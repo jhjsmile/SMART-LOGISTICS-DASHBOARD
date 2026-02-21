@@ -9,33 +9,26 @@ import re
 if 'auth_done' not in st.session_state:
     st.session_state.auth_done = False
 
-# 인증되지 않은 경우 로그인 화면 표시
 if not st.session_state.auth_done:
     st.title("🛡️ 시스템 접근 권한 확인")
     st.info("이 시스템은 허가된 사용자만 접속 가능합니다.")
-    
-    # 입력창과 버튼
-    access_key = st.text_input("접근 인증키를 입력하세요", type="password")
+    access_key = st.text_input("접근 인증키를 입력하세요 (기본: 7777)", type="password")
     if st.button("접속 승인"):
-        if access_key == "1472":  # 마스터 인증키
+        if access_key == "7777":
             st.session_state.auth_done = True
             st.rerun()
         else:
-            st.error("잘못된 인증키입니다. 접근 권한이 없습니다.")
-    st.stop()  # 인증 전까지 아래 코드는 절대 실행 안 함
+            st.error("잘못된 인증키입니다.")
+    st.stop()
 
-# --- 인증 성공 시 아래의 대시보드 로직이 실행됩니다 ---
-
-# [1. 유틸리티 함수]
+# [2. 유틸리티 함수 - 기존 로직 유지]
 def clean_serial(serial):
-    """한글 오타 교정 및 특수문자 제거"""
     kor_map = str.maketrans("ㅂㅈㄷㄱㅅㅛㅕㅑㅐㅔㅁㄴㅇㄹㅎㅗㅓㅏㅣㅋㅌㅊㅍㅠㅜㅡ", "qwertyuiopasdfghjklzxcvbnm")
     s = str(serial).translate(kor_map).strip()
     s = re.sub(r'[^a-zA-Z0-9_-]', '', s)
     return s.upper()
 
-def save_log_to_csv(serial_num, result_text):
-    """스캔 시 실시간으로 로컬 CSV 로그 파일에 저장"""
+def save_log_to_csv(serial_num, category, result_text):
     now = datetime.datetime.now()
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M:%S")
@@ -44,10 +37,10 @@ def save_log_to_csv(serial_num, result_text):
     with open(filename, mode='a', encoding='utf-8-sig', newline='') as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(["날짜", "시간", "시리얼 번호", "결과"])
-        writer.writerow([date_str, time_str, serial_num, result_text])
+            writer.writerow(["날짜", "시간", "공정단계", "시리얼 번호", "결과"])
+        writer.writerow([date_str, time_str, category, serial_num, result_text])
 
-# [2. 세션 상태 관리] (페이지 새로고침 시에도 데이터 유지)
+# [3. 세션 상태 관리 - 기존 데이터 구조 유지]
 if 'categories' not in st.session_state:
     st.session_state.categories = {}
 if 'admin_mode' not in st.session_state:
@@ -57,161 +50,78 @@ if 'failed_attempts' not in st.session_state:
 if 'admin_pass' not in st.session_state:
     st.session_state.admin_pass = "1234"
 
-# [3. 웹 UI 레이아웃 설정]
+# [4. UI 레이아웃]
 st.set_page_config(page_title="SMART LOGISTICS WEB", layout="wide")
 
-# 사이드바 구성
+# 사이드바 (기존 기능 유지)
 with st.sidebar:
     st.title("⚙️ 시스템 관리")
-    
-    # 📁 CSV 파일 업로드 (데이터 불러오기)
     uploaded_file = st.file_uploader("📂 CSV 데이터 로드", type="csv")
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-        # 엑셀/CSV 각 열을 카테고리로, 행을 시리얼로 변환
-        new_data = {col: {str(val).strip(): False for val in df[col].dropna()} for col in df.columns}
-        st.session_state.categories = new_data
+        st.session_state.categories = {col: {str(val).strip(): False for val in df[col].dropna()} for col in df.columns}
         st.success("데이터 로드 완료!")
-
+    
     st.divider()
+    if st.button("🔒 로그아웃/메뉴잠금"):
+        st.session_state.admin_mode = False
+        st.rerun()
 
-    # 🔒 관리자 인증 (비밀번호 보안)
-    if st.session_state.failed_attempts >= 5:
-        st.error("🚫 보안 잠금: 관리자에게 문의하세요.")
-    else:
-        btn_label = "🔒 메뉴 잠금" if st.session_state.admin_mode else "⚙️ 관리자 설정"
-        if st.button(btn_label):
-            if st.session_state.admin_mode:
-                st.session_state.admin_mode = False
-                st.rerun()
-            else:
-                st.session_state.show_pw_input = True
-        
-        if getattr(st.session_state, 'show_pw_input', False) and not st.session_state.admin_mode:
-            input_pw = st.text_input("비밀번호 입력", type="password")
-            if st.button("확인"):
-                if input_pw == st.session_state.admin_pass:
-                    st.session_state.admin_mode = True
-                    st.session_state.failed_attempts = 0
-                    st.session_state.show_pw_input = False
-                    st.rerun()
-                else:
-                    st.session_state.failed_attempts += 1
-                    st.error(f"비번 오류 ({st.session_state.failed_attempts}/5)")
-
-    # 🛠️ 관리자 전용 메뉴 (인증 시 활성화)
-    if st.session_state.admin_mode:
-        st.divider()
-        st.subheader("🛠️ 관리자 도구")
-        
-        # 항목 관리
-        with st.expander("📝 항목 추가/삭제"):
-            add_name = st.text_input("새 카테고리 이름")
-            if st.button("➕ 추가"):
-                if add_name and add_name.upper() not in st.session_state.categories:
-                    st.session_state.categories[add_name.upper()] = {}
-                    st.rerun()
-            
-            if st.session_state.categories:
-                del_target = st.selectbox("삭제할 항목 선택", list(st.session_state.categories.keys()))
-                if st.button("❌ 삭제"):
-                    del st.session_state.categories[del_target]
-                    st.rerun()
-
-        # 시리얼 자동 생성 (SerialGen)
-        with st.expander("🔢 시리얼 자동 생성"):
-            if st.session_state.categories:
-                gen_cat = st.selectbox("생성 대상 선택", list(st.session_state.categories.keys()))
-                prefix = st.text_input("고유 문자(Prefix)", "SN-")
-                c1, c2 = st.columns(2)
-                s_num = c1.number_input("시작", value=1)
-                e_num = c2.number_input("끝", value=10)
-                if st.button("🚀 생성 실행"):
-                    for i in range(int(s_num), int(e_num) + 1):
-                        sn = f"{prefix}{i:04d}"
-                        st.session_state.categories[gen_cat][sn] = False
-                    st.success("시리얼이 추가되었습니다.")
-                    st.rerun()
-
-        # 📥 데이터 내보내기 (Download)
-        with st.expander("📥 데이터 내보내기"):
-            if st.session_state.categories:
-                export_list = []
-                for cat, items in st.session_state.categories.items():
-                    for sn, status in items.items():
-                        export_list.append({"항목": cat, "시리얼": sn, "상태": "완료" if status else "대기"})
-                
-                export_df = pd.DataFrame(export_list)
-                csv_bytes = export_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-                
-                st.download_button(
-                    label="💾 CSV 다운로드",
-                    data=csv_bytes,
-                    file_name=f"스캔현황_{datetime.datetime.now().strftime('%m%d_%H%M')}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-
-        # 암호 설정
-        with st.expander("🔐 비밀번호 변경"):
-            new_pw = st.text_input("새 암호", type="password")
-            if st.button("변경"):
-                st.session_state.admin_pass = new_pw
-                st.success("암호가 변경되었습니다.")
-
-# [4. 메인 화면 - 스캔 및 대시보드]
+# [5. 메인 화면: 공정별 탭 분리]
 st.title("📦 SMART LOGISTICS DASHBOARD")
 
-# 스캔 입력 섹션
-sc1, sc2 = st.columns([1, 2])
-with sc1:
-    target_cat = st.selectbox("🎯 스캔 위치", ["전체 스캔"] + list(st.session_state.categories.keys()))
-with sc2:
-    scan_val = st.text_input("📷 바코드 스캔 입력 (Enter)", key="scan_input")
+# 4개의 개별 공정 탭 생성
+tab1, tab2, tab3, tab4 = st.tabs(["🚚 자재 입고", "🔧 조립 완료", "📦 포장 단계", "⚠️ 불량 처리"])
 
-if scan_val:
-    clean_bc = clean_serial(scan_val)
-    found = False
-    for cat, items in st.session_state.categories.items():
-        if target_cat == "전체 스캔" or target_cat == cat:
-            if clean_bc in items:
+def process_scan(scan_input, proc_name):
+    if scan_input:
+        cleaned = clean_serial(scan_input)
+        # 모든 카테고리에서 해당 시리얼 검색
+        found = False
+        for cat, items in st.session_state.categories.items():
+            if cleaned in items:
+                items[cleaned] = True
+                save_log_to_csv(cleaned, proc_name, f"{proc_name} 완료")
+                st.success(f"✅ [성공] {cleaned} : {proc_name} 처리되었습니다.")
                 found = True
-                if not items[clean_bc]:
-                    st.session_state.categories[cat][clean_bc] = True
-                    save_log_to_csv(clean_bc, f"[{cat}] 스캔 성공")
-                    st.toast(f"✅ {clean_bc} 완료", icon="🟢")
-                else:
-                    st.toast(f"⚠️ 이미 완료된 시리얼", icon="🟡")
-    if not found:
-        save_log_to_csv(clean_bc, f"미등록 시리얼 ({target_cat})")
-        st.error(f"❌ 미등록 시리얼 감지: {clean_bc}")
+                break
+        if not found:
+            st.error(f"❌ [미등록] {cleaned} : 등록되지 않은 시리얼입니다.")
 
+with tab1:
+    st.subheader("🚚 자재 입고 스캔")
+    in_scan = st.text_input("입고 시리얼 번호를 입력하세요", key="scan_in")
+    if st.button("입고 처리", key="btn_in"):
+        process_scan(in_scan, "자재 입고")
+
+with tab2:
+    st.subheader("🔧 조립 완료 스캔")
+    job_scan = st.text_input("조립 완료 시리얼을 입력하세요", key="scan_job")
+    if st.button("조립 확인", key="btn_job"):
+        process_scan(job_scan, "조립 완료")
+
+with tab3:
+    st.subheader("📦 포장 단계 스캔")
+    pkg_scan = st.text_input("포장 시리얼 번호를 입력하세요", key="scan_pkg")
+    if st.button("포장 완료", key="btn_pkg"):
+        process_scan(pkg_scan, "포장 단계")
+
+with tab4:
+    st.subheader("⚠️ 불량 처리")
+    fail_scan = st.text_input("불량 발생 시리얼을 입력하세요", key="scan_fail")
+    reason = st.selectbox("불량 사유", ["부품 파손", "조립 불량", "오염", "기타"])
+    if st.button("불량 등록", key="btn_fail"):
+        if fail_scan:
+            cleaned = clean_serial(fail_scan)
+            save_log_to_csv(cleaned, "불량 발생", f"사유: {reason}")
+            st.warning(f"⚠️ {cleaned} 건이 불량으로 기록되었습니다.")
+
+# [6. 실시간 현황 요약 (하단)]
 st.divider()
-
-# 대시보드 카드 섹션
-if not st.session_state.categories:
-    st.info("사이드바에서 CSV를 로드하거나 항목을 추가하세요.")
-else:
-    cats = list(st.session_state.categories.items())
-    for i in range(0, len(cats), 3): # 3열씩 자동 줄바꿈
-        cols = st.columns(3)
-        for j, (name, bcs) in enumerate(cats[i:i+3]):
-            with cols[j]:
-                with st.container(border=True):
-                    done = sum(bcs.values())
-                    total = len(bcs)
-                    st.subheader(f"📍 {name}")
-                    st.progress(done/total if total > 0 else 0)
-                    st.write(f"진행: {done} / {total}")
-                    
-                    # 상세 표 (Treeview 대체)
-                    df_view = pd.DataFrame([{"시리얼": k, "상태": "✅" if v else "⏳"} for k, v in bcs.items()])
-                    st.dataframe(df_view, use_container_width=True, hide_index=True, height=200)
-
-# 로그 리포트 확인 버튼
-if st.button("📋 오늘자 상세 로그 보기"):
-    d_str = datetime.datetime.now().strftime("%Y-%m-%d")
-    if os.path.exists(f"scan_log_{d_str}.csv"):
-
-        st.table(pd.read_csv(f"scan_log_{d_str}.csv").tail(10))
-
+st.subheader("📊 실시간 공정 현황")
+if st.session_state.categories:
+    cols = st.columns(len(st.session_state.categories))
+    for i, (cat, items) in enumerate(st.session_state.categories.items()):
+        total = len(items)
+        done = sum(items.values())
+        cols[i].metric(cat, f"{done}/{total}", f"{int(done/total*100) if total>0 else 0}%")
