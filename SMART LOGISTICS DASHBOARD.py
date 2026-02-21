@@ -15,9 +15,9 @@ if not st.session_state.auth_done:
     st.info("이 시스템은 허가된 사용자만 접속 가능합니다.")
     
     # 입력창과 버튼
-    access_key = st.text_input("접근 인증키를 입력하세요 (기본: 7777)", type="password")
+    access_key = st.text_input("접근 인증키를 입력하세요", type="password")
     if st.button("접속 승인"):
-        if access_key == "7777":  # 마스터 인증키
+        if access_key == "1472":  # 마스터 인증키
             st.session_state.auth_done = True
             st.rerun()
         else:
@@ -214,3 +214,4 @@ if st.button("📋 오늘자 상세 로그 보기"):
     if os.path.exists(f"scan_log_{d_str}.csv"):
 
         st.table(pd.read_csv(f"scan_log_{d_str}.csv").tail(10))
+
