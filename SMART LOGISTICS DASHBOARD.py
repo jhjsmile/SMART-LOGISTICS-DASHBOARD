@@ -111,7 +111,7 @@ with st.sidebar:
         with st.expander("🔢 시리얼 자동 생성"):
             if st.session_state.categories:
                 gen_cat = st.selectbox("생성 대상 선택", list(st.session_state.categories.keys()))
-                prefix = st.text_input("고유 문자(Prefix)", "SN-")
+                prefix = st.text_input("고유 문자(Prefix)")
                 c1, c2 = st.columns(2)
                 s_num = c1.number_input("시작", value=1)
                 e_num = c2.number_input("끝", value=10)
@@ -215,3 +215,4 @@ if st.button("📋 오늘자 상세 로그 보기"):
     d_str = datetime.datetime.now().strftime("%Y-%m-%d")
     if os.path.exists(f"scan_log_{d_str}.csv"):
         st.table(pd.read_csv(f"scan_log_{d_str}.csv").tail(10))
+
