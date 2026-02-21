@@ -5,6 +5,27 @@ import os
 import csv
 import re
 
+# [1. 보안: 시스템 접근 인증]
+if 'auth_done' not in st.session_state:
+    st.session_state.auth_done = False
+
+# 인증되지 않은 경우 로그인 화면 표시
+if not st.session_state.auth_done:
+    st.title("🛡️ 시스템 접근 권한 확인")
+    st.info("이 시스템은 허가된 사용자만 접속 가능합니다.")
+    
+    # 입력창과 버튼
+    access_key = st.text_input("접근 인증키를 입력하세요 (기본: 7777)", type="password")
+    if st.button("접속 승인"):
+        if access_key == "7777":  # 마스터 인증키
+            st.session_state.auth_done = True
+            st.rerun()
+        else:
+            st.error("잘못된 인증키입니다. 접근 권한이 없습니다.")
+    st.stop()  # 인증 전까지 아래 코드는 절대 실행 안 함
+
+# --- 인증 성공 시 아래의 대시보드 로직이 실행됩니다 ---
+
 # [1. 유틸리티 함수]
 def clean_serial(serial):
     """한글 오타 교정 및 특수문자 제거"""
@@ -191,4 +212,5 @@ else:
 if st.button("📋 오늘자 상세 로그 보기"):
     d_str = datetime.datetime.now().strftime("%Y-%m-%d")
     if os.path.exists(f"scan_log_{d_str}.csv"):
+
         st.table(pd.read_csv(f"scan_log_{d_str}.csv").tail(10))
