@@ -133,6 +133,14 @@ if st.sidebar.button("🛠️ 불량 수리 센터", use_container_width=True):
 if st.sidebar.button("🔐 마스터 데이터 관리", use_container_width=True, type="primary" if st.session_state.admin_page else "secondary"):
     nav_to(st.session_state.current_line, is_admin=True)
 
+if st.session_state.is_authenticated:
+    st.sidebar.markdown("---") # 구분선 하나 더 추가
+    if st.sidebar.button("🔓 관리자 로그아웃", use_container_width=True):
+        st.session_state.is_authenticated = False
+        st.session_state.admin_page = False
+        st.toast("관리자 모드가 종료되었습니다.", icon="🔒")
+        st.rerun()
+
 # =================================================================
 # 5. 마스터 데이터 관리
 # =================================================================
@@ -424,6 +432,7 @@ elif st.session_state.current_line == "포장 라인":
                         st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun()
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 포장완료")
+
 
 
 
