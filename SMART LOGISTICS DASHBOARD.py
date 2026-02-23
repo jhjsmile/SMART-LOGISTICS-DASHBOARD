@@ -717,7 +717,7 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
         else:
             st.warning("작업을 진행할 모델을 목록에서 먼저 선택해 주십시오.")
             
-    display_live_process_table(line_now_nm, "검사 합격" if line_now_nm == "검사 라인" else "최종 출하 완료")
+    display_live_process_table(line_now_nm, "합격" if line_now_nm == "검사 라인" else "최종 출하 완료")
 
 # -----------------------------------------------------------------
 # 7-3. 생산 리포트 통합 대시보드
@@ -935,5 +935,6 @@ elif st.session_state.current_line == "마스터 관리":
             if target_uid_in and target_upw_in:
                 st.session_state.user_db[target_uid_in] = {"pw": target_upw_in, "role": target_role_in}
                 st.success(f"[{target_uid_in}] 계정 정보가 성공적으로 반영되었습니다."); st.rerun()
+
 
 
