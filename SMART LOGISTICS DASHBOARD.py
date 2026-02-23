@@ -7,7 +7,7 @@ import plotly.express as px
 # =================================================================
 # 1. 전역 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v7.9", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v8.0", layout="wide")
 
 st.markdown("""
     <style>
@@ -96,7 +96,6 @@ if st.session_state.user_role == "admin":
     st.sidebar.divider()
     if st.sidebar.button("🔐 마스터 데이터 관리", use_container_width=True, type="primary" if st.session_state.current_line=="마스터 관리" else "secondary"): nav("마스터 관리")
 
-# 공용 다이얼로그
 @st.dialog("📦 공정 입고 승인 확인")
 def confirm_entry_dialog():
     st.warning(f"시리얼 [ {st.session_state.confirm_target} ] 입고하시겠습니까?")
@@ -204,7 +203,7 @@ elif st.session_state.current_line == "리포트":
         st.markdown("<div class='section-title'>📝 생산 현황 (전체 로그)</div>", unsafe_allow_html=True)
         st.dataframe(db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
 
-# --- 불량 수리 센터 (수정 요청 사항 반영) ---
+# --- 불량 수리 센터 (수리 완료 버튼 문구 수정) ---
 elif st.session_state.current_line == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 제품 수리 센터</h2>", unsafe_allow_html=True)
     bad = st.session_state.production_db[st.session_state.production_db['상태'] == "불량 처리 중"]
@@ -212,12 +211,10 @@ elif st.session_state.current_line == "불량 공정":
     if bad.empty:
         st.success("✅ 현재 수리 대기 중인 불량 제품이 없습니다.")
     else:
-        # 발생 라인별 아이콘 매핑
         line_icons = {"조립 라인": "📦 조립", "검사 라인": "🔍 품질", "포장 라인": "🚚 출하"}
         
         for idx, row in bad.iterrows():
             with st.container(border=True):
-                # 아이콘 삽입 (발생 부분)
                 icon = line_icons.get(row['라인'], "🏭 기타")
                 st.write(f"**S/N: {row['시리얼']}** ({row['모델']} / 발생: {icon})")
                 
@@ -225,10 +222,10 @@ elif st.session_state.current_line == "불량 공정":
                 s_val = c1.text_input("불량 원인", key=f"s_{idx}", placeholder="원인을 입력하세요")
                 a_val = c2.text_input("수리 조치", key=f"a_{idx}", placeholder="조치 내용을 입력하세요")
                 
-                # 버튼 비활성화 로직: 하나라도 빈칸이면 disabled=True
                 is_empty = (not s_val.strip()) or (not a_val.strip())
                 
-                if c3.button("✅ 완료 및 재투입", key=f"r_{idx}", use_container_width=True, disabled=is_empty):
+                # 버튼 문구 [수리 완료]로 수정
+                if c3.button("✅ 수리 완료", key=f"r_{idx}", use_container_width=True, disabled=is_empty):
                     st.session_state.production_db.at[idx, '상태'] = "수리 완료(재투입)"
                     st.session_state.production_db.at[idx, '증상'] = s_val
                     st.session_state.production_db.at[idx, '수리'] = a_val
