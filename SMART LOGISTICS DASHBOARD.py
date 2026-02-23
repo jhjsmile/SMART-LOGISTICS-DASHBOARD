@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 import plotly.express as px
+import plotly.graph_objects as go
 from streamlit_gsheets import GSheetsConnection
 import io
 
@@ -13,7 +14,7 @@ from googleapiclient.http import MediaIoBaseUpload
 # =================================================================
 # 1. 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v16.4", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v16.6", layout="wide")
 
 # [핵심] 사용자 역할(Role) 정의
 ROLES = {
@@ -356,7 +357,7 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
             
     display_process_log(st.session_state.current_line, "합격" if st.session_state.current_line=="검사 라인" else "출고")
 
-# --- 6-3. 통합 리포트 (막대 그래프 1/3 고정) ---
+# --- 6-3. 통합 리포트 [그래프 스타일 및 Y축 정수 수정] ---
 elif st.session_state.current_line == "리포트":
     st.markdown("<h2 class='centered-title'>📊 통합 생산 대시보드</h2>", unsafe_allow_html=True)
     if st.button("🔄 최신 데이터 동기화"): 
@@ -377,21 +378,47 @@ elif st.session_state.current_line == "리포트":
         met[3].metric("총 등록 수량", len(db))
         
         st.divider()
-        # [레이아웃] 막대 1/3, 파이 2/3
+        # [수정] 두 번째 이미지 디자인 스타일 적용 (Dark 테마 + 특정 색상 매핑)
         c1, c2 = st.columns([1, 2])
         with c1:
-            fig1 = px.bar(db.groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="공정별 제품 위치")
-            fig1.update_yaxes(rangemode='tozero')
+            loc_data = db.groupby('라인').size().reset_index(name='수량')
+            fig1 = px.bar(
+                loc_data, x='라인', y='수량', color='라인', 
+                title="공정별 제품 위치",
+                color_discrete_map={
+                    "검사 라인": "#A0D1FB", # 라이트 블루
+                    "조립 라인": "#0068C9", # 블루
+                    "포장 라인": "#FFABAB"  # 핑크
+                },
+                template="plotly_dark"
+            )
+            fig1.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            # [수정] Y축 정수 표기 강제 (dtick=1)
+            fig1.update_yaxes(dtick=1, rangemode='tozero')
             st.plotly_chart(fig1, use_container_width=True)
+            
         with c2:
-            st.plotly_chart(px.pie(db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 비중"), use_container_width=True)
+            model_data = db.groupby('모델').size().reset_index(name='수량')
+            fig_pie = px.pie(
+                model_data, values='수량', names='모델', hole=0.3, 
+                title="모델별 비중",
+                template="plotly_dark"
+            )
+            fig_pie.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_pie, use_container_width=True)
         
         st.divider()
         st.markdown("##### 👷 현장 작업자별 처리 건수")
         c3, _ = st.columns([1, 2]) # 1/3 크기 고정
         with c3:
-            fig2 = px.bar(db.groupby('작업자').size().reset_index(name='건수'), x='작업자', y='건수', color='작업자')
-            fig2.update_yaxes(rangemode='tozero')
+            user_data = db.groupby('작업자').size().reset_index(name='건수')
+            fig2 = px.bar(
+                user_data, x='작업자', y='건수', color='작업자',
+                template="plotly_dark"
+            )
+            fig2.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            # [수정] Y축 정수 표기 강제 (dtick=1)
+            fig2.update_yaxes(dtick=1, rangemode='tozero')
             st.plotly_chart(fig2, use_container_width=True)
             
         st.dataframe(db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
@@ -439,7 +466,7 @@ elif st.session_state.current_line == "불량 공정":
                         save_to_gsheet(db)
                         st.success("수리 처리 완료!"); st.rerun()
 
-# --- 6-5. 수리 리포트 ---
+# --- 6-5. 수리 리포트 [그래프 스타일 및 Y축 정수 수정] ---
 elif st.session_state.current_line == "수리 리포트":
     st.markdown("<h2 class='centered-title'>📈 불량 수리 리포트</h2>", unsafe_allow_html=True)
     db = st.session_state.production_db
@@ -448,11 +475,24 @@ elif st.session_state.current_line == "수리 리포트":
     if not rep_db.empty:
         c_r1, c_r2 = st.columns([1, 2])
         with c_r1:
-            fig_r1 = px.bar(rep_db.groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', title="라인별 수리 건수")
-            fig_r1.update_yaxes(rangemode='tozero')
+            repair_loc_data = rep_db.groupby('라인').size().reset_index(name='수량')
+            fig_r1 = px.bar(
+                repair_loc_data, x='라인', y='수량', title="라인별 수리 건수",
+                template="plotly_dark"
+            )
+            fig_r1.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            # [수정] Y축 정수 표기 강제 (dtick=1)
+            fig_r1.update_yaxes(dtick=1, rangemode='tozero')
             st.plotly_chart(fig_r1, use_container_width=True)
         with c_r2:
-            st.plotly_chart(px.pie(rep_db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="수리 모델 비중"), use_container_width=True)
+            repair_model_data = rep_db.groupby('모델').size().reset_index(name='수량')
+            fig_r_pie = px.pie(
+                repair_model_data, values='수량', names='모델', hole=0.3, 
+                title="수리 모델 비중",
+                template="plotly_dark"
+            )
+            fig_r_pie.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_r_pie, use_container_width=True)
         
         st.dataframe(rep_db[['시간', '라인', '모델', '시리얼', '증상', '수리', '작업자']], use_container_width=True, hide_index=True)
     else:
@@ -500,7 +540,7 @@ elif st.session_state.current_line == "마스터 관리":
                 csv_data = st.session_state.production_db.to_csv(index=False).encode('utf-8-sig')
                 st.download_button("📥 전체 DB 다운로드 (CSV)", csv_data, f"backup_{datetime.now(KST).strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
                 st.divider()
-                uploaded_csv = st.file_uploader("백업 파일 업로드 (기존 데이터와 병합)", type="csv")
+                uploaded_csv = st.file_uploader("백업 파일 로드 (기존 데이터와 병합)", type="csv")
                 if uploaded_csv and st.button("📤 데이터 병합 실행", use_container_width=True):
                     merged_db = pd.concat([st.session_state.production_db, pd.read_csv(uploaded_csv)], ignore_index=True)
                     st.session_state.production_db = merged_db.drop_duplicates(subset=['시리얼'], keep='last')
