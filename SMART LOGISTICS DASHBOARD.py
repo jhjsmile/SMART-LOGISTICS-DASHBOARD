@@ -107,7 +107,7 @@ def confirm_entry_dialog():
 # 4. 사이드바 내비게이션
 # =================================================================
 st.sidebar.title("🏭 생산 공정 관리 v7.5")
-st.sidebar.markdown("---")
+st.sidebar.divider()
 
 def nav_to(line_name, is_admin=False):
     st.session_state.current_line = line_name
@@ -117,10 +117,10 @@ def nav_to(line_name, is_admin=False):
 if st.sidebar.button("📦 조립 라인 현황", use_container_width=True, type="primary" if st.session_state.current_line == "조립 라인" and not st.session_state.admin_page else "secondary"):
     nav_to("조립 라인")
 
-if st.sidebar.button("🔍 검사 라인 현황", use_container_width=True, type="primary" if st.session_state.current_line == "검사 라인" and not st.session_state.admin_page else "secondary"):
+if st.sidebar.button("🔍 품질 검사 현황", use_container_width=True, type="primary" if st.session_state.current_line == "검사 라인" and not st.session_state.admin_page else "secondary"):
     nav_to("검사 라인")
 
-if st.sidebar.button("🚚 포장 라인 현황", use_container_width=True, type="primary" if st.session_state.current_line == "포장 라인" and not st.session_state.admin_page else "secondary"):
+if st.sidebar.button("🚚 출하 포장 현황", use_container_width=True, type="primary" if st.session_state.current_line == "포장 라인" and not st.session_state.admin_page else "secondary"):
     nav_to("포장 라인")
 
 st.sidebar.divider()
@@ -138,7 +138,6 @@ if st.sidebar.button("🔐 마스터 데이터 관리", use_container_width=True
 # =================================================================
 if st.session_state.admin_page:
     st.title("🔐 시스템 관리자 제어판")
-    
     if not st.session_state.is_authenticated:
         _, a_col, _ = st.columns([1, 1.5, 1])
         with a_col:
@@ -239,7 +238,7 @@ elif st.session_state.current_line == "불량 공정":
                     st.rerun()
 
 # =================================================================
-# 8. 조립 라인 (폼 로직 개선)
+# 8. 조립 라인 현황
 # =================================================================
 elif st.session_state.current_line == "조립 라인":
     st.title("📦 조립 라인 작업")
@@ -252,15 +251,10 @@ elif st.session_state.current_line == "조립 라인":
     if st.session_state.selected_cell != "전체 CELL":
         with st.container(border=True):
             st.subheader(f"📝 {st.session_state.selected_cell} 신규 등록")
-            
-            # 모델 선택은 폼 외부에서 처리하여 실시간으로 품목 리스트를 갱신함
             m_choice = st.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key="main_model_select")
             
-            # 품목과 시리얼 번호는 엔터 입력을 위해 폼 내부에 배치
             with st.form("assembly_reg_form", clear_on_submit=False):
                 reg1, reg2 = st.columns(2)
-                
-                # 모델 선택 여부에 따라 품목 리스트 결정
                 if m_choice != "선택하세요.":
                     i_opts = st.session_state.master_items_dict.get(m_choice, [])
                 else:
@@ -276,13 +270,7 @@ elif st.session_state.current_line == "조립 라인":
                         st.error("시리얼 번호를 입력해 주세요.")
                     else:
                         db = st.session_state.production_db
-                        duplicate = db[
-                            (db['모델'] == m_choice) & 
-                            (db['품목코드'] == i_choice) & 
-                            (db['시리얼'] == s_input) & 
-                            (db['상태'] != "완료")
-                        ]
-                        
+                        duplicate = db[(db['모델'] == m_choice) & (db['품목코드'] == i_choice) & (db['시리얼'] == s_input) & (db['상태'] != "완료")]
                         if not duplicate.empty:
                             st.error(f"이미 공정 진행 중인 동일 품목 시리얼입니다: {s_input}")
                         else:
@@ -317,18 +305,30 @@ elif st.session_state.current_line == "조립 라인":
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 완료")
 
-# (8-2) 검사 라인
+# =================================================================
+# 9. 품질 검사 현황 (수정 반영)
+# =================================================================
 elif st.session_state.current_line == "검사 라인":
-    st.title("🔍 품질 검사 라인")
+    st.title("🔍 품질 검사 현황")
     st.markdown("<div class='section-title'>📥 검사 입고 대상 조회 (조립 완료 물량)</div>", unsafe_allow_html=True)
     with st.container(border=True):
         f1, f2 = st.columns(2)
         sel_m = f1.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key="f_m_insp")
+        
+        # 모델 선택에 따른 품목 리스트 구성 (전체 선택 삭제)
         if sel_m != "선택하세요.":
-            sel_i = f2.selectbox("품목 선택", ["전체"] + st.session_state.master_items_dict.get(sel_m, []), key="f_i_insp")
+            i_opts = ["품목을 선택하세요."] + st.session_state.master_items_dict.get(sel_m, [])
+        else:
+            i_opts = ["모델을 먼저 선택하세요."]
+            
+        sel_i = f2.selectbox("품목 선택", i_opts, key="f_i_insp")
+        
+        # 품목까지 선택되어야 물량이 보임
+        if sel_m != "선택하세요." and sel_i != "품목을 선택하세요.":
             db = st.session_state.production_db
-            ready = db[(db['라인'] == "조립 라인") & (db['상태'] == "완료") & (db['모델'] == sel_m)]
-            if sel_i != "전체": ready = ready[ready['품목코드'] == sel_i]
+            # 조립 라인에서 완료된 데이터 필터링
+            ready = db[(db['라인'] == "조립 라인") & (db['상태'] == "완료") & (db['모델'] == sel_m) & (db['품목코드'] == sel_i)]
+            # 이미 검사 라인에 들어온 시리얼 제외
             done_sns = db[db['라인'] == "검사 라인"]['시리얼'].unique()
             avail_sns = [s for s in ready['시리얼'].unique() if s not in done_sns]
             
@@ -342,7 +342,10 @@ elif st.session_state.current_line == "검사 라인":
                         st.session_state.confirm_model = sel_m
                         st.session_state.confirm_item = i_code
                         confirm_entry_dialog()
-            else: st.info("대기 물량이 없습니다.")
+            else:
+                st.info("해당 품목의 대기 물량이 없습니다.")
+        else:
+            st.info("조회를 위해 모델과 품목을 순서대로 선택해 주세요.")
     
     st.divider()
     st.subheader("📊 검사 공정 현재 작업 현황")
@@ -363,18 +366,30 @@ elif st.session_state.current_line == "검사 라인":
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 합격완료")
 
-# (8-3) 포장 라인
+# =================================================================
+# 10. 출하 포장 현황 (수정 반영)
+# =================================================================
 elif st.session_state.current_line == "포장 라인":
-    st.title("🚚 출하 포장 라인")
+    st.title("🚚 출하 포장 현황")
     st.markdown("<div class='section-title'>📥 포장 입고 대상 조회 (검사 합격 물량)</div>", unsafe_allow_html=True)
     with st.container(border=True):
         f1, f2 = st.columns(2)
         sel_m = f1.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key="f_m_pack")
+        
+        # 모델 선택에 따른 품목 리스트 구성 (전체 선택 삭제)
         if sel_m != "선택하세요.":
-            sel_i = f2.selectbox("품목 선택", ["전체"] + st.session_state.master_items_dict.get(sel_m, []), key="f_i_pack")
+            i_opts = ["품목을 선택하세요."] + st.session_state.master_items_dict.get(sel_m, [])
+        else:
+            i_opts = ["모델을 먼저 선택하세요."]
+            
+        sel_i = f2.selectbox("품목 선택", i_opts, key="f_i_pack")
+        
+        # 품목까지 선택되어야 물량이 보임
+        if sel_m != "선택하세요." and sel_i != "품목을 선택하세요.":
             db = st.session_state.production_db
-            ready = db[(db['라인'] == "검사 라인") & (db['상태'] == "완료") & (db['모델'] == sel_m)]
-            if sel_i != "전체": ready = ready[ready['품목코드'] == sel_i]
+            # 검사 라인에서 완료된 데이터 필터링
+            ready = db[(db['라인'] == "검사 라인") & (db['상태'] == "완료") & (db['모델'] == sel_m) & (db['품목코드'] == sel_i)]
+            # 이미 포장 라인에 들어온 시리얼 제외
             done_sns = db[db['라인'] == "포장 라인"]['시리얼'].unique()
             avail_sns = [s for s in ready['시리얼'].unique() if s not in done_sns]
             
@@ -388,7 +403,10 @@ elif st.session_state.current_line == "포장 라인":
                         st.session_state.confirm_model = sel_m
                         st.session_state.confirm_item = i_code
                         confirm_entry_dialog()
-            else: st.info("대기 물량이 없습니다.")
+            else:
+                st.info("해당 품목의 대기 물량이 없습니다.")
+        else:
+            st.info("조회를 위해 모델과 품목을 순서대로 선택해 주세요.")
             
     st.divider()
     st.subheader("📊 포장 공정 현재 작업 현황")
