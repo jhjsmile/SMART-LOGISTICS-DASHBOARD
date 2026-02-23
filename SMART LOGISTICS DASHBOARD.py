@@ -324,39 +324,38 @@ elif st.session_state.current_line == "조립 라인":
             i_choice = reg2.selectbox("품목 선택", i_opts, key="am_i")
 
             # [핵심 변경 사항] 엔터 키 및 스캐너 연동 함수
-            def handle_registration():
-                s_val = st.session_state.temp_serial
-                if s_val:
-                    db = st.session_state.production_db
-                    # 중복 체크
-                    if not db[(db['모델'] == m_choice) & (db['품목코드'] == i_choice) & (db['시리얼'] == s_val)].empty:
-                        st.toast(f"❌ 중복 시리얼: {s_val}", icon="⚠️") # 에러 메시지를 가볍게 표시
-                    else:
-                        new_data = {
-                            '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                            '라인': "조립 라인", 'CELL': st.session_state.selected_cell,
-                            '모델': m_choice, '품목코드': i_choice, '시리얼': s_val,
-                            '상태': '진행 중', '증상': '', '수리': ''
-                        }
-                        st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True)
-                        st.toast(f"✅ 등록 완료: {s_val}", icon="🚀")
-                    # 입력 필드 초기화
-                    st.session_state.temp_serial = ""
-
-            # 시리얼 입력란: 엔터 시 handle_registration 호출
-            s_input = reg3.text_input(
-                "시리얼 번호 스캔", 
-                key="temp_serial", 
-                on_change=handle_registration
-            )
-            
-            # 수동 클릭용 버튼도 유지 (사용자 경험 보존)
-            if st.button("▶️ 조립 시작 등록 (또는 Enter)", type="primary", use_container_width=True):
-                handle_registration()
-                st.rerun()
+# [점검 및 보완된 조립 등록 로직]
+def handle_registration():
+    # 1. 현재 입력된 값 가져오기
+    s_val = st.session_state.temp_serial
     
-    st.divider()
-    # ... (이후 조립 라인 로그 출력 부분은 기존과 동일하게 유지)
+    if s_val:  # 값이 비어있지 않을 때만 실행
+        db = st.session_state.production_db
+        # 2. 중복 체크 (모델/품목/시리얼 모두 일치하는지)
+        is_duplicate = not db[(db['모델'] == m_choice) & 
+                             (db['품목코드'] == i_choice) & 
+                             (db['시리얼'] == s_val)].empty
+        
+        if is_duplicate:
+            st.toast(f"❌ 중복 등록됨: {s_val}", icon="⚠️")
+        else:
+            # 3. 데이터 추가
+            new_data = {
+                '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                '라인': "조립 라인", 'CELL': st.session_state.selected_cell,
+                '모델': m_choice, '품목코드': i_choice, '시리얼': s_val,
+                '상태': '진행 중', '증상': '', '수리': ''
+            }
+            st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True)
+            st.toast(f"✅ 등록 성공: {s_val}", icon="🚀")
+        
+        # 4. 핵심: 입력칸 비우기
+        st.session_state.temp_serial = ""
+        # 5. 즉시 반영 (중요!)
+        st.rerun()
+
+# 입력창 적용
+reg3.text_input("시리얼 번호 스캔", key="temp_serial", on_change=handle_registration)
 
 # -----------------------------------------------------------------
 # (8-2) 검사 라인
@@ -455,6 +454,7 @@ elif st.session_state.current_line == "포장 라인":
                         st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun()
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 포장완료")
+
 
 
 
