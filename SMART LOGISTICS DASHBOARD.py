@@ -121,16 +121,23 @@ if st.sidebar.button("🔐 마스터 데이터 관리", use_container_width=True
 # =================================================================
 if st.session_state.admin_page:
     st.title("🔐 시스템 관리자 제어판")
+    
     if not st.session_state.is_authenticated:
         _, a_col, _ = st.columns([1, 1.5, 1])
         with a_col:
             st.subheader("관리자 본인 확인")
-            with st.form("admin_auth"):
-                p_input = st.text_input("접속 비밀번호", type="password")
-                if st.form_submit_button("인증하기", use_container_width=True):
-                    if p_input == ADMIN_PASSWORD:
-                        st.session_state.is_authenticated = True; st.rerun()
-                    else: st.error("인증에 실패했습니다.")
+            # 엔터키 입력을 감지하기 위해 text_input의 반환값을 활용합니다.
+            p_input = st.text_input("접속 비밀번호", type="password")
+            
+            # 버튼 클릭 또는 엔터키 입력(p_input에 값이 있을 때) 시 실행
+            auth_triggered = st.button("인증하기", use_container_width=True)
+            
+            if p_input and (auth_triggered or p_input == ADMIN_PASSWORD):
+                if p_input == ADMIN_PASSWORD:
+                    st.session_state.is_authenticated = True
+                    st.rerun()
+                elif auth_triggered: # 비밀번호가 틀린 상태에서 버튼을 눌렀을 때만 에러 표시
+                    st.error("인증에 실패했습니다.")
     else:
         st.markdown("<div class='section-title'>📋 마스터 기준 정보 설정</div>", unsafe_allow_html=True)
         m_col1, m_col2 = st.columns(2)
@@ -316,3 +323,4 @@ elif st.session_state.current_line == "불량 공정":
                     st.session_state.production_db.at[idx, '증상'] = symp; st.session_state.production_db.at[idx, '수리'] = repa
                     st.rerun()
     else: st.success("대기 중인 수리 물량이 없습니다.")
+
