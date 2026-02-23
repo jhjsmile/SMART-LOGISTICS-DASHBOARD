@@ -5,10 +5,15 @@ import plotly.express as px
 from streamlit_gsheets import GSheetsConnection
 import io
 
+# [NEW] 구글 드라이브 연동 라이브러리
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+
 # =================================================================
 # 1. 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v14.1", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v15.0", layout="wide")
 
 # [핵심] 역할(Role) 정의
 ROLES = {
@@ -29,7 +34,6 @@ st.markdown("""
         border-radius: 8px; border: 1px solid #ffa8a8; font-weight: bold; margin-bottom: 20px;
         text-align: center;
     }
-    /* 현황판 스타일 */
     .stat-box {
         background-color: #f0f2f6; border-radius: 10px; padding: 15px; text-align: center;
         border: 1px solid #e0e0e0; margin-bottom: 10px;
@@ -41,7 +45,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # =================================================================
-# 2. 구글 시트 연결
+# 2. 구글 시트 및 드라이브 연결
 # =================================================================
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -57,6 +61,40 @@ def load_data():
 def save_to_gsheet(df):
     conn.update(data=df)
     st.cache_data.clear()
+
+# [NEW] 구글 드라이브 이미지 업로드 함수
+def upload_image_to_drive(file_obj, filename):
+    try:
+        # Secrets에서 인증 정보 가져오기
+        raw_creds = st.secrets["connections"]["gsheets"]
+        creds = service_account.Credentials.from_service_account_info(raw_creds)
+        
+        # 구글 드라이브 서비스 빌드
+        service = build('drive', 'v3', credentials=creds)
+        
+        # 폴더 ID 가져오기 (secrets.toml에 없으면 에러 방지용으로 None)
+        folder_id = st.secrets["connections"]["gsheets"].get("image_folder_id")
+        
+        if not folder_id:
+            return "폴더ID설정안됨"
+
+        file_metadata = {
+            'name': filename,
+            'parents': [folder_id]
+        }
+        
+        media = MediaIoBaseUpload(file_obj, mimetype=file_obj.type)
+        
+        # 파일 업로드 실행
+        file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id, webViewLink'
+        ).execute()
+        
+        return file.get('webViewLink') # 업로드된 파일의 링크 반환
+    except Exception as e:
+        return f"업로드실패({str(e)})"
 
 # =================================================================
 # 3. 세션 상태 초기화 & 계정 설정
@@ -144,7 +182,7 @@ if bad_count > 0:
     st.markdown(f"<div class='alarm-banner'>⚠️ 현장 알림: 수리 대기 중인 제품이 {bad_count}건 있습니다.</div>", unsafe_allow_html=True)
 
 # =================================================================
-# 5. 공용 컴포넌트 (공정 연계형 집계 로직)
+# 5. 공용 컴포넌트 (투입/완료 집계 및 공정 흐름)
 # =================================================================
 @st.dialog("📦 공정 입고 승인 확인")
 def confirm_entry_dialog():
@@ -162,70 +200,36 @@ def confirm_entry_dialog():
         st.session_state.confirm_target = None; st.rerun()
     if c2.button("❌ 취소", use_container_width=True): st.session_state.confirm_target = None; st.rerun()
 
-# [핵심] 공정 흐름(Flow)에 따른 물량 집계 함수
 def display_line_flow_stats(current_line):
     db = st.session_state.production_db
     today_str = datetime.now().strftime('%Y-%m-%d')
+    today_current = db[(db['라인'] == current_line) & (db['시간'].astype(str).str.contains(today_str))].copy()
     
-    # 1. 금일 투입 및 완료 (현재 라인 기준)
-    today_current = db[(db['라인'] == current_line) & (db['시간'].astype(str).str.contains(today_str))]
     today_input = len(today_current)
     today_output = len(today_current[today_current['상태'] == '완료'])
 
-    # 2. 대기 물량 (이전 라인 완료 - 현재 라인 투입)
     buffer_count = 0
     prev_line = None
     
-    if current_line == "검사 라인":
-        prev_line = "조립 라인"
-    elif current_line == "포장 라인":
-        prev_line = "검사 라인"
+    if current_line == "검사 라인": prev_line = "조립 라인"
+    elif current_line == "포장 라인": prev_line = "검사 라인"
     
     if prev_line:
-        # 이전 공정에서 '완료'된 모든 시리얼 (날짜 무관, 누적)
         prev_done = set(db[(db['라인'] == prev_line) & (db['상태'] == '완료')]['시리얼'])
-        # 현재 공정에 이미 '투입'된 모든 시리얼
         curr_in = set(db[db['라인'] == current_line]['시리얼'])
-        # 차집합 = 아직 안 넘어온 대기 물량
         buffer_count = len(prev_done - curr_in)
     
-    # 3. 3단 현황판 UI 표시
     c1, c2, c3 = st.columns(3)
-    
     with c1:
-        st.markdown(f"""
-        <div class='stat-box'>
-            <div class='stat-label'>⏳ {prev_line if prev_line else '신규'} 대기</div>
-            <div class='stat-value' style='color: #ff9800;'>{buffer_count if prev_line else '-'}</div>
-            <div class='stat-sub'>건 (누적)</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
+        st.markdown(f"<div class='stat-box'><div class='stat-label'>⏳ {prev_line if prev_line else '신규'} 대기</div><div class='stat-value' style='color: #ff9800;'>{buffer_count if prev_line else '-'}</div><div class='stat-sub'>건 (누적)</div></div>", unsafe_allow_html=True)
     with c2:
-        st.markdown(f"""
-        <div class='stat-box'>
-            <div class='stat-label'>📥 금일 투입</div>
-            <div class='stat-value'>{today_input}</div>
-            <div class='stat-sub'>건 (Today)</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
+        st.markdown(f"<div class='stat-box'><div class='stat-label'>📥 금일 투입</div><div class='stat-value'>{today_input}</div><div class='stat-sub'>건 (Today)</div></div>", unsafe_allow_html=True)
     with c3:
-        st.markdown(f"""
-        <div class='stat-box'>
-            <div class='stat-label'>✅ 금일 완료</div>
-            <div class='stat-value' style='color: #28a745;'>{today_output}</div>
-            <div class='stat-sub'>건 (Today)</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"<div class='stat-box'><div class='stat-label'>✅ 금일 완료</div><div class='stat-value' style='color: #28a745;'>{today_output}</div><div class='stat-sub'>건 (Today)</div></div>", unsafe_allow_html=True)
         
-    # [추가] 금일 상세 테이블 (모델별)
     if not today_current.empty:
         today_current['is_done'] = today_current['상태'].apply(lambda x: 1 if x == '완료' else 0)
-        summary = today_current.groupby(['모델', '품목코드']).agg(
-            투입=('시리얼', 'count'),
-            완료=('is_done', 'sum')
-        ).reset_index()
+        summary = today_current.groupby(['모델', '품목코드']).agg(투입=('시리얼', 'count'), 완료=('is_done', 'sum')).reset_index()
         with st.expander("🔽 금일 모델별 상세 집계 보기", expanded=False):
             st.dataframe(summary, use_container_width=True, hide_index=True)
 
@@ -265,7 +269,7 @@ def display_process_log(line_name, ok_label="완료"):
 # --- 6-1. 조립 라인 ---
 if st.session_state.current_line == "조립 라인":
     st.markdown("<h2 class='centered-title'>📦 조립 라인 현황</h2>", unsafe_allow_html=True)
-    display_line_flow_stats("조립 라인") # 3단 현황판
+    display_line_flow_stats("조립 라인") 
     st.divider()
 
     cells = ["전체 CELL", "CELL 1", "CELL 2", "CELL 3", "CELL 4", "CELL 5", "CELL 6"]
@@ -300,7 +304,7 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
     line_title = "🔍 품질 검사 현황" if st.session_state.current_line == "검사 라인" else "🚚 출하 포장 현황"
     prev_line = "조립 라인" if st.session_state.current_line == "검사 라인" else "검사 라인"
     st.markdown(f"<h2 class='centered-title'>{line_title}</h2>", unsafe_allow_html=True)
-    display_line_flow_stats(st.session_state.current_line) # 3단 현황판
+    display_line_flow_stats(st.session_state.current_line) 
     st.divider()
 
     with st.container(border=True):
@@ -345,10 +349,10 @@ elif st.session_state.current_line == "리포트":
         st.plotly_chart(px.bar(db.groupby('작업자').size().reset_index(name='건수'), x='작업자', y='건수', color='작업자'), use_container_width=True)
         st.dataframe(db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
 
-# --- 6-4. 불량 수리 센터 ---
+# --- 6-4. 불량 수리 센터 (이미지 저장 기능 포함) ---
 elif st.session_state.current_line == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 수리 센터</h2>", unsafe_allow_html=True)
-    display_line_flow_stats("조립 라인") # 참고용
+    display_line_flow_stats("조립 라인")
 
     bad = st.session_state.production_db[st.session_state.production_db['상태'] == "불량 처리 중"]
     if bad.empty: st.success("✅ 수리 대기 중인 불량 제품이 없습니다.")
@@ -364,17 +368,26 @@ elif st.session_state.current_line == "불량 공정":
                 av = c2.text_input("수리 조치", value=cache_a, key=f"a_{idx}")
                 st.session_state.repair_cache[f"s_{idx}"], st.session_state.repair_cache[f"a_{idx}"] = sv, av
                 
-                up_f = st.file_uploader("수리 사진 미리보기", type=['jpg','png','jpeg'], key=f"img_{idx}")
+                up_f = st.file_uploader("수리 사진 (드라이브 저장)", type=['jpg','png','jpeg'], key=f"img_{idx}")
                 if up_f: st.image(up_f, width=250)
                 
                 if c3.button("✅ 수리 완료", key=f"r_{idx}", type="primary", use_container_width=True):
                     if sv and av:
+                        # [NEW] 이미지 드라이브 저장 로직
+                        img_link = ""
+                        if up_f is not None:
+                            with st.spinner("사진을 구글 드라이브에 저장 중..."):
+                                link_res = upload_image_to_drive(up_f, f"{row['시리얼']}_{datetime.now().strftime('%Y%m%d_%H%M')}.jpg")
+                                if "http" in link_res: img_link = f" [사진: {link_res}]"
+                        
                         st.session_state.production_db.at[idx, '상태'] = "수리 완료(재투입)"
-                        st.session_state.production_db.at[idx, '증상'], st.session_state.production_db.at[idx, '수리'] = sv, av
+                        st.session_state.production_db.at[idx, '증상'] = sv
+                        st.session_state.production_db.at[idx, '수리'] = av + img_link # 링크를 텍스트에 포함
                         st.session_state.production_db.at[idx, '작업자'] = st.session_state.user_id
                         save_to_gsheet(st.session_state.production_db)
+                        
                         st.session_state.repair_cache.pop(f"s_{idx}", None); st.session_state.repair_cache.pop(f"a_{idx}", None)
-                        st.rerun()
+                        st.success("수리 완료 및 사진 저장 성공!"); st.rerun()
 
 # --- 6-5. 수리 리포트 ---
 elif st.session_state.current_line == "수리 리포트":
