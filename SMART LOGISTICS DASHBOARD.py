@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import plotly.express as px
 from streamlit_gsheets import GSheetsConnection
 import io
@@ -13,7 +13,7 @@ from googleapiclient.http import MediaIoBaseUpload
 # =================================================================
 # 1. 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v16.1", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v16.2", layout="wide")
 
 # [핵심] 역할(Role) 정의
 ROLES = {
@@ -176,7 +176,7 @@ if bad_count > 0:
 # =================================================================
 # [NEW] 10단위 구분선 추가 함수
 def check_and_add_marker(df, line_name):
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = (datetime.now() + timedelta(hours=9)).strftime('%Y-%m-%d')
     # 오늘 해당 라인 작업물 수량 계산 (구분선 제외)
     count = len(df[(df['라인'] == line_name) & (df['시간'].astype(str).str.contains(today)) & (df['상태'] != "구분선")])
     
@@ -196,7 +196,7 @@ def confirm_entry_dialog():
     if c1.button("✅ 승인", type="primary", use_container_width=True):
         # 1. 실제 데이터 추가
         new_row = {
-            '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '라인': st.session_state.current_line, 
+            '시간': (datetime.now() + timedelta(hours=9)).strftime('%Y-%m-%d %H:%M:%S'), '라인': st.session_state.current_line, 
             'CELL': "-", '모델': st.session_state.confirm_model, '품목코드': st.session_state.confirm_item, 
             '시리얼': st.session_state.confirm_target, '상태': '진행 중', '증상': '', '수리': '', 
             '작업자': st.session_state.user_id
@@ -213,7 +213,7 @@ def confirm_entry_dialog():
 
 def display_line_flow_stats(current_line):
     db = st.session_state.production_db
-    today_str = datetime.now().strftime('%Y-%m-%d')
+    today_str = (datetime.now() + timedelta(hours=9)).strftime('%Y-%m-%d')
     today_current = db[(db['라인'] == current_line) & (db['시간'].astype(str).str.contains(today_str)) & (db['상태'] != '구분선')].copy() # 구분선 제외
     
     today_input = len(today_current)
@@ -308,7 +308,7 @@ if st.session_state.current_line == "조립 라인":
                         else:
                             # 1. 데이터 저장
                             new_row = {
-                                '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '라인': "조립 라인", 
+                                '시간': (datetime.now() + timedelta(hours=9)).strftime('%Y-%m-%d %H:%M:%S'), '라인': "조립 라인", 
                                 'CELL': st.session_state.selected_cell, '모델': m_choice, '품목코드': i_choice, 
                                 '시리얼': s_input, '상태': '진행 중', '증상': '', '수리': '', '작업자': st.session_state.user_id
                             }
@@ -374,7 +374,7 @@ elif st.session_state.current_line == "생산 리포트":
         st.plotly_chart(px.bar(real_db.groupby('작업자').size().reset_index(name='건수'), x='작업자', y='건수', color='작업자'), use_container_width=True)
         st.dataframe(db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
 
-# --- 6-4. 불량 수리 센터 ---
+# --- 6-4. 불량 공정 ---
 elif st.session_state.current_line == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 수리 센터</h2>", unsafe_allow_html=True)
     display_line_flow_stats("조립 라인")
@@ -401,7 +401,7 @@ elif st.session_state.current_line == "불량 공정":
                         img_link = ""
                         if up_f is not None:
                             with st.spinner("사진을 구글 드라이브에 저장 중..."):
-                                link_res = upload_image_to_drive(up_f, f"{row['시리얼']}_{datetime.now().strftime('%Y%m%d_%H%M')}.jpg")
+                                link_res = upload_image_to_drive(up_f, f"{row['시리얼']}_{((datetime.now() + timedelta(hours=9)).strftime('%Y%m%d_%H%M'))}.jpg")
                                 if "http" in link_res: img_link = f" [사진: {link_res}]"
                         
                         st.session_state.production_db.at[idx, '상태'] = "수리 완료(재투입)"
@@ -457,7 +457,7 @@ elif st.session_state.current_line == "마스터 관리":
             with st.container(border=True):
                 st.subheader("데이터 백업 및 로드")
                 csv = st.session_state.production_db.to_csv(index=False).encode('utf-8-sig')
-                st.download_button("📥 전체 생산 데이터 다운로드 (CSV)", csv, f"backup_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+                st.download_button("📥 전체 생산 데이터 다운로드 (CSV)", csv, f"backup_{((datetime.now() + timedelta(hours=9)).strftime('%Y%m%d'))}.csv", "text/csv", use_container_width=True)
                 st.divider()
                 up_f = st.file_uploader("백업 파일 로드 (CSV)", type="csv")
                 if up_f and st.button("📤 데이터 업로드 (병합)", use_container_width=True):
