@@ -570,7 +570,7 @@ def display_live_process_table(line_name_val, btn_label_ok="완료 처리"):
                     if save_to_gsheet(full_db_ptr):
                         st.rerun()
                         
-                if btn_c_ng.button("🚫불량 발생", key=f"btn_ng_act_{row_idx_val}"):
+                if btn_c_ng.button("🚫불량", key=f"btn_ng_act_{row_idx_val}"):
                     full_db_ptr.at[row_idx_val, '상태'] = "불량 처리 중"
                     full_db_ptr.at[row_idx_val, '작업자'] = st.session_state.user_id
                     if save_to_gsheet(full_db_ptr):
@@ -662,7 +662,7 @@ if st.session_state.current_line == "조립 라인":
                     else:
                         st.warning("모델명과 시리얼 번호를 누락 없이 입력해 주십시오.")
                         
-    display_live_process_table("조립 라인", "조립 완료 보고")
+    display_live_process_table("조립 라인", "완료")
 
 # -----------------------------------------------------------------
 # 7-2. 검사 및 포장 라인 페이지 (전체보기 제거 및 복합키 매칭 반영)
@@ -935,4 +935,5 @@ elif st.session_state.current_line == "마스터 관리":
             if target_uid_in and target_upw_in:
                 st.session_state.user_db[target_uid_in] = {"pw": target_upw_in, "role": target_role_in}
                 st.success(f"[{target_uid_in}] 계정 정보가 성공적으로 반영되었습니다."); st.rerun()
+
 
