@@ -219,7 +219,7 @@ if st.session_state.admin_page:
             st.rerun()
 
 # =================================================================
-# 6. 생산 통합 리포트
+# 6. 생산 통합 리포트 (수정된 섹션)
 # =================================================================
 elif st.session_state.current_line == "리포트":
     st.title("📊 통합 생산 실적 분석")
@@ -234,7 +234,25 @@ elif st.session_state.current_line == "리포트":
         st.divider()
         c_left, c_right = st.columns([3, 2])
         with c_left:
-            st.plotly_chart(px.bar(main_db[main_db['상태'] == '완료'].groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="라인별 양품 실적"), use_container_width=True)
+            # 막대 두께 조절을 위해 fig 객체를 생성하고 update_layout을 적용합니다.
+            fig_bar = px.bar(
+                main_db[main_db['상태'] == '완료'].groupby('라인').size().reset_index(name='수량'), 
+                x='라인', 
+                y='수량', 
+                color='라인', 
+                title="라인별 양품 실적"
+            )
+            
+            # 그래프 두께 조절 핵심 설정: 
+            # bargap은 막대 사이의 간격을 결정합니다. (0~1 사이 값, 클수록 막대가 얇아짐)
+            # 데이터가 1개일 때 너무 커지는 것을 방지하기 위해 0.7 정도로 설정합니다. (기존 대비 약 1/3 두께)
+            fig_bar.update_layout(
+                bargap=0.7, 
+                showlegend=False
+            )
+            
+            st.plotly_chart(fig_bar, use_container_width=True)
+            
         with c_right:
             st.plotly_chart(px.pie(main_db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 투입 비중"), use_container_width=True)
         
@@ -424,4 +442,5 @@ elif st.session_state.current_line == "포장 라인":
                         st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun()
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 포장완료")
+
 
