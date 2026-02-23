@@ -71,12 +71,12 @@ st.markdown("""
     
     /* 공정 제어 버튼의 스타일을 크고 굵게 설정하여 오작동을 방지합니다. */
     .stButton button { 
-        margin-top: 5px; 
-        padding: 12px 18px; 
+        margin-top: 2px; 
+        padding: 6px 10px !important;  /* 상하 여백을 줄여 버튼 높이 축소 */
         width: 100%; 
-        font-weight: 800;
-        font-size: 1.05em;
-        border-radius: 12px;
+        font-size: 0.95em;             /* 글자 크기를 작게 하여 콤팩트하게 변경 */
+        font-weight: 700;
+        border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         transition: all 0.2s ease;
     }
@@ -935,3 +935,4 @@ elif st.session_state.current_line == "마스터 관리":
             if target_uid_in and target_upw_in:
                 st.session_state.user_db[target_uid_in] = {"pw": target_upw_in, "role": target_role_in}
                 st.success(f"[{target_uid_in}] 계정 정보가 성공적으로 반영되었습니다."); st.rerun()
+
