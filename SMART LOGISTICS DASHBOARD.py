@@ -233,6 +233,7 @@ elif st.session_state.current_line == "리포트":
     st.title("📊 통합 생산 실적 분석")
     main_db = st.session_state.production_db
     if not main_db.empty:
+        # 상단 지표 (Metric)
         met1, met2, met3, met4 = st.columns(4)
         met1.metric("최종 완료", len(main_db[main_db['상태'] == '완료']))
         met2.metric("공정 진행중", len(main_db[main_db['상태'] == '진행 중']))
@@ -240,15 +241,46 @@ elif st.session_state.current_line == "리포트":
         met4.metric("수리 완료", len(main_db[main_db['상태'].str.contains("재투입")]))
         
         st.divider()
+        
+        # [그래프 영역] 중앙 정렬 및 두께/정수 표시 적용
         c_left, c_right = st.columns([3, 2])
         with c_left:
-            st.plotly_chart(px.bar(main_db[main_db['상태'] == '완료'].groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="라인별 양품 실적"), use_container_width=True)
+            df_bar = main_db[main_db['상태'] == '완료'].groupby('라인').size().reset_index(name='수량')
+            fig_bar = px.bar(df_bar, x='라인', y='수량', color='라인', title="라인별 양품 실적", text='수량')
+            fig_bar.update_layout(
+                title={'text': "라인별 양품 실적", 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top'},
+                bargap=0.7, # 그래프 두께 1/3 수준으로 조절
+                showlegend=False,
+                yaxis=dict(tickformat='d', dtick=1) # Y축 소수점 제거 및 정수 표시
+            )
+            fig_bar.update_traces(textposition='outside')
+            st.plotly_chart(fig_bar, use_container_width=True)
+            
         with c_right:
-            st.plotly_chart(px.pie(main_db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 투입 비중"), use_container_width=True)
+            df_pie = main_db.groupby('모델').size().reset_index(name='수량')
+            fig_pie = px.pie(df_pie, values='수량', names='모델', hole=0.3, title="모델별 투입 비중")
+            fig_pie.update_layout(
+                title={'text': "모델별 투입 비중", 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top'},
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
         
-        st.markdown("<div class='section-title'>📝 불량 및 수리 완료 상세 기록</div>", unsafe_allow_html=True)
-        h_df = main_db[main_db['상태'].str.contains("불량|수리|재투입", na=False)].sort_values('시간', ascending=False)
-        st.dataframe(h_df, use_container_width=True, hide_index=True)
+        st.divider()
+
+        # [테이블 영역] 명칭 변경 및 실시간 통합 데이터 출력
+        # 1. 생산 현황 (모든 데이터 실시간 출력)
+        st.markdown("<div class='section-title'>📋 생산 현황 (전체 실시간 기록)</div>", unsafe_allow_html=True)
+        st.dataframe(main_db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
+
+        # 2. 불량 처리 현황 (불량/수리 데이터만 필터링)
+        st.markdown("<br><div class='section-title'>⚠️ 불량 처리 현황 (수리 기록)</div>", unsafe_allow_html=True)
+        bad_repair_df = main_db[main_db['상태'].str.contains("불량|수리|재투입", na=False)]
+        if not bad_repair_df.empty:
+            st.dataframe(bad_repair_df.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
+        else:
+            st.info("현재까지 발생한 불량 및 수리 기록이 없습니다.")
+    else:
+        st.info("데이터가 없습니다. 공정에서 제품을 등록해주세요.")
 
 # =================================================================
 # 7. 불량 수리 센터
@@ -477,6 +509,7 @@ elif st.session_state.current_line == "포장 라인":
                         st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun()
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 포장완료")
+
 
 
 
