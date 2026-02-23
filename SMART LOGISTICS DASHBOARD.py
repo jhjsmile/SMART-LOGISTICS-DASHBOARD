@@ -7,7 +7,7 @@ import plotly.express as px
 # =================================================================
 # 1. 전역 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v7.5", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v7.6", layout="wide")
 ADMIN_PASSWORD = "admin1234"
 
 st.markdown("""
@@ -45,7 +45,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # =================================================================
-# 2. 세션 상태(Session State) 초기화 - 시스템의 뼈대
+# 2. 세션 상태(Session State) 초기화
 # =================================================================
 if 'production_db' not in st.session_state:
     st.session_state.production_db = pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리'])
@@ -77,7 +77,7 @@ if 'selected_cell' not in st.session_state:
     st.session_state.selected_cell = "CELL 1"
 
 # =================================================================
-# 3. 다이얼로그 정의 (메인 루프 진입 전 선언하여 에러 방지)
+# 3. 다이얼로그 정의
 # =================================================================
 @st.dialog("📦 공정 입고 승인 확인")
 def confirm_entry_dialog():
@@ -104,9 +104,9 @@ def confirm_entry_dialog():
         st.rerun()
 
 # =================================================================
-# 4. 사이드바 내비게이션 (명칭 및 순서 엄수)
+# 4. 사이드바 내비게이션
 # =================================================================
-st.sidebar.title("🏭 생산 공정 관리 v7.5")
+st.sidebar.title("🏭 생산 공정 관리 v7.6")
 st.sidebar.markdown("---")
 
 def nav_to(line_name, is_admin=False):
@@ -134,7 +134,7 @@ if st.sidebar.button("🔐 마스터 데이터 관리", use_container_width=True
     nav_to(st.session_state.current_line, is_admin=True)
 
 # =================================================================
-# 5. 마스터 데이터 관리 (미리보기 목록 복구 및 업로드 상세)
+# 5. 마스터 데이터 관리 (인증 버튼 엔터 처리 반영)
 # =================================================================
 if st.session_state.admin_page:
     st.title("🔐 시스템 관리자 제어판")
@@ -143,11 +143,13 @@ if st.session_state.admin_page:
         _, a_col, _ = st.columns([1, 1.5, 1])
         with a_col:
             st.subheader("관리자 본인 확인")
-            p_input = st.text_input("접속 비밀번호", type="password")
-            if st.button("인증하기", use_container_width=True):
-                if p_input == ADMIN_PASSWORD:
-                    st.session_state.is_authenticated = True; st.rerun()
-                else: st.error("인증에 실패했습니다.")
+            with st.form("admin_login_form"):
+                p_input = st.text_input("접속 비밀번호", type="password")
+                submit_auth = st.form_submit_button("인증하기", use_container_width=True)
+                if submit_auth:
+                    if p_input == ADMIN_PASSWORD:
+                        st.session_state.is_authenticated = True; st.rerun()
+                    else: st.error("인증에 실패했습니다.")
     else:
         st.markdown("<div class='section-title'>📋 마스터 기준 정보 개별 설정</div>", unsafe_allow_html=True)
         m_col1, m_col2 = st.columns(2)
@@ -176,20 +178,16 @@ if st.session_state.admin_page:
                     st.session_state.master_items_dict[m_target].remove(i_del); st.rerun()
 
         st.divider()
-        st.markdown("<div class='section-title'>📤 CSV 대량 데이터 관리 (업로드 미리보기)</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>📤 CSV 대량 데이터 관리</div>", unsafe_allow_html=True)
         up_c1, up_c2 = st.columns([1, 1])
-        
         with up_c1:
             with st.container(border=True):
                 st.write("**파일 업로드 제어**")
                 up_file = st.file_uploader("업로드할 CSV 파일을 드래그하세요", type="csv")
                 up_opt = st.radio("적용 범위 선택", ["모델 마스터 갱신", "품목코드 마스터 갱신"], horizontal=True)
-                
                 if st.button("🚀 시스템 일괄 반영", type="primary", use_container_width=True):
-                    if up_file:
-                        st.success("데이터 검증 완료 및 반영 성공")
+                    if up_file: st.success("데이터 검증 완료 및 반영 성공")
                     else: st.warning("파일을 먼저 선택하세요.")
-        
         with up_c2:
             st.write("**👀 업로드 예정 데이터 미리보기**")
             if up_file:
@@ -197,8 +195,7 @@ if st.session_state.admin_page:
                 st.markdown("<div class='preview-box'>", unsafe_allow_html=True)
                 st.dataframe(pre_df, use_container_width=True, height=200)
                 st.markdown("</div>", unsafe_allow_html=True)
-            else:
-                st.info("파일을 업로드하면 목록이 여기에 표시됩니다.")
+            else: st.info("파일을 업로드하면 목록이 여기에 표시됩니다.")
 
         st.divider()
         st.markdown("<div class='section-title'>📂 시스템 백업 및 DB 초기화</div>", unsafe_allow_html=True)
@@ -210,7 +207,7 @@ if st.session_state.admin_page:
             st.rerun()
 
 # =================================================================
-# 6. 생산 통합 리포트
+# 6. 생산 통합 리포트 (그래프 중앙 정렬 및 명칭 변경 반영)
 # =================================================================
 elif st.session_state.current_line == "리포트":
     st.title("📊 통합 생산 실적 분석")
@@ -225,13 +222,29 @@ elif st.session_state.current_line == "리포트":
         st.divider()
         c_left, c_right = st.columns([3, 2])
         with c_left:
-            st.plotly_chart(px.bar(main_db[main_db['상태'] == '완료'].groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="라인별 양품 실적"), use_container_width=True)
+            perf_df = main_db[main_db['상태'] == '완료'].groupby('라인').size().reset_index(name='수량')
+            fig_bar = px.bar(perf_df, x='라인', y='수량', color='라인', title="라인별 양품 실적")
+            # 두께 조절(bargap) 및 제목 중앙 정렬(title_x)
+            fig_bar.update_layout(bargap=0.6, title_x=0.5, showlegend=False)
+            st.plotly_chart(fig_bar, use_container_width=True)
+            
         with c_right:
-            st.plotly_chart(px.pie(main_db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 투입 비중"), use_container_width=True)
+            pie_df = main_db.groupby('모델').size().reset_index(name='수량')
+            fig_pie = px.pie(pie_df, values='수량', names='모델', hole=0.3, title="모델별 투입 비중")
+            # 제목 중앙 정렬
+            fig_pie.update_layout(title_x=0.5)
+            st.plotly_chart(fig_pie, use_container_width=True)
         
-        st.markdown("<div class='section-title'>📝 불량 및 수리 완료 상세 기록</div>", unsafe_allow_html=True)
-        h_df = main_db[main_db['상태'].str.contains("불량|수리|재투입", na=False)].sort_values('시간', ascending=False)
-        st.dataframe(h_df, use_container_width=True, hide_index=True)
+        # 표 섹션 명칭 변경 및 실시간 반영
+        col_tab1, col_tab2 = st.columns(2)
+        with col_tab1:
+            st.markdown("<div class='section-title'>📝 생산 현황</div>", unsafe_allow_html=True)
+            st.dataframe(main_db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
+            
+        with col_tab2:
+            st.markdown("<div class='section-title'>🛠️ 불량 및 수리 현황</div>", unsafe_allow_html=True)
+            h_df = main_db[main_db['상태'].str.contains("불량|수리|재투입", na=False)].sort_values('시간', ascending=False)
+            st.dataframe(h_df, use_container_width=True, hide_index=True)
 
 # =================================================================
 # 7. 불량 수리 센터
@@ -256,12 +269,8 @@ elif st.session_state.current_line == "불량 공정":
                     st.rerun()
 
 # =================================================================
-# 8. 각 공정별 완전 독립 구현 (조립 / 검사 / 포장)
+# 8. 조립 라인 (스캔 후 엔터 자동 등록 반영)
 # =================================================================
-
-# -----------------------------------------------------------------
-# (8-1) 조립 라인
-# -----------------------------------------------------------------
 elif st.session_state.current_line == "조립 라인":
     st.title("📦 조립 라인 작업")
     c_list = ["전체 CELL", "CELL 1", "CELL 2", "CELL 3", "CELL 4", "CELL 5", "CELL 6"]
@@ -273,26 +282,30 @@ elif st.session_state.current_line == "조립 라인":
     if st.session_state.selected_cell != "전체 CELL":
         with st.container(border=True):
             st.subheader(f"📝 {st.session_state.selected_cell} 신규 등록")
-            reg1, reg2, reg3 = st.columns(3)
-            m_choice = reg1.selectbox("모델 선택", st.session_state.master_models, key="am_m")
-            i_opts = st.session_state.master_items_dict.get(m_choice, [])
-            i_choice = reg2.selectbox("품목 선택", i_opts, key="am_i")
-            s_input = reg3.text_input("시리얼 번호 스캔")
-            
-            if st.button("▶️ 조립 시작 등록", type="primary", use_container_width=True):
-                if s_input:
-                    db = st.session_state.production_db
-                    if not db[(db['모델'] == m_choice) & (db['품목코드'] == i_choice) & (db['시리얼'] == s_input)].empty:
-                        st.error(f"이미 등록된 시리얼입니다: {s_input}")
-                    else:
-                        new_data = {
-                            '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                            '라인': "조립 라인", 'CELL': st.session_state.selected_cell,
-                            '모델': m_choice, '품목코드': i_choice, '시리얼': s_input,
-                            '상태': '진행 중', '증상': '', '수리': ''
-                        }
-                        st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True)
-                        st.rerun()
+            # form을 사용하여 엔터 키 이벤트 캡처
+            with st.form("assembly_scan_form", clear_on_submit=True):
+                reg1, reg2, reg3 = st.columns(3)
+                m_choice = reg1.selectbox("모델 선택", st.session_state.master_models, key="am_m")
+                i_opts = st.session_state.master_items_dict.get(m_choice, [])
+                i_choice = reg2.selectbox("품목 선택", i_opts, key="am_i")
+                s_input = reg3.text_input("시리얼 번호 스캔 (입력 후 Enter)")
+                
+                submit_reg = st.form_submit_button("▶️ 조립 시작 등록", type="primary", use_container_width=True)
+                
+                if submit_reg:
+                    if s_input:
+                        db = st.session_state.production_db
+                        if not db[db['시리얼'] == s_input].empty:
+                            st.error(f"이미 등록된 시리얼입니다: {s_input}")
+                        else:
+                            new_data = {
+                                '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                '라인': "조립 라인", 'CELL': st.session_state.selected_cell,
+                                '모델': m_choice, '품목코드': i_choice, '시리얼': s_input,
+                                '상태': '진행 중', '증상': '', '수리': ''
+                            }
+                            st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True)
+                            st.rerun()
     
     st.divider()
     st.subheader("📊 조립 라인 실시간 로그")
