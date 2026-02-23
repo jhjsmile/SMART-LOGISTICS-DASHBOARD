@@ -311,29 +311,14 @@ elif st.session_state.current_line == "불량 공정":
 # -----------------------------------------------------------------
 # (8-1) 조립 라인
 # -----------------------------------------------------------------
-보내주신 이미지를 보니 두 가지 문제가 동시에 발생했습니다.
-
-첫 번째 이미지 (SyntaxError): 제가 제목에 넣은 **핀 이모지(📍)**가 주석 처리(#)가 되지 않은 채 코드에 포함되어 파이썬이 이를 문법 오류로 인식했습니다.
-
-두 번째 이미지 (StreamlitAPIException): on_change 콜백 함수 내부에서 st.session_state.temp_serial = ""와 같이 세션 상태를 직접 수정할 때, Streamlit의 내부 순서와 충돌하여 발생하는 오류입니다.
-
-이 모든 문제를 한꺼번에 해결한 완전 무결한 코드를 드립니다. 아래 코드는 이모지를 제거했고, 오류를 일으키는 세션 수정 방식을 Streamlit이 권장하는 안전한 방식으로 변경했습니다.
-
-🛠️ (8-1) 조립 라인 최종 수정본 (에러 완벽 해결)
-기존 조립 라인 구간을 아래 코드로 통째로 교체해 주세요. 주석(##)으로 시작하는 부분부터 끝까지 복사하시면 됩니다.
-
-Python
-## -----------------------------------------------------------------
-## (8-1) 조립 라인 (에러 수정 및 이중 등록 방지 최종본)
-## -----------------------------------------------------------------
 elif st.session_state.current_line == "조립 라인":
     st.title("📦 조립 라인 작업")
     
-    # 세션 상태 초기화 (알림 및 마지막 처리 시리얼)
+    # 알림 및 중복 방지 세션 초기화
     if 'reg_msg' not in st.session_state:
         st.session_state.reg_msg = {"type": None, "text": ""}
-    if 'last_processed_sn' not in st.session_state:
-        st.session_state.last_processed_sn = ""
+    if 'last_sn' not in st.session_state:
+        st.session_state.last_sn = ""
 
     c_list = ["전체 CELL", "CELL 1", "CELL 2", "CELL 3", "CELL 4", "CELL 5", "CELL 6"]
     cols = st.columns(len(c_list))
@@ -357,12 +342,12 @@ elif st.session_state.current_line == "조립 라인":
                 i_options = ["선택하세요"] + st.session_state.master_items_dict.get(m_choice, [])
                 i_choice = reg2.selectbox("품목 선택", i_options, key="am_i")
 
-            # 등록 처리 함수
+            # [해결] 등록 함수: API 충돌을 피하기 위해 내부에서 직접 세션을 비우지 않습니다.
             def handle_registration():
-                # 콜백 내 세션 수정을 안전하게 처리하기 위해 변수로 할당
-                current_sn = st.session_state.temp_serial.strip()
+                input_sn = st.session_state.temp_serial.strip()
                 
-                if not current_sn or current_sn == st.session_state.last_processed_sn:
+                # 방어 로직: 빈 값이거나 직전 처리와 동일하면 중단
+                if not input_sn or input_sn == st.session_state.last_sn:
                     return
 
                 if m_choice == "선택하세요" or i_choice in ["선택하세요", "모델을 먼저 선택하세요"]:
@@ -370,31 +355,30 @@ elif st.session_state.current_line == "조립 라인":
                     return
                 
                 db = st.session_state.production_db
-                is_duplicate = not db[(db['모델'] == m_choice) & (db['품목코드'] == i_choice) & (db['시리얼'] == current_sn)].empty
+                is_dup = not db[(db['모델'] == m_choice) & (db['품목코드'] == i_choice) & (db['시리얼'] == input_sn)].empty
                 
-                if is_duplicate:
-                    st.session_state.reg_msg = {"type": "warning", "text": f"❌ 중복 등록된 시리얼입니다: {current_sn}"}
+                if is_dup:
+                    st.session_state.reg_msg = {"type": "warning", "text": f"❌ 중복 등록된 시리얼: {input_sn}"}
                 else:
-                    new_data = {
+                    new_row = {
                         '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         '라인': "조립 라인", 'CELL': st.session_state.selected_cell,
-                        '모델': m_choice, '품목코드': i_choice, '시리얼': current_sn,
+                        '모델': m_choice, '품목코드': i_choice, '시리얼': input_sn,
                         '상태': '진행 중', '증상': '', '수리': ''
                     }
-                    st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True)
-                    st.session_state.reg_msg = {"type": "success", "text": f"✅ 등록 완료: {current_sn}"}
-                    st.session_state.last_processed_sn = current_sn
+                    st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_row])], ignore_index=True)
+                    st.session_state.reg_msg = {"type": "success", "text": f"✅ 등록 완료: {input_sn}"}
+                    st.session_state.last_sn = input_sn
 
-            # 입력창 (on_change 사용)
-            # 주의: 콜백 함수에서 temp_serial을 직접 ""로 비우면 에러가 날 수 있으므로 
-            # 다음 스캔 시 자연스럽게 덮어씌워지거나 rerun 시 초기화되도록 둡니다.
-            reg3.text_input("시리얼 번호 스캔", key="temp_serial", on_change=handle_registration)
+            # [해결] 시리얼 입력창
+            st.text_input("시리얼 번호 스캔", key="temp_serial", on_change=handle_registration)
             
+            # 수동 등록 버튼
             if st.button("▶️ 조립 시작 등록 (Enter)", type="primary", use_container_width=True):
                 handle_registration()
                 st.rerun()
 
-            # 알림 표시
+            # 결과 알림창 (버튼 바로 아래 표시)
             if st.session_state.reg_msg["type"] == "error":
                 st.error(st.session_state.reg_msg["text"])
             elif st.session_state.reg_msg["type"] == "warning":
@@ -523,6 +507,7 @@ elif st.session_state.current_line == "포장 라인":
                         st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun()
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 포장완료")
+
 
 
 
