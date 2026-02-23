@@ -8,31 +8,15 @@ import io
 # =================================================================
 # 1. 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v14.0", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v14.1", layout="wide")
 
-# [핵심] 역할(Role) 정의: 시스템의 권한 체계를 정의합니다.
+# [핵심] 역할(Role) 정의
 ROLES = {
-    # 1. 슈퍼 관리자: 모든 권한 보유
-    "master": [
-        "조립 라인", "검사 라인", "포장 라인", 
-        "리포트", "불량 공정", "수리 리포트", "마스터 관리"
-    ],
-    # 2. 중앙 관제탑 (사무실): 현황판 및 데이터 관리
-    "control_tower": [
-        "리포트", "수리 리포트", "마스터 관리"
-    ],
-    # 3. 조립팀 (현장): 조립 업무만 수행
-    "assembly_team": [
-        "조립 라인"
-    ],
-    # 4. 품질/수리팀 (현장): 검사 및 불량 등록
-    "qc_team": [
-        "검사 라인", "불량 공정"
-    ],
-    # 5. 포장팀 (현장): 포장 및 출하
-    "packing_team": [
-        "포장 라인"
-    ]
+    "master": ["조립 라인", "검사 라인", "포장 라인", "리포트", "불량 공정", "수리 리포트", "마스터 관리"],
+    "control_tower": ["리포트", "수리 리포트", "마스터 관리"],
+    "assembly_team": ["조립 라인"],
+    "qc_team": ["검사 라인", "불량 공정"],
+    "packing_team": ["포장 라인"]
 }
 
 st.markdown("""
@@ -40,30 +24,30 @@ st.markdown("""
     .stApp { max-width: 1200px; margin: 0 auto; }
     .stButton button { margin-top: 0px; padding: 2px 10px; width: 100%; }
     .centered-title { text-align: center; font-weight: bold; margin: 20px 0; }
-    .section-title { 
-        background-color: #f8f9fa; color: #000; padding: 15px; border-radius: 8px; 
-        font-weight: bold; margin-bottom: 20px; border-left: 8px solid #007bff;
-    }
-    .status-red { color: #dc3545; font-weight: bold; }
-    .status-green { color: #28a745; font-weight: bold; }
     .alarm-banner { 
         background-color: #fff5f5; color: #c92a2a; padding: 15px; 
         border-radius: 8px; border: 1px solid #ffa8a8; font-weight: bold; margin-bottom: 20px;
         text-align: center;
     }
+    /* 현황판 스타일 */
+    .stat-box {
+        background-color: #f0f2f6; border-radius: 10px; padding: 15px; text-align: center;
+        border: 1px solid #e0e0e0; margin-bottom: 10px;
+    }
+    .stat-label { font-size: 0.9em; color: #555; font-weight: bold; }
+    .stat-value { font-size: 1.8em; color: #007bff; font-weight: bold; }
+    .stat-sub { font-size: 0.8em; color: #888; }
     </style>
     """, unsafe_allow_html=True)
 
 # =================================================================
-# 2. 구글 시트 연결 (소수점 제거 기능 포함)
+# 2. 구글 시트 연결
 # =================================================================
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try:
-        # 캐시 없이 항상 최신 데이터 로드
         df = conn.read(ttl=0).fillna("")
-        # 시리얼 번호가 숫자로 인식되어 .0이 붙는 현상 방지
         if '시리얼' in df.columns:
             df['시리얼'] = df['시리얼'].astype(str).str.replace(r'\.0$', '', regex=True)
         return df
@@ -75,13 +59,12 @@ def save_to_gsheet(df):
     st.cache_data.clear()
 
 # =================================================================
-# 3. 세션 상태 초기화 & 사용자 계정 설정
+# 3. 세션 상태 초기화 & 계정 설정
 # =================================================================
 if 'production_db' not in st.session_state: st.session_state.production_db = load_data()
 
 if 'user_db' not in st.session_state:
     st.session_state.user_db = {
-        # 초기 계정 설정 (필요시 마스터 관리에서 추가 가능)
         "master": {"pw": "master1234", "role": "master"},
         "admin": {"pw": "admin1234", "role": "control_tower"},
         "line1": {"pw": "1111", "role": "assembly_team"},
@@ -100,13 +83,13 @@ if 'selected_cell' not in st.session_state: st.session_state.selected_cell = "CE
 if 'repair_cache' not in st.session_state: st.session_state.repair_cache = {}
 
 # =================================================================
-# 4. 로그인 및 사이드바 (메뉴 필터링)
+# 4. 로그인 및 사이드바
 # =================================================================
 if not st.session_state.login_status:
     _, l_col, _ = st.columns([1, 1.2, 1])
     with l_col:
         st.markdown("<h2 class='centered-title'>🔐 생산 시스템 로그인</h2>", unsafe_allow_html=True)
-        st.info("💡 계정 안내: master(전체), admin(관제), line1~3(현장)")
+        st.info("💡 계정: master(전체), admin(관제), line1~3(현장)")
         with st.form("login_form"):
             uid = st.text_input("아이디(ID)")
             upw = st.text_input("비밀번호(PW)", type="password")
@@ -114,7 +97,6 @@ if not st.session_state.login_status:
                 if uid in st.session_state.user_db and st.session_state.user_db[uid]["pw"] == upw:
                     st.session_state.login_status, st.session_state.user_id = True, uid
                     st.session_state.user_role = st.session_state.user_db[uid]["role"]
-                    # 로그인 성공 시, 해당 역할의 첫 번째 메뉴로 자동 이동
                     st.session_state.current_line = ROLES[st.session_state.user_role][0]
                     st.rerun()
                 else: st.error("계정 정보를 확인하세요.")
@@ -128,7 +110,6 @@ def nav(name): st.session_state.current_line = name; st.rerun()
 
 allowed = ROLES.get(st.session_state.user_role, [])
 
-# 메뉴 그룹 1: 생산 라인 및 리포트
 menu_group_1 = ["조립 라인", "검사 라인", "포장 라인", "리포트"]
 icons_1 = {"조립 라인":"📦", "검사 라인":"🔍", "포장 라인":"🚚", "리포트":"📊"}
 g1_ok = False
@@ -139,7 +120,6 @@ for m in menu_group_1:
         if st.sidebar.button(label, use_container_width=True, type="primary" if st.session_state.current_line==m else "secondary"):
             nav(m)
 
-# 메뉴 그룹 2: 불량 수리 센터
 menu_group_2 = ["불량 공정", "수리 리포트"]
 icons_2 = {"불량 공정":"🛠️", "수리 리포트":"📈"}
 g2_ok = False
@@ -154,19 +134,17 @@ for m in menu_group_2:
         if st.sidebar.button(label, use_container_width=True, type="primary" if st.session_state.current_line==m else "secondary"):
             nav(m)
 
-# 메뉴 그룹 3: 마스터 관리
 if "마스터 관리" in allowed:
     st.sidebar.divider()
     if st.sidebar.button("🔐 마스터 관리 (Admin)", use_container_width=True, type="primary" if st.session_state.current_line=="마스터 관리" else "secondary"):
         nav("마스터 관리")
 
-# 지능형 알림 배너
 bad_count = len(st.session_state.production_db[st.session_state.production_db['상태'] == "불량 처리 중"])
 if bad_count > 0:
     st.markdown(f"<div class='alarm-banner'>⚠️ 현장 알림: 수리 대기 중인 제품이 {bad_count}건 있습니다.</div>", unsafe_allow_html=True)
 
 # =================================================================
-# 5. 공용 컴포넌트 (투입/완료 집계 기능 포함)
+# 5. 공용 컴포넌트 (공정 연계형 집계 로직)
 # =================================================================
 @st.dialog("📦 공정 입고 승인 확인")
 def confirm_entry_dialog():
@@ -184,35 +162,76 @@ def confirm_entry_dialog():
         st.session_state.confirm_target = None; st.rerun()
     if c2.button("❌ 취소", use_container_width=True): st.session_state.confirm_target = None; st.rerun()
 
-# [기능 추가] 투입 수량과 완료 수량을 동시에 집계하여 표시
-def display_daily_status(line_name):
-    today = datetime.now().strftime('%Y-%m-%d')
+# [핵심] 공정 흐름(Flow)에 따른 물량 집계 함수
+def display_line_flow_stats(current_line):
     db = st.session_state.production_db
+    today_str = datetime.now().strftime('%Y-%m-%d')
     
-    if not db.empty:
-        # 오늘 날짜 + 해당 라인 데이터만 필터링
-        today_data = db[(db['라인'] == line_name) & (db['시간'].astype(str).str.contains(today))].copy()
+    # 1. 금일 투입 및 완료 (현재 라인 기준)
+    today_current = db[(db['라인'] == current_line) & (db['시간'].astype(str).str.contains(today_str))]
+    today_input = len(today_current)
+    today_output = len(today_current[today_current['상태'] == '완료'])
+
+    # 2. 대기 물량 (이전 라인 완료 - 현재 라인 투입)
+    buffer_count = 0
+    prev_line = None
+    
+    if current_line == "검사 라인":
+        prev_line = "조립 라인"
+    elif current_line == "포장 라인":
+        prev_line = "검사 라인"
+    
+    if prev_line:
+        # 이전 공정에서 '완료'된 모든 시리얼 (날짜 무관, 누적)
+        prev_done = set(db[(db['라인'] == prev_line) & (db['상태'] == '완료')]['시리얼'])
+        # 현재 공정에 이미 '투입'된 모든 시리얼
+        curr_in = set(db[db['라인'] == current_line]['시리얼'])
+        # 차집합 = 아직 안 넘어온 대기 물량
+        buffer_count = len(prev_done - curr_in)
+    
+    # 3. 3단 현황판 UI 표시
+    c1, c2, c3 = st.columns(3)
+    
+    with c1:
+        st.markdown(f"""
+        <div class='stat-box'>
+            <div class='stat-label'>⏳ {prev_line if prev_line else '신규'} 대기</div>
+            <div class='stat-value' style='color: #ff9800;'>{buffer_count if prev_line else '-'}</div>
+            <div class='stat-sub'>건 (누적)</div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        if not today_data.empty:
-            # 완료 여부를 1과 0으로 변환하여 집계 준비
-            today_data['is_done'] = today_data['상태'].apply(lambda x: 1 if x == '완료' else 0)
-            
-            # 모델/품목코드별 그룹화 -> 투입(count), 완료(sum) 계산
-            summary = today_data.groupby(['모델', '품목코드']).agg(
-                금일_투입수량=('시리얼', 'count'),
-                금일_완료수량=('is_done', 'sum')
-            ).reset_index()
-            
-            st.markdown(f"##### 📊 {line_name} 금일 생산 현황 ({today})")
+    with c2:
+        st.markdown(f"""
+        <div class='stat-box'>
+            <div class='stat-label'>📥 금일 투입</div>
+            <div class='stat-value'>{today_input}</div>
+            <div class='stat-sub'>건 (Today)</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with c3:
+        st.markdown(f"""
+        <div class='stat-box'>
+            <div class='stat-label'>✅ 금일 완료</div>
+            <div class='stat-value' style='color: #28a745;'>{today_output}</div>
+            <div class='stat-sub'>건 (Today)</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    # [추가] 금일 상세 테이블 (모델별)
+    if not today_current.empty:
+        today_current['is_done'] = today_current['상태'].apply(lambda x: 1 if x == '완료' else 0)
+        summary = today_current.groupby(['모델', '품목코드']).agg(
+            투입=('시리얼', 'count'),
+            완료=('is_done', 'sum')
+        ).reset_index()
+        with st.expander("🔽 금일 모델별 상세 집계 보기", expanded=False):
             st.dataframe(summary, use_container_width=True, hide_index=True)
-        else:
-            st.info(f"📢 {today} :: 아직 투입된 {line_name} 작업이 없습니다.")
-    else:
-        st.info("데이터가 없습니다.")
 
 def display_process_log(line_name, ok_label="완료"):
     st.divider()
-    st.markdown(f"<h3 class='centered-title'>📝 {line_name} 실시간 로그 현황</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 class='centered-title'>📝 {line_name} 실시간 로그</h3>", unsafe_allow_html=True)
     l_db = st.session_state.production_db[st.session_state.production_db['라인'] == line_name]
     if line_name == "조립 라인" and st.session_state.selected_cell != "전체 CELL": 
         l_db = l_db[l_db['CELL'] == st.session_state.selected_cell]
@@ -246,9 +265,7 @@ def display_process_log(line_name, ok_label="완료"):
 # --- 6-1. 조립 라인 ---
 if st.session_state.current_line == "조립 라인":
     st.markdown("<h2 class='centered-title'>📦 조립 라인 현황</h2>", unsafe_allow_html=True)
-    
-    # 상단 집계표 표시
-    display_daily_status("조립 라인")
+    display_line_flow_stats("조립 라인") # 3단 현황판
     st.divider()
 
     cells = ["전체 CELL", "CELL 1", "CELL 2", "CELL 3", "CELL 4", "CELL 5", "CELL 6"]
@@ -266,7 +283,6 @@ if st.session_state.current_line == "조립 라인":
                 s_input = r2.text_input("시리얼 번호")
                 if st.form_submit_button("▶️ 조립 등록", use_container_width=True, type="primary"):
                     if m_choice != "선택하세요." and s_input:
-                        # 중복 체크
                         if not st.session_state.production_db[(st.session_state.production_db['시리얼'] == s_input) & (st.session_state.production_db['상태'] != "완료")].empty:
                             st.error("❌ 이미 진행 중인 시리얼입니다.")
                         else:
@@ -284,9 +300,7 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
     line_title = "🔍 품질 검사 현황" if st.session_state.current_line == "검사 라인" else "🚚 출하 포장 현황"
     prev_line = "조립 라인" if st.session_state.current_line == "검사 라인" else "검사 라인"
     st.markdown(f"<h2 class='centered-title'>{line_title}</h2>", unsafe_allow_html=True)
-    
-    # 상단 집계표 표시
-    display_daily_status(st.session_state.current_line)
+    display_line_flow_stats(st.session_state.current_line) # 3단 현황판
     st.divider()
 
     with st.container(border=True):
@@ -295,11 +309,10 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
         si = f2.selectbox("품목 선택", ["품목 선택"] + st.session_state.master_items_dict.get(sm, []) if sm != "선택하세요." else ["품목 선택"], key=f"si_{st.session_state.current_line}")
         if sm != "선택하세요." and si != "품목 선택":
             db = st.session_state.production_db
-            # 이전 공정에서 완료된 물량 중, 현재 공정에 아직 안 들어온 것 찾기
             ready = db[(db['라인'] == prev_line) & (db['상태'] == "완료") & (db['모델'] == sm) & (db['품목코드'] == si)]
             avail = [s for s in ready['시리얼'].unique() if s not in db[db['라인'] == st.session_state.current_line]['시리얼'].unique()]
             if avail:
-                st.success(f"📦 대기 물량: {len(avail)}건")
+                st.success(f"📦 입고 대기: {len(avail)}건")
                 grid = st.columns(4)
                 for i, sn in enumerate(avail):
                     if grid[i % 4].button(f"입고: {sn}", key=f"btn_{sn}"):
@@ -309,7 +322,7 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
 
 # --- 6-3. 통합 리포트 ---
 elif st.session_state.current_line == "리포트":
-    st.markdown("<h2 class='centered-title'>📊 통합 생산 대시보드 (현황판)</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='centered-title'>📊 통합 생산 대시보드</h2>", unsafe_allow_html=True)
     if st.button("🔄 최신 데이터 동기화"): st.session_state.production_db = load_data(); st.rerun()
     db = st.session_state.production_db
     if not db.empty:
@@ -335,8 +348,7 @@ elif st.session_state.current_line == "리포트":
 # --- 6-4. 불량 수리 센터 ---
 elif st.session_state.current_line == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 수리 센터</h2>", unsafe_allow_html=True)
-    # 수리 센터에서는 참고용으로 '조립 라인'의 현황을 표시 (원한다면 제거 가능)
-    display_daily_status("조립 라인") 
+    display_line_flow_stats("조립 라인") # 참고용
 
     bad = st.session_state.production_db[st.session_state.production_db['상태'] == "불량 처리 중"]
     if bad.empty: st.success("✅ 수리 대기 중인 불량 제품이 없습니다.")
@@ -346,14 +358,12 @@ elif st.session_state.current_line == "불량 공정":
                 st.write(f"**S/N: {row['시리얼']}** ({row['모델']} / 발생: {row['라인']})")
                 c1, c2, c3 = st.columns([4, 4, 2])
                 
-                # 입력값 보존 (Cache)
                 cache_s = st.session_state.repair_cache.get(f"s_{idx}", "")
                 cache_a = st.session_state.repair_cache.get(f"a_{idx}", "")
                 sv = c1.text_input("불량 원인", value=cache_s, key=f"s_{idx}")
                 av = c2.text_input("수리 조치", value=cache_a, key=f"a_{idx}")
                 st.session_state.repair_cache[f"s_{idx}"], st.session_state.repair_cache[f"a_{idx}"] = sv, av
                 
-                # 사진 미리보기
                 up_f = st.file_uploader("수리 사진 미리보기", type=['jpg','png','jpeg'], key=f"img_{idx}")
                 if up_f: st.image(up_f, width=250)
                 
@@ -376,7 +386,7 @@ elif st.session_state.current_line == "수리 리포트":
         with c2: st.plotly_chart(px.pie(rep_db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="수리 모델 비중"), use_container_width=True)
         st.dataframe(rep_db[['시간', '라인', '모델', '시리얼', '증상', '수리', '작업자']], use_container_width=True, hide_index=True)
 
-# --- 6-6. 마스터 관리 (계정 생성/관리 UI 완전 복구) ---
+# --- 6-6. 마스터 관리 ---
 elif st.session_state.current_line == "마스터 관리":
     st.markdown("<h2 class='centered-title'>🔐 마스터 데이터 및 계정 관리</h2>", unsafe_allow_html=True)
     if not st.session_state.admin_authenticated:
@@ -424,14 +434,7 @@ elif st.session_state.current_line == "마스터 관리":
         new_upw = u_col2.text_input("신규 생성 PW", type="password")
         new_role_choice = u_col3.selectbox("권한 설정", ["control_tower", "assembly_team", "qc_team", "packing_team", "master"])
         
-        # UI 표시 이름과 내부 역할 코드 매핑
-        role_map = {
-            "control_tower": "control_tower", 
-            "assembly_team": "assembly_team", 
-            "qc_team": "qc_team", 
-            "packing_team": "packing_team", 
-            "master": "master"
-        }
+        role_map = {"control_tower": "control_tower", "assembly_team": "assembly_team", "qc_team": "qc_team", "packing_team": "packing_team", "master": "master"}
 
         if st.button("계정 생성 및 업데이트", use_container_width=True):
             if new_uid and new_upw:
