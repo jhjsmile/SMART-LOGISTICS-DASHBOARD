@@ -416,7 +416,7 @@ if st.session_state.current_line == "조립 라인":
                             st.session_state.production_db = pd.concat([db_current, pd.DataFrame([new_row_data])], ignore_index=True)
                             push_to_gsheet(st.session_state.production_db); st.rerun()
     
-    draw_log_table_v9("조립 라인", "조립 완료")
+    draw_log_table_v9("조립 라인", "완료")
 
 # --- 6-2. 품질 / 포장 라인 페이지 ---
 elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
@@ -654,3 +654,4 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.3 배포용 통합 코드 종료 ]
 # =================================================================
+
