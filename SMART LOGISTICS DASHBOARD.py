@@ -119,7 +119,7 @@ def confirm_entry_dialog():
         st.session_state.confirm_target = None; st.rerun()
 
 # =================================================================
-# 5. 마스터 관리 (인증/로그아웃/업로드)
+# 5. 마스터 관리
 # =================================================================
 if st.session_state.current_line == "마스터 관리":
     st.title("🔐 마스터 데이터 관리")
@@ -159,7 +159,7 @@ if st.session_state.current_line == "마스터 관리":
             st.session_state.production_db = pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리']); st.rerun()
 
 # =================================================================
-# 6. 조립 라인 현황 (중복체크/엔터/제어버튼)
+# 6. 조립 라인 현황 (셀 변경 시 초기화 로직 보강)
 # =================================================================
 elif st.session_state.current_line == "조립 라인":
     st.title("📦 조립 라인 현황")
@@ -171,19 +171,25 @@ elif st.session_state.current_line == "조립 라인":
     
     if st.session_state.selected_cell != "전체 CELL":
         with st.container(border=True):
-            m_choice = st.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models)
-            with st.form("asm_form"):
+            st.subheader(f"📝 {st.session_state.selected_cell} 신규 등록")
+            
+            # [해결 방법] key값에 selected_cell을 포함하여 셀이 바뀔 때마다 위젯을 새로 생성(초기화)합니다.
+            m_choice = st.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, 
+                                    key=f"m_select_{st.session_state.selected_cell}")
+            
+            with st.form(f"asm_form_{st.session_state.selected_cell}", clear_on_submit=False):
                 r1, r2 = st.columns(2)
-                i_opts = st.session_state.master_items_dict.get(m_choice, []) if m_choice!="선택하세요." else ["모델 선택 필요"]
+                i_opts = st.session_state.master_items_dict.get(m_choice, []) if m_choice != "선택하세요." else ["모델 선택 필요"]
                 i_choice = r1.selectbox("품목 선택", i_opts)
                 s_input = r2.text_input("시리얼 번호")
+                
                 if st.form_submit_button("▶️ 조립 등록", type="primary", use_container_width=True):
                     if m_choice != "선택하세요." and s_input:
                         db = st.session_state.production_db
                         if db[(db['모델']==m_choice) & (db['품목코드']==i_choice) & (db['시리얼']==s_input) & (db['상태'] != "완료")].empty:
                             new_data = {'시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '라인': "조립 라인", 'CELL': st.session_state.selected_cell, '모델': m_choice, '품목코드': i_choice, '시리얼': s_input, '상태': '진행 중', '증상': '', '수리': ''}
                             st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True); st.rerun()
-                        else: st.error("진행 중인 동일 데이터 존재")
+                        else: st.error("이미 진행 중인 동일 데이터 존재")
 
     st.divider()
     l_db = st.session_state.production_db[st.session_state.production_db['라인'] == "조립 라인"]
@@ -202,7 +208,7 @@ elif st.session_state.current_line == "조립 라인":
                 else: st.success(row['상태'])
 
 # =================================================================
-# 7. 품질 검사 / 8. 출하 포장 (입고/판정 로직 복구)
+# 7. 품질 검사 / 8. 출하 포장 
 # =================================================================
 elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
     line_title = "🔍 품질 검사 현황" if st.session_state.current_line == "검사 라인" else "🚚 출하 포장 현황"
@@ -211,7 +217,7 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
     
     with st.container(border=True):
         f1, f2 = st.columns(2)
-        sm = f1.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models)
+        sm = f1.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key=f"m_sel_{st.session_state.current_line}")
         si_opts = st.session_state.master_items_dict.get(sm, []) if sm != "선택하세요." else []
         si = f2.selectbox("품목 선택", ["품목을 선택하세요."] + si_opts)
         
@@ -222,8 +228,9 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
             avail = [s for s in ready['시리얼'].unique() if s not in done_sns]
             if avail:
                 st.success(f"📦 대기 물량: {len(avail)}건")
-                for sn in avail:
-                    if st.button(f"입고: {sn}", key=f"btn_{sn}"):
+                grid = st.columns(4)
+                for i, sn in enumerate(avail):
+                    if grid[i % 4].button(f"입고: {sn}", key=f"btn_{sn}"):
                         st.session_state.confirm_target, st.session_state.confirm_model, st.session_state.confirm_item = sn, sm, si; confirm_entry_dialog()
             else: st.info("대기 물량 없음")
 
@@ -242,7 +249,7 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
                 else: st.success("🟢 완료")
 
 # =================================================================
-# 9. 리포트 / 10. 불량 수리 센터 (정수 그래프/명칭 복구)
+# 9. 리포트 / 10. 불량 수리 센터
 # =================================================================
 elif st.session_state.current_line == "리포트":
     st.title("📊 통합 생산 리포트")
@@ -250,7 +257,7 @@ elif st.session_state.current_line == "리포트":
     if not db.empty:
         c1, c2 = st.columns([3, 2])
         with c1:
-            fig1 = px.bar(db[db['상태']=='완료'].groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', title="라인별 양품 실적")
+            fig1 = px.bar(db[db['상태']=='완료'].groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="라인별 양품 실적")
             fig1.update_layout(title_x=0.5, yaxis=dict(dtick=1))
             st.plotly_chart(fig1, use_container_width=True)
         with c2:
