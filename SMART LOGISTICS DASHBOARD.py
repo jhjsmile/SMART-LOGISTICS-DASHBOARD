@@ -13,7 +13,7 @@ from googleapiclient.http import MediaIoBaseUpload
 # =================================================================
 # 1. 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v15.2", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v15.3", layout="wide")
 
 # [핵심] 역할(Role) 정의
 ROLES = {
@@ -62,16 +62,13 @@ def save_to_gsheet(df):
     conn.update(data=df)
     st.cache_data.clear()
 
-# [NEW] 구글 드라이브 이미지 업로드 함수
 def upload_image_to_drive(file_obj, filename):
     try:
         raw_creds = st.secrets["connections"]["gsheets"]
         creds = service_account.Credentials.from_service_account_info(raw_creds)
         service = build('drive', 'v3', credentials=creds)
         folder_id = st.secrets["connections"]["gsheets"].get("image_folder_id")
-        
         if not folder_id: return "폴더ID설정안됨"
-
         file_metadata = {'name': filename, 'parents': [folder_id]}
         media = MediaIoBaseUpload(file_obj, mimetype=file_obj.type)
         file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
@@ -80,7 +77,7 @@ def upload_image_to_drive(file_obj, filename):
         return f"업로드실패({str(e)})"
 
 # =================================================================
-# 3. 세션 상태 초기화 & 계정 설정
+# 3. 세션 상태 초기화 & 계정 설정 (완벽 복구)
 # =================================================================
 if 'production_db' not in st.session_state: st.session_state.production_db = load_data()
 
@@ -123,9 +120,9 @@ if not st.session_state.login_status:
                 else: st.error("계정 정보를 확인하세요.")
     st.stop()
 
-# [수정 사항 반영]
+# 사이드바 상단 레이아웃 (요청 사항 반영)
 st.sidebar.markdown("### 🏭 생산 관리 시스템")
-st.sidebar.title(f"{st.session_state.user_id}님")
+st.sidebar.title(f"{st.session_state.user_id}님") # 아이콘 제거됨
 if st.sidebar.button("전체 로그아웃"): st.session_state.login_status = False; st.rerun()
 st.sidebar.divider()
 
@@ -287,7 +284,7 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
             else: st.info("대기 물량이 없습니다.")
     display_process_log(st.session_state.current_line, "합격" if st.session_state.current_line=="검사 라인" else "출고")
 
-# --- 6-3. 통합 리포트 [수정: 점선 제거] ---
+# --- 6-3. 통합 리포트 [수정: 음수 축 제거] ---
 elif st.session_state.current_line == "리포트":
     st.markdown("<h2 class='centered-title'>📊 통합 생산 대시보드</h2>", unsafe_allow_html=True)
     if st.button("🔄 최신 데이터 동기화"): st.session_state.production_db = load_data(); st.rerun()
@@ -303,19 +300,22 @@ elif st.session_state.current_line == "리포트":
         met[3].metric("직행률(FTT)", f"{ftt:.1f}%")
         
         st.divider(); c1, c2 = st.columns([3, 2])
-        # [수정] Plotly 점선 제거 설정
+        # 차트1 (음수 제거 설정 반영)
         fig1 = px.bar(db[db['상태']=='완료'].groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="공정별 실적")
         fig1.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-        fig1.update_xaxes(showgrid=False); fig1.update_yaxes(showgrid=False)
+        fig1.update_xaxes(showgrid=False)
+        fig1.update_yaxes(showgrid=False, rangemode='tozero') # 음수 제거
         with c1: st.plotly_chart(fig1, use_container_width=True)
         
         with c2: st.plotly_chart(px.pie(db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 비중"), use_container_width=True)
         
         st.divider()
         st.markdown("##### 👷 현장 작업자별 처리 건수")
+        # 차트2 (음수 제거 설정 반영)
         fig2 = px.bar(db.groupby('작업자').size().reset_index(name='건수'), x='작업자', y='건수', color='작업자')
         fig2.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-        fig2.update_xaxes(showgrid=False); fig2.update_yaxes(showgrid=False)
+        fig2.update_xaxes(showgrid=False)
+        fig2.update_yaxes(showgrid=False, rangemode='tozero') # 음수 제거
         st.plotly_chart(fig2, use_container_width=True)
         st.dataframe(db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
 
@@ -350,26 +350,28 @@ elif st.session_state.current_line == "불량 공정":
                         st.session_state.repair_cache.pop(f"s_{idx}", None); st.session_state.repair_cache.pop(f"a_{idx}", None)
                         st.success("수리 완료 및 사진 저장 성공!"); st.rerun()
 
-# --- 6-5. 수리 리포트 [100% 복구] ---
+# --- 6-5. 수리 리포트 ---
 elif st.session_state.current_line == "수리 리포트":
     st.markdown("<h2 class='centered-title'>📈 불량 수리 리포트</h2>", unsafe_allow_html=True)
     rep_db = st.session_state.production_db[(st.session_state.production_db['상태'].str.contains("재투입", na=False)) | (st.session_state.production_db['수리'] != "")]
     if not rep_db.empty:
         c1, c2 = st.columns(2)
         fig_r1 = px.bar(rep_db.groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', title="라인별 수리 건수")
-        fig_r1.update_layout(plot_bgcolor='rgba(0,0,0,0)'); fig_r1.update_xaxes(showgrid=False); fig_r1.update_yaxes(showgrid=False)
+        fig_r1.update_layout(plot_bgcolor='rgba(0,0,0,0)')
+        fig_r1.update_xaxes(showgrid=False)
+        fig_r1.update_yaxes(showgrid=False, rangemode='tozero') # 음수 제거
         with c1: st.plotly_chart(fig_r1, use_container_width=True)
         with c2: st.plotly_chart(px.pie(rep_db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="수리 모델 비중"), use_container_width=True)
         st.dataframe(rep_db[['시간', '라인', '모델', '시리얼', '증상', '수리', '작업자']], use_container_width=True, hide_index=True)
 
-# --- 6-6. 마스터 관리 [100% 복구] ---
+# --- 6-6. 마스터 관리 ---
 elif st.session_state.current_line == "마스터 관리":
     st.markdown("<h2 class='centered-title'>🔐 마스터 데이터 및 계정 관리</h2>", unsafe_allow_html=True)
     if not st.session_state.admin_authenticated:
         with st.form("admin_auth"):
             apw = st.text_input("관리자 PW (admin1234)", type="password")
             if st.form_submit_button("인증하기"):
-                if apw == "admin1234" or apw == "master1234":
+                if apw in ["admin1234", "master1234"]:
                     st.session_state.admin_authenticated = True; st.rerun()
                 else: st.error("인증 실패")
     else:
@@ -416,4 +418,3 @@ elif st.session_state.current_line == "마스터 관리":
         if st.button("⚠️ 시스템 전체 DB 초기화", type="secondary", use_container_width=True):
             st.session_state.production_db = pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리', '작업자'])
             save_to_gsheet(st.session_state.production_db); st.rerun()
-
