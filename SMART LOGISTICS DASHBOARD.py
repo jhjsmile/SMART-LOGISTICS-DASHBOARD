@@ -608,7 +608,7 @@ if st.session_state.current_line == "조립 라인":
             st.subheader(f"🛠️ {st.session_state.selected_cell} 신규 조립 등록")
             
             # 모델 선택박스 (마스터 모델 기준)
-            sel_model_in = st.selectbox("생산 모델을 선택하세요.", ["선택하세요."] + st.session_state.master_models)
+            sel_model_in = st.selectbox("생산 모델을 선택하세요.", ["선택하세요."] + st.session_state.master_models, key=f"model_sel_widget_{st.session_state.selected_cell}")
             
             with st.form("new_assembly_registration_form"):
                 row_f1_in, row_f2_in = st.columns(2)
