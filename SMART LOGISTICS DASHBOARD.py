@@ -5,7 +5,7 @@ import plotly.express as px
 from streamlit_gsheets import GSheetsConnection
 import io
 
-# [NEW] 구글 드라이브 연동 라이브러리
+# 구글 드라이브 연동 라이브러리
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
@@ -13,7 +13,7 @@ from googleapiclient.http import MediaIoBaseUpload
 # =================================================================
 # 1. 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v15.0", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v15.2", layout="wide")
 
 # [핵심] 역할(Role) 정의
 ROLES = {
@@ -62,37 +62,22 @@ def save_to_gsheet(df):
     conn.update(data=df)
     st.cache_data.clear()
 
-# [NEW] 구글 드라이브 이미지 업로드 함수
 def upload_image_to_drive(file_obj, filename):
     try:
-        # Secrets에서 인증 정보 가져오기
         raw_creds = st.secrets["connections"]["gsheets"]
         creds = service_account.Credentials.from_service_account_info(raw_creds)
-        
-        # 구글 드라이브 서비스 빌드
         service = build('drive', 'v3', credentials=creds)
-        
-        # 폴더 ID 가져오기 (secrets.toml에 없으면 에러 방지용으로 None)
         folder_id = st.secrets["connections"]["gsheets"].get("image_folder_id")
         
-        if not folder_id:
-            return "폴더ID설정안됨"
+        if not folder_id: return "폴더ID설정안됨"
 
-        file_metadata = {
-            'name': filename,
-            'parents': [folder_id]
-        }
-        
+        file_metadata = {'name': filename, 'parents': [folder_id]}
         media = MediaIoBaseUpload(file_obj, mimetype=file_obj.type)
         
-        # 파일 업로드 실행
         file = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id, webViewLink'
+            body=file_metadata, media_body=media, fields='id, webViewLink'
         ).execute()
-        
-        return file.get('webViewLink') # 업로드된 파일의 링크 반환
+        return file.get('webViewLink')
     except Exception as e:
         return f"업로드실패({str(e)})"
 
@@ -133,6 +118,8 @@ if not st.session_state.login_status:
             upw = st.text_input("비밀번호(PW)", type="password")
             if st.form_submit_button("로그인", use_container_width=True):
                 if uid in st.session_state.user_db and st.session_state.user_db[uid]["pw"] == upw:
+                    st.cache_data.clear()
+                    st.session_state.production_db = load_data()
                     st.session_state.login_status, st.session_state.user_id = True, uid
                     st.session_state.user_role = st.session_state.user_db[uid]["role"]
                     st.session_state.current_line = ROLES[st.session_state.user_role][0]
@@ -141,7 +128,10 @@ if not st.session_state.login_status:
     st.stop()
 
 st.sidebar.title(f"🏭 {st.session_state.user_id}님")
-if st.sidebar.button("전체 로그아웃"): st.session_state.login_status = False; st.rerun()
+if st.sidebar.button("전체 로그아웃"): 
+    st.session_state.login_status = False
+    st.cache_data.clear()
+    st.rerun()
 st.sidebar.divider()
 
 def nav(name): st.session_state.current_line = name; st.rerun()
@@ -182,20 +172,42 @@ if bad_count > 0:
     st.markdown(f"<div class='alarm-banner'>⚠️ 현장 알림: 수리 대기 중인 제품이 {bad_count}건 있습니다.</div>", unsafe_allow_html=True)
 
 # =================================================================
-# 5. 공용 컴포넌트 (투입/완료 집계 및 공정 흐름)
+# 5. 공용 컴포넌트 (10단위 구분선 기능 추가됨)
 # =================================================================
+# [NEW] 10단위 구분선 추가 함수
+def check_and_add_marker(df, line_name):
+    today = datetime.now().strftime('%Y-%m-%d')
+    # 오늘 해당 라인 작업물 수량 계산 (구분선 제외)
+    count = len(df[(df['라인'] == line_name) & (df['시간'].astype(str).str.contains(today)) & (df['상태'] != "구분선")])
+    
+    # 10개 단위(10, 20, 30...)가 되면 구분선 추가
+    if count > 0 and count % 10 == 0:
+        marker_row = {
+            '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '라인': line_name, 
+            'CELL': '-', '모델': '----------------', '품목코드': '----------------', 
+            '시리얼': f"✅ {count}대 달성", '상태': '구분선', '증상': '', '수리': '', '작업자': '-'
+        }
+        return pd.concat([df, pd.DataFrame([marker_row])], ignore_index=True)
+    return df
+
 @st.dialog("📦 공정 입고 승인 확인")
 def confirm_entry_dialog():
     st.warning(f"시리얼 [ {st.session_state.confirm_target} ] 입고하시겠습니까?")
     c1, c2 = st.columns(2)
     if c1.button("✅ 승인", type="primary", use_container_width=True):
+        # 1. 실제 데이터 추가
         new_row = {
             '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '라인': st.session_state.current_line, 
             'CELL': "-", '모델': st.session_state.confirm_model, '품목코드': st.session_state.confirm_item, 
             '시리얼': st.session_state.confirm_target, '상태': '진행 중', '증상': '', '수리': '', 
             '작업자': st.session_state.user_id
         }
-        st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_row])], ignore_index=True)
+        updated_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_row])], ignore_index=True)
+        
+        # 2. [NEW] 10단위 구분선 체크 및 추가
+        updated_db = check_and_add_marker(updated_db, st.session_state.current_line)
+        
+        st.session_state.production_db = updated_db
         save_to_gsheet(st.session_state.production_db)
         st.session_state.confirm_target = None; st.rerun()
     if c2.button("❌ 취소", use_container_width=True): st.session_state.confirm_target = None; st.rerun()
@@ -203,7 +215,7 @@ def confirm_entry_dialog():
 def display_line_flow_stats(current_line):
     db = st.session_state.production_db
     today_str = datetime.now().strftime('%Y-%m-%d')
-    today_current = db[(db['라인'] == current_line) & (db['시간'].astype(str).str.contains(today_str))].copy()
+    today_current = db[(db['라인'] == current_line) & (db['시간'].astype(str).str.contains(today_str)) & (db['상태'] != '구분선')].copy() # 구분선 제외
     
     today_input = len(today_current)
     today_output = len(today_current[today_current['상태'] == '완료'])
@@ -246,6 +258,11 @@ def display_process_log(line_name, ok_label="완료"):
     for col, txt in zip(lh, ["시간", "CELL", "모델", "품목코드", "시리얼", "상태제어"]): col.write(f"**{txt}**")
     
     for idx, row in l_db.sort_values('시간', ascending=False).iterrows():
+        # 구분선인 경우 다르게 표시
+        if row['상태'] == "구분선":
+            st.markdown(f"<div style='background-color: #e9ecef; padding: 5px; text-align: center; border-radius: 5px; font-weight: bold; color: #495057;'>📦 {row['시리얼']} -----------------------------------------------------</div>", unsafe_allow_html=True)
+            continue
+
         lr = st.columns([2.5, 1, 1.5, 1.5, 2, 3])
         lr[0].write(row['시간']); lr[1].write(row['CELL']); lr[2].write(row['모델']); lr[3].write(row['품목코드']); lr[4].write(row['시리얼'])
         with lr[5]:
@@ -290,12 +307,18 @@ if st.session_state.current_line == "조립 라인":
                         if not st.session_state.production_db[(st.session_state.production_db['시리얼'] == s_input) & (st.session_state.production_db['상태'] != "완료")].empty:
                             st.error("❌ 이미 진행 중인 시리얼입니다.")
                         else:
+                            # 1. 데이터 저장
                             new_row = {
                                 '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '라인': "조립 라인", 
                                 'CELL': st.session_state.selected_cell, '모델': m_choice, '품목코드': i_choice, 
                                 '시리얼': s_input, '상태': '진행 중', '증상': '', '수리': '', '작업자': st.session_state.user_id
                             }
-                            st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_row])], ignore_index=True)
+                            updated_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_row])], ignore_index=True)
+                            
+                            # 2. [NEW] 10단위 구분선 체크
+                            updated_db = check_and_add_marker(updated_db, "조립 라인")
+                            
+                            st.session_state.production_db = updated_db
                             save_to_gsheet(st.session_state.production_db); st.rerun()
     display_process_log("조립 라인", "완료")
 
@@ -330,26 +353,29 @@ elif st.session_state.current_line == "리포트":
     if st.button("🔄 최신 데이터 동기화"): st.session_state.production_db = load_data(); st.rerun()
     db = st.session_state.production_db
     if not db.empty:
-        t_done = len(db[(db['라인'] == '포장 라인') & (db['상태'] == '완료')])
-        t_ng = len(db[db['상태'].str.contains("불량", na=False)])
+        # 구분선 제외하고 통계 계산
+        real_db = db[db['상태'] != '구분선']
+        
+        t_done = len(real_db[(real_db['라인'] == '포장 라인') & (real_db['상태'] == '완료')])
+        t_ng = len(real_db[real_db['상태'].str.contains("불량", na=False)])
         ftt = (t_done / (t_done + t_ng) * 100) if (t_done + t_ng) > 0 else 100
         
         met = st.columns(4)
         met[0].metric("최종 생산", f"{t_done} EA")
-        met[1].metric("진행 중", len(db[db['상태'] == '진행 중']))
+        met[1].metric("진행 중", len(real_db[real_db['상태'] == '진행 중']))
         met[2].metric("누적 불량", f"{t_ng} 건", delta=t_ng, delta_color="inverse")
         met[3].metric("직행률(FTT)", f"{ftt:.1f}%")
         
         st.divider(); c1, c2 = st.columns([3, 2])
-        with c1: st.plotly_chart(px.bar(db[db['상태']=='완료'].groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="공정별 실적"), use_container_width=True)
-        with c2: st.plotly_chart(px.pie(db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 비중"), use_container_width=True)
+        with c1: st.plotly_chart(px.bar(real_db[real_db['상태']=='완료'].groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="공정별 실적"), use_container_width=True)
+        with c2: st.plotly_chart(px.pie(real_db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 비중"), use_container_width=True)
         
         st.divider()
         st.markdown("##### 👷 현장 작업자별 처리 건수")
-        st.plotly_chart(px.bar(db.groupby('작업자').size().reset_index(name='건수'), x='작업자', y='건수', color='작업자'), use_container_width=True)
+        st.plotly_chart(px.bar(real_db.groupby('작업자').size().reset_index(name='건수'), x='작업자', y='건수', color='작업자'), use_container_width=True)
         st.dataframe(db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
 
-# --- 6-4. 불량 수리 센터 (이미지 저장 기능 포함) ---
+# --- 6-4. 불량 수리 센터 ---
 elif st.session_state.current_line == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 수리 센터</h2>", unsafe_allow_html=True)
     display_line_flow_stats("조립 라인")
@@ -373,7 +399,6 @@ elif st.session_state.current_line == "불량 공정":
                 
                 if c3.button("✅ 수리 완료", key=f"r_{idx}", type="primary", use_container_width=True):
                     if sv and av:
-                        # [NEW] 이미지 드라이브 저장 로직
                         img_link = ""
                         if up_f is not None:
                             with st.spinner("사진을 구글 드라이브에 저장 중..."):
@@ -382,12 +407,12 @@ elif st.session_state.current_line == "불량 공정":
                         
                         st.session_state.production_db.at[idx, '상태'] = "수리 완료(재투입)"
                         st.session_state.production_db.at[idx, '증상'] = sv
-                        st.session_state.production_db.at[idx, '수리'] = av + img_link # 링크를 텍스트에 포함
+                        st.session_state.production_db.at[idx, '수리'] = av + img_link
                         st.session_state.production_db.at[idx, '작업자'] = st.session_state.user_id
                         save_to_gsheet(st.session_state.production_db)
                         
                         st.session_state.repair_cache.pop(f"s_{idx}", None); st.session_state.repair_cache.pop(f"a_{idx}", None)
-                        st.success("수리 완료 및 사진 저장 성공!"); st.rerun()
+                        st.success("수리 완료!"); st.rerun()
 
 # --- 6-5. 수리 리포트 ---
 elif st.session_state.current_line == "수리 리포트":
