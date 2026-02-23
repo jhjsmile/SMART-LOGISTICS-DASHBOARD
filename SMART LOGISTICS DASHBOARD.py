@@ -134,7 +134,7 @@ if st.sidebar.button("🔐 마스터 데이터 관리", use_container_width=True
     nav_to(st.session_state.current_line, is_admin=True)
 
 # =================================================================
-# 5. 마스터 데이터 관리 (미리보기 목록 복구 및 업로드 상세)
+# 5. 마스터 데이터 관리
 # =================================================================
 if st.session_state.admin_page:
     st.title("🔐 시스템 관리자 제어판")
@@ -143,11 +143,20 @@ if st.session_state.admin_page:
         _, a_col, _ = st.columns([1, 1.5, 1])
         with a_col:
             st.subheader("관리자 본인 확인")
+            # 엔터 입력을 감지하기 위해 on_change는 사용하지 않고 버튼과 변수를 연동합니다.
             p_input = st.text_input("접속 비밀번호", type="password")
-            if st.button("인증하기", use_container_width=True):
+            
+            # 버튼 클릭 혹은 텍스트 입력 후 엔터 시 로직 실행
+            btn_clicked = st.button("인증하기", use_container_width=True)
+            
+            if btn_clicked or (p_input != ""):
+                # 엔터만 쳤을 때도 작동하도록 p_input 값이 있을 때 검증 로직 진입
+                # (단, 사용자가 비밀번호를 입력하고 엔터를 치면 p_input 값이 업데이트되며 스크립트가 재실행됨)
                 if p_input == ADMIN_PASSWORD:
-                    st.session_state.is_authenticated = True; st.rerun()
-                else: st.error("인증에 실패했습니다.")
+                    st.session_state.is_authenticated = True
+                    st.rerun()
+                elif btn_clicked and p_input != ADMIN_PASSWORD:
+                    st.error("인증에 실패했습니다.")
     else:
         st.markdown("<div class='section-title'>📋 마스터 기준 정보 개별 설정</div>", unsafe_allow_html=True)
         m_col1, m_col2 = st.columns(2)
