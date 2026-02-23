@@ -219,7 +219,7 @@ if st.session_state.admin_page:
             st.rerun()
 
 # =================================================================
-# 6. 생산 통합 리포트 (수량 소수점 제거 및 두께 조절 적용)
+# 6. 생산 통합 리포트 (중앙 정렬 및 정수 표시 적용)
 # =================================================================
 elif st.session_state.current_line == "리포트":
     st.title("📊 통합 생산 실적 분석")
@@ -233,36 +233,46 @@ elif st.session_state.current_line == "리포트":
         
         st.divider()
         c_left, c_right = st.columns([3, 2])
+        
         with c_left:
-            # 데이터 집계
             df_bar = main_db[main_db['상태'] == '완료'].groupby('라인').size().reset_index(name='수량')
-            
             fig_bar = px.bar(
-                df_bar, 
-                x='라인', 
-                y='수량', 
-                color='라인', 
+                df_bar, x='라인', y='수량', color='라인', 
                 title="라인별 양품 실적",
-                text='수량' # 막대 위에 숫자를 직접 표시하여 가독성 향상
+                text='수량'
             )
             
-            # 레이아웃 업데이트: 두께 조절 및 소수점 제거
+            # 중앙 정렬 및 옵션 설정
             fig_bar.update_layout(
+                title={
+                    'text': "라인별 양품 실적",
+                    'y':0.95, 'x':0.5,           # x:0.5 가 중앙 정렬입니다
+                    'xanchor': 'center', 'yanchor': 'top'
+                },
                 bargap=0.7, 
                 showlegend=False,
-                yaxis=dict(
-                    tickformat='d', # 'd'는 정수(integer) 포맷을 의미합니다. 소수점 강제 제거
-                    dtick=1         # 그리드 간격을 1단위로 설정하여 0, 1, 2... 로만 표시
-                )
+                yaxis=dict(tickformat='d', dtick=1)
             )
-            
-            # 막대 위 텍스트 위치 설정
             fig_bar.update_traces(textposition='outside')
-            
             st.plotly_chart(fig_bar, use_container_width=True)
             
         with c_right:
-            st.plotly_chart(px.pie(main_db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 투입 비중"), use_container_width=True)
+            df_pie = main_db.groupby('모델').size().reset_index(name='수량')
+            fig_pie = px.pie(
+                df_pie, values='수량', names='모델', 
+                hole=0.3, title="모델별 투입 비중"
+            )
+            
+            # 파이 차트 제목도 중앙 정렬
+            fig_pie.update_layout(
+                title={
+                    'text': "모델별 투입 비중",
+                    'y':0.95, 'x':0.5,           # 중앙 정렬 설정
+                    'xanchor': 'center', 'yanchor': 'top'
+                },
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5) # 범례도 하단 중앙으로
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
         
         st.markdown("<div class='section-title'>📝 불량 및 수리 완료 상세 기록</div>", unsafe_allow_html=True)
         h_df = main_db[main_db['상태'].str.contains("불량|수리|재투입", na=False)].sort_values('시간', ascending=False)
@@ -450,6 +460,7 @@ elif st.session_state.current_line == "포장 라인":
                         st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun()
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 포장완료")
+
 
 
 
