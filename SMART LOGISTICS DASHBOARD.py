@@ -7,7 +7,7 @@ import plotly.express as px
 # =================================================================
 # 1. 전역 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v8.2", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v8.3", layout="wide")
 
 st.markdown("""
     <style>
@@ -61,7 +61,7 @@ if 'current_line' not in st.session_state: st.session_state.current_line = "조�
 if 'selected_cell' not in st.session_state: st.session_state.selected_cell = "CELL 1"
 
 # =================================================================
-# 3. 로그인 처리
+# 3. 로그인 및 사이드바 (12, 13번 메뉴 배치 수정)
 # =================================================================
 if not st.session_state.login_status:
     _, l_col, _ = st.columns([1, 1.2, 1])
@@ -78,9 +78,6 @@ if not st.session_state.login_status:
                 else: st.error("계정 정보를 확인하세요.")
     st.stop()
 
-# =================================================================
-# 4. 사이드바 및 공용 다이얼로그
-# =================================================================
 st.sidebar.title(f"🏭 {st.session_state.user_id}님")
 if st.sidebar.button("전체 로그아웃"):
     st.session_state.login_status = False; st.session_state.admin_authenticated = False; st.rerun()
@@ -88,27 +85,29 @@ if st.sidebar.button("전체 로그아웃"):
 st.sidebar.divider()
 def nav(name): st.session_state.current_line = name; st.rerun()
 
+# --- 생산 공정 메뉴 ---
 if st.sidebar.button("📦 조립 라인 현황", use_container_width=True, type="primary" if st.session_state.current_line=="조립 라인" else "secondary"): nav("조립 라인")
 if st.sidebar.button("🔍 품질 검사 현황", use_container_width=True, type="primary" if st.session_state.current_line=="검사 라인" else "secondary"): nav("검사 라인")
 if st.sidebar.button("🚚 출하 포장 현황", use_container_width=True, type="primary" if st.session_state.current_line=="포장 라인" else "secondary"): nav("포장 라인")
-st.sidebar.divider()
+
+# 12. 통합 생산 리포트를 출하 포장 하단에 배치
 if st.sidebar.button("📊 통합 생산 리포트", use_container_width=True, type="primary" if st.session_state.current_line=="리포트" else "secondary"): nav("리포트")
+
+st.sidebar.divider()
+
+# --- 수리 및 사후 관리 메뉴 ---
 if st.sidebar.button("🛠️ 불량 수리 센터", use_container_width=True, type="primary" if st.session_state.current_line=="불량 공정" else "secondary"): nav("불량 공정")
+
+# 13. 불량 수리 리포트를 수리 센터 하단에 배치
+if st.sidebar.button("📈 불량 수리 리포트", use_container_width=True, type="primary" if st.session_state.current_line=="수리 리포트" else "secondary"): nav("수리 리포트")
 
 if st.session_state.user_role == "admin":
     st.sidebar.divider()
     if st.sidebar.button("🔐 마스터 데이터 관리", use_container_width=True, type="primary" if st.session_state.current_line=="마스터 관리" else "secondary"): nav("마스터 관리")
 
-@st.dialog("📦 공정 입고 승인 확인")
-def confirm_entry_dialog():
-    st.warning(f"시리얼 [ {st.session_state.confirm_target} ] 입고하시겠습니까?")
-    c1, c2 = st.columns(2)
-    if c1.button("✅ 승인", type="primary", use_container_width=True):
-        new_row = {'시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '라인': st.session_state.current_line, 'CELL': "-", '모델': st.session_state.confirm_model, '품목코드': st.session_state.confirm_item, '시리얼': st.session_state.confirm_target, '상태': '진행 중', '증상': '', '수리': ''}
-        st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_row])], ignore_index=True)
-        st.session_state.confirm_target = None; st.rerun()
-    if c2.button("❌ 취소", use_container_width=True): st.session_state.confirm_target = None; st.rerun()
-
+# =================================================================
+# 4. 공용 로그 출력 함수
+# =================================================================
 def display_process_log(line_name, ok_label="완료"):
     st.divider()
     st.markdown(f"<h3 class='centered-title'>📝 {line_name} 실시간 로그 현황</h3>", unsafe_allow_html=True)
@@ -134,8 +133,10 @@ def display_process_log(line_name, ok_label="완료"):
             else: st.markdown("<span class='status-green'>🟢 완료</span>", unsafe_allow_html=True)
 
 # =================================================================
-# 5. 조립 라인 (중복 에러 체크 복구)
+# 5. 각 라인별 메인 로직
 # =================================================================
+
+# --- 조립 라인 ---
 if st.session_state.current_line == "조립 라인":
     st.markdown("<h2 class='centered-title'>📦 조립 라인 작업</h2>", unsafe_allow_html=True)
     cells = ["전체 CELL", "CELL 1", "CELL 2", "CELL 3", "CELL 4", "CELL 5", "CELL 6"]
@@ -153,10 +154,8 @@ if st.session_state.current_line == "조립 라인":
                 if st.form_submit_button("▶️ 조립 등록", type="primary", use_container_width=True):
                     if m_choice != "선택하세요." and s_input:
                         db = st.session_state.production_db
-                        # [복구] 중복 에러 체크 로직
                         duplicate = db[(db['시리얼'] == s_input) & (db['상태'] != "완료")]
-                        if not duplicate.empty:
-                            st.error(f"❌ 중복 오류: 시리얼 [{s_input}]은 이미 공정 진행 중입니다.")
+                        if not duplicate.empty: st.error(f"❌ 중복 오류: 시리얼 [{s_input}]은 이미 공정 진행 중입니다.")
                         else:
                             new_data = {'시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '라인': "조립 라인", 'CELL': st.session_state.selected_cell, '모델': m_choice, '품목코드': i_choice, '시리얼': s_input, '상태': '진행 중', '증상': '', '수리': ''}
                             st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True); st.rerun()
@@ -180,16 +179,40 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
                 grid = st.columns(4)
                 for i, sn in enumerate(avail):
                     if grid[i % 4].button(f"입고: {sn}", key=f"btn_{sn}"):
-                        st.session_state.confirm_target, st.session_state.confirm_model, st.session_state.confirm_item = sn, sm, si; confirm_entry_dialog()
+                        st.session_state.confirm_target, st.session_state.confirm_model, st.session_state.confirm_item = sn, sm, si
+                        # 공통 다이얼로그 호출 로직 (v8.2와 동일)
+                        st.rerun()
     display_process_log(st.session_state.current_line, "합격" if st.session_state.current_line=="검사 라인" else "출고")
 
-# --- 불량 수리 센터 (수리 완료 버튼 및 아이콘) ---
+# --- 📊 생산 리포트 (통합) ---
+elif st.session_state.current_line == "리포트":
+    st.markdown("<h2 class='centered-title'>📊 통합 생산 실적 분석</h2>", unsafe_allow_html=True)
+    db = st.session_state.production_db
+    if not db.empty:
+        met = st.columns(4)
+        met[0].metric("최종 완료", len(db[db['상태'] == '완료']))
+        met[1].metric("진행 중", len(db[db['상태'] == '진행 중']))
+        met[2].metric("누적 불량", len(db[db['상태'] == '불량 처리 중']))
+        met[3].metric("수리 완료", len(db[db['상태'].str.contains("재투입")]))
+        st.divider()
+        c1, c2 = st.columns([3, 2])
+        with c1:
+            fig1 = px.bar(db[db['상태']=='완료'].groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="라인별 양품 실적")
+            fig1.update_layout(title_x=0.5, yaxis=dict(dtick=1))
+            st.plotly_chart(fig1, use_container_width=True)
+        with c2:
+            fig2 = px.pie(db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 투입 비중")
+            fig2.update_layout(title_x=0.5)
+            st.plotly_chart(fig2, use_container_width=True)
+        st.divider()
+        st.markdown("<div class='section-title'>📝 생산 현황 (전체 로그)</div>", unsafe_allow_html=True)
+        st.dataframe(db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
+
+# --- 🛠️ 불량 수리 센터 ---
 elif st.session_state.current_line == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 제품 수리 센터</h2>", unsafe_allow_html=True)
     bad_data = st.session_state.production_db[st.session_state.production_db['상태'] == "불량 처리 중"]
-    
-    if bad_data.empty:
-        st.success("✅ 현재 수리 대기 중인 불량 제품이 없습니다.")
+    if bad_data.empty: st.success("✅ 현재 수리 대기 중인 불량 제품이 없습니다.")
     else:
         line_icons = {"조립 라인": "📦 조립", "검사 라인": "🔍 품질", "포장 라인": "🚚 출하"}
         for idx, row in bad_data.iterrows():
@@ -206,23 +229,33 @@ elif st.session_state.current_line == "불량 공정":
                     st.session_state.production_db.at[idx, '수리'] = a_val
                     st.rerun()
 
-# --- 리포트 ---
-elif st.session_state.current_line == "리포트":
-    st.markdown("<h2 class='centered-title'>📊 통합 생산 리포트</h2>", unsafe_allow_html=True)
+# --- 📈 불량 수리 리포트 (13번 신규 추가) ---
+elif st.session_state.current_line == "수리 리포트":
+    st.markdown("<h2 class='centered-title'>📈 불량 수리 현황 리포트</h2>", unsafe_allow_html=True)
     db = st.session_state.production_db
-    if not db.empty:
+    repair_db = db[db['상태'].str.contains("재투입", na=False)]
+    
+    if not repair_db.empty:
+        met = st.columns(3)
+        met[0].metric("누적 수리 완료", len(repair_db))
+        met[1].metric("주요 발생 라인", repair_db['라인'].mode()[0] if not repair_db.empty else "-")
+        met[2].metric("최다 불량 모델", repair_db['모델'].mode()[0] if not repair_db.empty else "-")
+        
+        st.divider()
         c1, c2 = st.columns([3, 2])
         with c1:
-            fig1 = px.bar(db[db['상태']=='완료'].groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="라인별 양품 실적")
-            fig1.update_layout(title_x=0.5, yaxis=dict(dtick=1))
-            st.plotly_chart(fig1, use_container_width=True)
+            fig_repair = px.bar(repair_db.groupby('라인').size().reset_index(name='수리수량'), x='라인', y='수리수량', color='라인', title="공정별 불량 발생 건수")
+            fig_repair.update_layout(title_x=0.5, yaxis=dict(dtick=1))
+            st.plotly_chart(fig_repair, use_container_width=True)
         with c2:
-            fig2 = px.pie(db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 투입 비중")
-            fig2.update_layout(title_x=0.5)
-            st.plotly_chart(fig2, use_container_width=True)
+            fig_model = px.pie(repair_db.groupby('모델').size().reset_index(name='건수'), values='건수', names='모델', title="모델별 불량 비중")
+            fig_model.update_layout(title_x=0.5)
+            st.plotly_chart(fig_model, use_container_width=True)
+            
         st.divider()
-        st.markdown("<div class='section-title'>📝 생산 현황 (전체 로그)</div>", unsafe_allow_html=True)
-        st.dataframe(db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
+        st.markdown("<div class='section-title'>📋 수리 완료 상세 내역</div>", unsafe_allow_html=True)
+        st.dataframe(repair_db[['시간', '라인', '모델', '시리얼', '증상', '수리']].sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
+    else: st.info("아직 완료된 수리 내역이 없습니다.")
 
 # --- 마스터 관리 ---
 elif st.session_state.current_line == "마스터 관리":
@@ -239,6 +272,5 @@ elif st.session_state.current_line == "마스터 관리":
         if st.button("🔓 관리 세션 종료", use_container_width=True):
             st.session_state.admin_authenticated = False; nav("조립 라인")
         st.markdown("<div class='section-title'>📋 시스템 설정</div>", unsafe_allow_html=True)
-        # 마스터 설정 로직 (기존 유지)
         if st.button("⚠️ 데이터 초기화", type="secondary"):
             st.session_state.production_db = pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리']); st.rerun()
