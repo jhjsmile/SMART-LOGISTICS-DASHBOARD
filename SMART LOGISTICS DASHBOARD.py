@@ -94,31 +94,28 @@ st.sidebar.divider()
 
 def nav(name): st.session_state.current_line = name; st.rerun()
 
-# [메뉴 권한 필터링]
+# [메뉴 권한 필터링 및 배치 수정] - v9.1 스타일로 복구
 allowed = ROLES.get(st.session_state.user_role, ["조립 라인"])
 
-# 그룹 1: 생산 및 리포트
-menu_group_1 = ["조립 라인", "검사 라인", "포장 라인", "리포트"]
-icons_1 = {"조립 라인":"📦", "검사 라인":"🔍", "포장 라인":"🚚", "리포트":"📊"}
+# 1. 생산 및 통합 리포트 그룹
+if "조립 라인" in allowed:
+    if st.sidebar.button("📦 조립 라인 현황", use_container_width=True, type="primary" if st.session_state.current_line=="조립 라인" else "secondary"): nav("조립 라인")
+if "검사 라인" in allowed:
+    if st.sidebar.button("🔍 품질 검사 현황", use_container_width=True, type="primary" if st.session_state.current_line=="검사 라인" else "secondary"): nav("검사 라인")
+if "포장 라인" in allowed:
+    if st.sidebar.button("🚚 출하 포장 현황", use_container_width=True, type="primary" if st.session_state.current_line=="포장 라인" else "secondary"): nav("포장 라인")
+if "리포트" in allowed:
+    if st.sidebar.button("📊 통합 생산 리포트", use_container_width=True, type="primary" if st.session_state.current_line=="리포트" else "secondary"): nav("리포트")
 
-for m in menu_group_1:
-    if m in allowed:
-        label = f"{icons_1[m]} {m}" + (" 현황" if "라인" in m else "") + (" 통합 생산 리포트" if m == "리포트" else "")
-        if st.sidebar.button(label, use_container_width=True, type="primary" if st.session_state.current_line==m else "secondary"):
-            nav(m)
-
-# 그룹 2: 불량 수리 (구분선 후 배치 - v9.1 복구)
 st.sidebar.divider()
-menu_group_2 = ["불량 공정", "수리 리포트"]
-icons_2 = {"불량 공정":"🛠️", "수리 리포트":"📈"}
 
-for m in menu_group_2:
-    if m in allowed:
-        label = f"{icons_2[m]} {m}" + (" 센터" if m == "불량 공정" else "")
-        if st.sidebar.button(label, use_container_width=True, type="primary" if st.session_state.current_line==m else "secondary"):
-            nav(m)
+# 2. 불량 수리 그룹
+if "불량 공정" in allowed:
+    if st.sidebar.button("🛠️ 불량 수리 센터", use_container_width=True, type="primary" if st.session_state.current_line=="불량 공정" else "secondary"): nav("불량 공정")
+if "수리 리포트" in allowed:
+    if st.sidebar.button("📈 불량 수리 리포트", use_container_width=True, type="primary" if st.session_state.current_line=="수리 리포트" else "secondary"): nav("수리 리포트")
 
-# 그룹 3: 관리자 (구분선 후 배치)
+# 3. 관리자 그룹
 if st.session_state.user_role == "admin":
     st.sidebar.divider()
     if st.sidebar.button("🔐 마스터 관리 (Admin)", use_container_width=True, type="primary" if st.session_state.current_line=="마스터 관리" else "secondary"):
