@@ -7,7 +7,7 @@ import plotly.express as px
 # =================================================================
 # 1. 전역 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v7.8", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v7.9", layout="wide")
 ADMIN_PASSWORD = "admin1234"
 
 st.markdown("""
@@ -74,12 +74,6 @@ if 'confirm_target' not in st.session_state:
 if 'selected_cell' not in st.session_state:
     st.session_state.selected_cell = "CELL 1"
 
-# 모델/품목 입력 상태 유지를 위한 전용 키 초기화
-if 'active_model' not in st.session_state:
-    st.session_state.active_model = "선택하세요"
-if 'active_item' not in st.session_state:
-    st.session_state.active_item = ""
-
 # =================================================================
 # 3. 다이얼로그 정의
 # =================================================================
@@ -106,7 +100,7 @@ def confirm_entry_dialog():
 # =================================================================
 # 4. 사이드바 내비게이션
 # =================================================================
-st.sidebar.title("🏭 생산 통합 관리 v7.8")
+st.sidebar.title("🏭 생산 통합 관리 v7.9")
 st.sidebar.markdown("---")
 
 def nav_to(line_name, is_admin=False):
@@ -123,7 +117,7 @@ if st.sidebar.button("🛠️ 불량 수리 센터", use_container_width=True): 
 if st.sidebar.button("🔐 마스터 데이터 관리", use_container_width=True, type="primary" if st.session_state.admin_page else "secondary"): nav_to(st.session_state.current_line, is_admin=True)
 
 # =================================================================
-# 5. 마스터 데이터 관리 (인증 엔터 연동)
+# 5. 마스터 데이터 관리
 # =================================================================
 if st.session_state.admin_page:
     st.title("🔐 시스템 관리자 제어판")
@@ -195,7 +189,7 @@ elif st.session_state.current_line == "리포트":
         st.dataframe(h_df, use_container_width=True, hide_index=True)
 
 # =================================================================
-# 7. 조립 라인 (로직 수정: 모델/품목 연동 및 상태 유지)
+# 7. 조립 라인 (로직 수정: 품목이 다르면 중복 허용)
 # =================================================================
 elif st.session_state.current_line == "조립 라인":
     st.title("📦 조립 라인 작업")
@@ -204,7 +198,6 @@ elif st.session_state.current_line == "조립 라인":
     for i, cname in enumerate(c_list):
         if cols[i].button(cname, type="primary" if st.session_state.selected_cell == cname else "secondary"):
             st.session_state.selected_cell = cname
-            # 셀 변경 시에만 입력값 초기화
             st.session_state.active_model = "선택하세요"
             st.session_state.active_item = ""
             st.rerun()
@@ -213,19 +206,15 @@ elif st.session_state.current_line == "조립 라인":
         with st.container(border=True):
             st.subheader(f"📝 {st.session_state.selected_cell} 신규 등록")
             
-            # 레이아웃 유지를 위한 컬럼 구성 (Selectbox는 Form 밖으로 배치하여 즉시 반응)
             reg1, reg2, reg3 = st.columns(3)
             
-            # 1. 모델 선택 (반응형)
             model_options = ["선택하세요"] + st.session_state.master_models
             m_choice = reg1.selectbox("모델 선택", model_options, key="active_model")
             
-            # 2. 품목 선택 (모델 선택 시에만 활성화)
             is_disabled = (m_choice == "선택하세요")
             i_opts = st.session_state.master_items_dict.get(m_choice, []) if not is_disabled else []
             i_choice = reg2.selectbox("품목 선택", i_opts, key="active_item", disabled=is_disabled)
             
-            # 3. 시리얼 입력 및 버튼 (Enter 키 연동을 위해 Form 사용)
             with reg3.form("registration_form", clear_on_submit=False):
                 s_input = st.text_input("시리얼 번호 스캔 (입력 후 Enter)", disabled=is_disabled, value="")
                 submit_btn = st.form_submit_button("▶️ 조립 시작 등록", type="primary", use_container_width=True)
@@ -237,10 +226,12 @@ elif st.session_state.current_line == "조립 라인":
                         st.warning("시리얼 번호를 입력해주세요.")
                     else:
                         db = st.session_state.production_db
-                        if not db[db['시리얼'] == s_input].empty:
-                            st.error(f"이미 등록된 시리얼입니다: {s_input}")
+                        # 수정: 시리얼뿐만 아니라 품목코드까지 같은 데이터가 있는지 확인
+                        duplicate = db[(db['시리얼'] == s_input) & (db['품목코드'] == i_choice)]
+                        
+                        if not duplicate.empty:
+                            st.error(f"동일 품목에 이미 등록된 시리얼입니다: {s_input} ({i_choice})")
                         else:
-                            # 등록 후에도 m_choice, i_choice는 session_state 키값에 의해 유지됨
                             new_data = {
                                 '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                 '라인': "조립 라인", 'CELL': st.session_state.selected_cell,
