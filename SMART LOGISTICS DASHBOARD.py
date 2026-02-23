@@ -194,8 +194,10 @@ elif st.session_state.current_line == "리포트":
         with c_left:
             fig_bar = px.bar(main_db[main_db['상태'] == '완료'].groupby('라인').size().reset_index(name='수량'), 
                              x='라인', y='수량', color='라인', title="라인별 양품 실적")
+            # [수정 9] y축 수량을 정수(1단위)로 표시하도록 dtick=1 추가
             fig_bar.update_layout(
                 title={'text': "라인별 양품 실적", 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top'},
+                yaxis=dict(dtick=1, tickformat='d'),
                 margin=dict(l=20, r=20, t=50, b=20)
             )
             st.plotly_chart(fig_bar, use_container_width=True)
@@ -306,7 +308,7 @@ elif st.session_state.current_line == "조립 라인":
                 else: st.success("🟢 완료")
 
 # =================================================================
-# 9. 품질 검사 현황 (수정 반영)
+# 9. 품질 검사 현황
 # =================================================================
 elif st.session_state.current_line == "검사 라인":
     st.title("🔍 품질 검사 현황")
@@ -315,7 +317,6 @@ elif st.session_state.current_line == "검사 라인":
         f1, f2 = st.columns(2)
         sel_m = f1.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key="f_m_insp")
         
-        # 모델 선택에 따른 품목 리스트 구성 (전체 선택 삭제)
         if sel_m != "선택하세요.":
             i_opts = ["품목을 선택하세요."] + st.session_state.master_items_dict.get(sel_m, [])
         else:
@@ -323,12 +324,10 @@ elif st.session_state.current_line == "검사 라인":
             
         sel_i = f2.selectbox("품목 선택", i_opts, key="f_i_insp")
         
-        # 품목까지 선택되어야 물량이 보임
+        # [수정 8] 품목까지 명확히 선택해야 리스트가 보이도록 함
         if sel_m != "선택하세요." and sel_i != "품목을 선택하세요.":
             db = st.session_state.production_db
-            # 조립 라인에서 완료된 데이터 필터링
             ready = db[(db['라인'] == "조립 라인") & (db['상태'] == "완료") & (db['모델'] == sel_m) & (db['품목코드'] == sel_i)]
-            # 이미 검사 라인에 들어온 시리얼 제외
             done_sns = db[db['라인'] == "검사 라인"]['시리얼'].unique()
             avail_sns = [s for s in ready['시리얼'].unique() if s not in done_sns]
             
@@ -367,7 +366,7 @@ elif st.session_state.current_line == "검사 라인":
                 else: st.success("🟢 합격완료")
 
 # =================================================================
-# 10. 출하 포장 현황 (수정 반영)
+# 10. 출하 포장 현황
 # =================================================================
 elif st.session_state.current_line == "포장 라인":
     st.title("🚚 출하 포장 현황")
@@ -376,7 +375,6 @@ elif st.session_state.current_line == "포장 라인":
         f1, f2 = st.columns(2)
         sel_m = f1.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key="f_m_pack")
         
-        # 모델 선택에 따른 품목 리스트 구성 (전체 선택 삭제)
         if sel_m != "선택하세요.":
             i_opts = ["품목을 선택하세요."] + st.session_state.master_items_dict.get(sel_m, [])
         else:
@@ -384,12 +382,10 @@ elif st.session_state.current_line == "포장 라인":
             
         sel_i = f2.selectbox("품목 선택", i_opts, key="f_i_pack")
         
-        # 품목까지 선택되어야 물량이 보임
+        # [수정 8] 품목까지 명확히 선택해야 리스트가 보이도록 함
         if sel_m != "선택하세요." and sel_i != "품목을 선택하세요.":
             db = st.session_state.production_db
-            # 검사 라인에서 완료된 데이터 필터링
             ready = db[(db['라인'] == "검사 라인") & (db['상태'] == "완료") & (db['모델'] == sel_m) & (db['품목코드'] == sel_i)]
-            # 이미 포장 라인에 들어온 시리얼 제외
             done_sns = db[db['라인'] == "포장 라인"]['시리얼'].unique()
             avail_sns = [s for s in ready['시리얼'].unique() if s not in done_sns]
             
