@@ -292,11 +292,11 @@ elif st.session_state.current_line == "조립 라인":
             st.subheader(f"📝 {st.session_state.selected_cell} 신규 등록")
             reg1, reg2, reg3 = st.columns(3)
             
-            # 모델 선택 초기화 ("선택하세요" 추가)
+            # 1. 모델 선택 (초기값 "선택하세요")
             m_options = ["선택하세요"] + st.session_state.master_models
             m_choice = reg1.selectbox("모델 선택", m_options, key="am_m")
             
-            # 모델이 선택되지 않았을 때 품목 처리
+            # 2. 품목 선택 (모델 미선택 시 비활성화)
             if m_choice == "선택하세요":
                 i_options = ["모델을 먼저 선택하세요"]
                 i_choice = reg2.selectbox("품목 선택", i_options, key="am_i", disabled=True)
@@ -304,21 +304,24 @@ elif st.session_state.current_line == "조립 라인":
                 i_options = ["선택하세요"] + st.session_state.master_items_dict.get(m_choice, [])
                 i_choice = reg2.selectbox("품목 선택", i_options, key="am_i")
 
-            # [핵심] 알림 메시지가 출력될 전용 공간을 버튼 바로 아래에 생성
+            # 3. 알림 메시지 표시 전용 공간 (버튼 바로 아래 위치)
             msg_container = st.empty()
 
+            # 4. 등록 실행 함수 (엔터/버튼 공용)
             def handle_registration():
                 s_val = st.session_state.temp_serial
                 
+                # 모델/품목 선택 여부 검사
                 if m_choice == "선택하세요" or i_choice in ["선택하세요", "모델을 먼저 선택하세요"]:
-                    msg_container.error("⚠️ 모델과 품목을 먼저 선택하세요.")
+                    msg_container.error("⚠️ 모델과 품목을 먼저 선택해야 합니다.")
+                    st.session_state.temp_serial = "" # 입력창 비움
                     return
                 
                 if s_val:
                     db = st.session_state.production_db
+                    # 중복 체크
                     if not db[(db['모델'] == m_choice) & (db['품목코드'] == i_choice) & (db['시리얼'] == s_val)].empty:
-                        # 중복 알림을 버튼 바로 아래에 표시
-                        msg_container.warning(f"❌ 중복 시리얼: {s_val}")
+                        msg_container.warning(f"❌ 중복 등록된 시리얼입니다: {s_val}")
                     else:
                         new_data = {
                             '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -327,19 +330,19 @@ elif st.session_state.current_line == "조립 라인":
                             '상태': '진행 중', '증상': '', '수리': ''
                         }
                         st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True)
-                        # 등록 완료 알림을 버튼 바로 아래에 표시
                         msg_container.success(f"✅ 등록 완료: {s_val}")
                     
+                    # 입력창 초기화
                     st.session_state.temp_serial = ""
-                    # 주의: 콜백 함수 내부이므로 st.rerun()은 생략합니다.
+                    # 콜백 함수이므로 st.rerun()은 사용하지 않음 (자동 실행됨)
 
-            # 시리얼 입력란
+            # 5. 시리얼 입력란 (엔터/스캔 시 handle_registration 실행)
             reg3.text_input("시리얼 번호 스캔", key="temp_serial", on_change=handle_registration)
             
-            # 버튼
+            # 6. 수동 등록 버튼
             if st.button("▶️ 조립 시작 등록 (또는 Enter)", type="primary", use_container_width=True):
                 handle_registration()
-                
+    
     st.divider()
     st.subheader("📊 조립 라인 실시간 로그")
     l_db = st.session_state.production_db[st.session_state.production_db['라인'] == "조립 라인"]
@@ -461,6 +464,7 @@ elif st.session_state.current_line == "포장 라인":
                         st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun()
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 포장완료")
+
 
 
 
