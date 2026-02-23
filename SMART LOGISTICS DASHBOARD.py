@@ -442,7 +442,7 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
         else: 
             st.info("현재 입고 가능한 대기 물량이 없습니다. 공정 흐름을 확인하세요.")
             
-    draw_log_table_v9(st.session_state.current_line, "합격처리" if st.session_state.current_line=="검사 라인" else "완료")
+    draw_log_table_v9(st.session_state.current_line, "합격" if st.session_state.current_line=="검사 라인" else "완료")
 
 # --- 6-3. 통합 리포트 대시보드 (디자인 최적화 버전) ---
 elif st.session_state.current_line == "리포트":
@@ -654,6 +654,7 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.3 배포용 통합 코드 종료 ]
 # =================================================================
+
 
 
 
