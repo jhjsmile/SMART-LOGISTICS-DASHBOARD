@@ -7,7 +7,7 @@ import plotly.express as px
 # =================================================================
 # 1. 전역 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v7.8", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v7.9", layout="wide")
 
 st.markdown("""
     <style>
@@ -30,7 +30,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # =================================================================
-# 2. 세션 상태 초기화 (계정, 데이터 등)
+# 2. 세션 상태 초기화
 # =================================================================
 if 'user_db' not in st.session_state:
     st.session_state.user_db = {
@@ -107,27 +107,18 @@ def confirm_entry_dialog():
         st.session_state.confirm_target = None; st.rerun()
     if c2.button("❌ 취소", use_container_width=True): st.session_state.confirm_target = None; st.rerun()
 
-# =================================================================
-# 4. 공용 로그 출력 함수 (요청하신 구분선 및 제목 추가)
-# =================================================================
+# 공용 로그 출력 함수
 def display_process_log(line_name, ok_label="완료"):
-    # 요청하신 구분선 및 로그 섹션 제목 (차트화 스타일)
     st.divider()
     st.markdown(f"<h3 class='centered-title'>📝 {line_name} 실시간 로그 현황</h3>", unsafe_allow_html=True)
-    
     l_db = st.session_state.production_db[st.session_state.production_db['라인'] == line_name]
     if line_name == "조립 라인" and st.session_state.selected_cell != "전체 CELL":
         l_db = l_db[l_db['CELL'] == st.session_state.selected_cell]
-    
     if l_db.empty:
         st.info("현재 표시할 데이터가 없습니다.")
         return
-
-    # 로그 헤더
     lh = st.columns([2.5, 1, 1.5, 1.5, 2, 3])
-    labels = ["시간", "CELL", "모델", "품목코드", "시리얼", "상태제어"]
-    for col, txt in zip(lh, labels): col.write(f"**{txt}**")
-    
+    for col, txt in zip(lh, ["시간", "CELL", "모델", "품목코드", "시리얼", "상태제어"]): col.write(f"**{txt}**")
     for idx, row in l_db.sort_values('시간', ascending=False).iterrows():
         lr = st.columns([2.5, 1, 1.5, 1.5, 2, 3])
         lr[0].write(row['시간']); lr[1].write(row['CELL']); lr[2].write(row['모델']); lr[3].write(row['품목코드']); lr[4].write(row['시리얼'])
@@ -142,7 +133,7 @@ def display_process_log(line_name, ok_label="완료"):
             else: st.markdown("<span class='status-green'>🟢 완료</span>", unsafe_allow_html=True)
 
 # =================================================================
-# 5. 각 라인별 메인 화면
+# 6. 각 라인별 메인 화면
 # =================================================================
 
 # --- 조립 라인 ---
@@ -153,14 +144,12 @@ if st.session_state.current_line == "조립 라인":
     for i, c in enumerate(cells):
         if c_cols[i].button(c, type="primary" if st.session_state.selected_cell==c else "secondary"):
             st.session_state.selected_cell = c; st.rerun()
-    
     if st.session_state.selected_cell != "전체 CELL":
         with st.container(border=True):
             m_choice = st.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key=f"ms_{st.session_state.selected_cell}")
             with st.form(f"asm_f_{st.session_state.selected_cell}"):
                 r1, r2 = st.columns(2)
-                i_opts = st.session_state.master_items_dict.get(m_choice, []) if m_choice!="선택하세요." else ["모델 선택 필요"]
-                i_choice = r1.selectbox("품목 선택", i_opts)
+                i_choice = r1.selectbox("품목 선택", st.session_state.master_items_dict.get(m_choice, []) if m_choice!="선택하세요." else ["모델 선택 필요"])
                 s_input = r2.text_input("시리얼 번호")
                 if st.form_submit_button("▶️ 조립 등록", type="primary", use_container_width=True):
                     if m_choice != "선택하세요." and s_input:
@@ -168,7 +157,6 @@ if st.session_state.current_line == "조립 라인":
                         if db[(db['모델']==m_choice) & (db['품목코드']==i_choice) & (db['시리얼']==s_input) & (db['상태'] != "완료")].empty:
                             new_data = {'시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '라인': "조립 라인", 'CELL': st.session_state.selected_cell, '모델': m_choice, '품목코드': i_choice, '시리얼': s_input, '상태': '진행 중', '증상': '', '수리': ''}
                             st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True); st.rerun()
-                        else: st.error("진행 중인 동일 데이터 존재")
     display_process_log("조립 라인", "완료")
 
 # --- 품질 / 포장 라인 ---
@@ -176,29 +164,25 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
     line_title = "🔍 품질 검사 현황" if st.session_state.current_line == "검사 라인" else "🚚 출하 포장 현황"
     prev_line = "조립 라인" if st.session_state.current_line == "검사 라인" else "검사 라인"
     st.markdown(f"<h2 class='centered-title'>{line_title}</h2>", unsafe_allow_html=True)
-    
     with st.container(border=True):
         f1, f2 = st.columns(2)
         sm = f1.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key=f"selm_{st.session_state.current_line}")
         si = f2.selectbox("품목 선택", ["품목을 선택하세요."] + st.session_state.master_items_dict.get(sm, []) if sm != "선택하세요." else ["품목을 선택하세요."], key=f"seli_{st.session_state.current_line}")
-        
         if sm != "선택하세요." and si != "품목을 선택하세요.":
             db = st.session_state.production_db
             ready = db[(db['라인'] == prev_line) & (db['상태'] == "완료") & (db['모델'] == sm) & (db['품목코드'] == si)]
-            done_sns = db[db['라인'] == st.session_state.current_line]['시리얼'].unique()
-            avail = [s for s in ready['시리얼'].unique() if s not in done_sns]
+            avail = [s for s in ready['시리얼'].unique() if s not in db[db['라인'] == st.session_state.current_line]['시리얼'].unique()]
             if avail:
-                st.success(f"📦 대기 중인 물량: {len(avail)}건")
+                st.success(f"📦 대기 물량: {len(avail)}건")
                 grid = st.columns(4)
                 for i, sn in enumerate(avail):
                     if grid[i % 4].button(f"입고: {sn}", key=f"btn_{sn}"):
                         st.session_state.confirm_target, st.session_state.confirm_model, st.session_state.confirm_item = sn, sm, si; confirm_entry_dialog()
-            else: st.info("대기 물량이 없습니다.")
     display_process_log(st.session_state.current_line, "합격" if st.session_state.current_line=="검사 라인" else "출고")
 
 # --- 리포트 ---
 elif st.session_state.current_line == "리포트":
-    st.markdown("<h2 class='centered-title'>📊 통합 생산 실적 분석</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='centered-title'>📊 통합 생산 리포트</h2>", unsafe_allow_html=True)
     db = st.session_state.production_db
     if not db.empty:
         met = st.columns(4)
@@ -220,20 +204,35 @@ elif st.session_state.current_line == "리포트":
         st.markdown("<div class='section-title'>📝 생산 현황 (전체 로그)</div>", unsafe_allow_html=True)
         st.dataframe(db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
 
-# --- 불량 수리 센터 ---
+# --- 불량 수리 센터 (수정 요청 사항 반영) ---
 elif st.session_state.current_line == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 제품 수리 센터</h2>", unsafe_allow_html=True)
     bad = st.session_state.production_db[st.session_state.production_db['상태'] == "불량 처리 중"]
-    if bad.empty: st.success("✅ 현재 수리 대기 중인 불량 제품이 없습니다.")
+    
+    if bad.empty:
+        st.success("✅ 현재 수리 대기 중인 불량 제품이 없습니다.")
     else:
+        # 발생 라인별 아이콘 매핑
+        line_icons = {"조립 라인": "📦 조립", "검사 라인": "🔍 품질", "포장 라인": "🚚 출하"}
+        
         for idx, row in bad.iterrows():
             with st.container(border=True):
-                st.write(f"**S/N: {row['시리얼']}** ({row['모델']} / 발생: {row['라인']})")
+                # 아이콘 삽입 (발생 부분)
+                icon = line_icons.get(row['라인'], "🏭 기타")
+                st.write(f"**S/N: {row['시리얼']}** ({row['모델']} / 발생: {icon})")
+                
                 c1, c2, c3 = st.columns([4, 4, 2])
-                s_val = c1.text_input("불량 원인", key=f"s_{idx}")
-                a_val = c2.text_input("수리 조치", key=f"a_{idx}")
-                if c3.button("완료 및 재투입", key=f"r_{idx}", use_container_width=True):
-                    st.session_state.production_db.at[idx, '상태'] = "수리 완료(재투입)"; st.rerun()
+                s_val = c1.text_input("불량 원인", key=f"s_{idx}", placeholder="원인을 입력하세요")
+                a_val = c2.text_input("수리 조치", key=f"a_{idx}", placeholder="조치 내용을 입력하세요")
+                
+                # 버튼 비활성화 로직: 하나라도 빈칸이면 disabled=True
+                is_empty = (not s_val.strip()) or (not a_val.strip())
+                
+                if c3.button("✅ 완료 및 재투입", key=f"r_{idx}", use_container_width=True, disabled=is_empty):
+                    st.session_state.production_db.at[idx, '상태'] = "수리 완료(재투입)"
+                    st.session_state.production_db.at[idx, '증상'] = s_val
+                    st.session_state.production_db.at[idx, '수리'] = a_val
+                    st.rerun()
 
 # --- 마스터 관리 ---
 elif st.session_state.current_line == "마스터 관리":
@@ -263,6 +262,5 @@ elif st.session_state.current_line == "마스터 관리":
                 if st.button("계정 생성"):
                     st.session_state.user_db[uid] = {"pw": upw, "role": "user"}; st.rerun()
         st.divider()
-        st.button("💾 모델 백업"); st.button("💾 품목 백업")
-        if st.button("⚠️ DB 초기화", type="secondary"):
+        if st.button("⚠️ 데이터 초기화", type="secondary"):
             st.session_state.production_db = pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리']); st.rerun()
