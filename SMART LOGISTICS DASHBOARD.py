@@ -304,21 +304,21 @@ elif st.session_state.current_line == "조립 라인":
                 i_options = ["선택하세요"] + st.session_state.master_items_dict.get(m_choice, [])
                 i_choice = reg2.selectbox("품목 선택", i_options, key="am_i")
 
-            # 등록 실행 함수 정의
+            # [핵심] 알림 메시지가 출력될 전용 공간을 버튼 바로 아래에 생성
+            msg_container = st.empty()
+
             def handle_registration():
-                # 콜백 함수는 실행이 끝나면 자동으로 rerun되므로 st.rerun()이 필요 없습니다.
                 s_val = st.session_state.temp_serial
                 
                 if m_choice == "선택하세요" or i_choice in ["선택하세요", "모델을 먼저 선택하세요"]:
-                    # 콜백 내에서는 st.error보다 st.toast가 UI 흐름상 더 자연스럽습니다.
-                    st.toast("⚠️ 모델과 품목을 먼저 선택하세요.", icon="⚠️")
-                    st.session_state.temp_serial = "" # 잘못된 입력 시 비워줌
+                    msg_container.error("⚠️ 모델과 품목을 먼저 선택하세요.")
                     return
                 
                 if s_val:
                     db = st.session_state.production_db
                     if not db[(db['모델'] == m_choice) & (db['품목코드'] == i_choice) & (db['시리얼'] == s_val)].empty:
-                        st.toast(f"❌ 중복 시리얼: {s_val}", icon="⚠️")
+                        # 중복 알림을 버튼 바로 아래에 표시
+                        msg_container.warning(f"❌ 중복 시리얼: {s_val}")
                     else:
                         new_data = {
                             '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -327,22 +327,19 @@ elif st.session_state.current_line == "조립 라인":
                             '상태': '진행 중', '증상': '', '수리': ''
                         }
                         st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True)
-                        st.toast(f"✅ 등록 완료: {s_val}", icon="🚀")
+                        # 등록 완료 알림을 버튼 바로 아래에 표시
+                        msg_container.success(f"✅ 등록 완료: {s_val}")
                     
-                    # 입력창 초기화 (세션 상태를 직접 수정)
                     st.session_state.temp_serial = ""
+                    # 주의: 콜백 함수 내부이므로 st.rerun()은 생략합니다.
 
-            # 시리얼 입력 (on_change 사용)
+            # 시리얼 입력란
             reg3.text_input("시리얼 번호 스캔", key="temp_serial", on_change=handle_registration)
             
-            # 수동 버튼은 콜백이 아니므로 필요시 st.rerun()을 쓸 수 있지만, 
-            # 위에서 on_change가 이미 로직을 처리하므로 버튼 클릭 시에도 
-            # 세션 상태 변화를 감지해 알아서 돌아갑니다.
+            # 버튼
             if st.button("▶️ 조립 시작 등록 (또는 Enter)", type="primary", use_container_width=True):
-                # 버튼 클릭 시에도 handle_registration()이 실행되도록 하려면 
-                # 여기서 호출만 해주면 됩니다.
                 handle_registration()
-
+                
     st.divider()
     st.subheader("📊 조립 라인 실시간 로그")
     l_db = st.session_state.production_db[st.session_state.production_db['라인'] == "조립 라인"]
@@ -464,6 +461,7 @@ elif st.session_state.current_line == "포장 라인":
                         st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun()
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 포장완료")
+
 
 
 
