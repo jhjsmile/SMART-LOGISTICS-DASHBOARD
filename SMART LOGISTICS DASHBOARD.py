@@ -372,9 +372,9 @@ def draw_log_table_v9(line_name, btn_label="완료 처리"):
                     db_source.at[idx, '작업자'] = st.session_state.user_id
                     push_to_gsheet(db_source); st.rerun()
             elif row['상태'] == "불량 처리 중":
-                st.markdown("<span class='status-red'>🔴 품질 이슈 분석 중</span>", unsafe_allow_html=True)
+                st.markdown("<span class='status-red'>🔴품질분석</span>", unsafe_allow_html=True)
             else:
-                st.markdown("<span class='status-green'>🟢 공정 정상 완료</span>", unsafe_allow_html=True)
+                st.markdown("<span class='status-green'>🟢조립완료</span>", unsafe_allow_html=True)
 
 # =================================================================
 # 6. 세부 페이지 렌더링 (Page Views)
@@ -654,4 +654,5 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.3 배포용 통합 코드 종료 ]
 # =================================================================
+
 
