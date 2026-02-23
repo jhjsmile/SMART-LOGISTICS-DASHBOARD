@@ -3,14 +3,13 @@ import pandas as pd
 from datetime import datetime
 import plotly.express as px
 from streamlit_gsheets import GSheetsConnection
-import io
 
 # =================================================================
-# 1. 시스템 설정 및 스타일 (v9.1 디자인 완벽 복구)
+# 1. 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v12.1", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v12.5", layout="wide")
 
-# 권한별 메뉴 접근 정의 (고도화)
+# [고도화] 권한별 메뉴 접근 제어 목록
 ROLES = {
     "admin": ["조립 라인", "검사 라인", "포장 라인", "리포트", "불량 공정", "수리 리포트", "마스터 관리"],
     "manager": ["조립 라인", "검사 라인", "포장 라인", "리포트", "수리 리포트"],
@@ -37,14 +36,16 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # =================================================================
-# 2. 구글 시트 연결 및 데이터 로직
+# 2. 구글 시트 연결 및 데이터 핸들링
 # =================================================================
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try:
+        # 캐시 없이(ttl=0) 항상 최신 데이터를 가져옴
         return conn.read(ttl=0).fillna("")
     except:
+        # 시트 로드 실패 시 빈 데이터프레임 반환 (컬럼 포맷 유지)
         return pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리', '작업자'])
 
 def save_to_gsheet(df):
@@ -52,7 +53,7 @@ def save_to_gsheet(df):
     st.cache_data.clear()
 
 # =================================================================
-# 3. 세션 상태 초기화 (v9.1 변수 전수 복구)
+# 3. 세션 상태 초기화 (v9.1 변수 + 고도화 변수)
 # =================================================================
 if 'production_db' not in st.session_state: st.session_state.production_db = load_data()
 if 'user_db' not in st.session_state:
@@ -69,7 +70,7 @@ if 'selected_cell' not in st.session_state: st.session_state.selected_cell = "CE
 if 'repair_cache' not in st.session_state: st.session_state.repair_cache = {}
 
 # =================================================================
-# 4. 로그인 및 사이드바 (v9.1 배치 완벽 복구)
+# 4. 로그인 및 사이드바 (UI 배치 완벽 복구)
 # =================================================================
 if not st.session_state.login_status:
     _, l_col, _ = st.columns([1, 1.2, 1])
@@ -86,45 +87,50 @@ if not st.session_state.login_status:
                 else: st.error("계정 정보를 확인하세요.")
     st.stop()
 
-# 사이드바 배치 (v9.1 순서 및 구분선 복구)
+# 사이드바 상단
 st.sidebar.title(f"🏭 {st.session_state.user_id}님")
 if st.sidebar.button("전체 로그아웃"): st.session_state.login_status = False; st.rerun()
 st.sidebar.divider()
 
 def nav(name): st.session_state.current_line = name; st.rerun()
 
+# [메뉴 권한 필터링]
 allowed = ROLES.get(st.session_state.user_role, ["조립 라인"])
 
 # 그룹 1: 생산 및 리포트
-if "조립 라인" in allowed:
-    if st.sidebar.button("📦 조립 라인 현황", use_container_width=True, type="primary" if st.session_state.current_line=="조립 라인" else "secondary"): nav("조립 라인")
-if "검사 라인" in allowed:
-    if st.sidebar.button("🔍 품질 검사 현황", use_container_width=True, type="primary" if st.session_state.current_line=="검사 라인" else "secondary"): nav("검사 라인")
-if "포장 라인" in allowed:
-    if st.sidebar.button("🚚 출하 포장 현황", use_container_width=True, type="primary" if st.session_state.current_line=="포장 라인" else "secondary"): nav("포장 라인")
-if "리포트" in allowed:
-    if st.sidebar.button("📊 통합 생산 리포트", use_container_width=True, type="primary" if st.session_state.current_line=="리포트" else "secondary"): nav("리포트")
+menu_group_1 = ["조립 라인", "검사 라인", "포장 라인", "리포트"]
+icons_1 = {"조립 라인":"📦", "검사 라인":"🔍", "포장 라인":"🚚", "리포트":"📊"}
 
+for m in menu_group_1:
+    if m in allowed:
+        label = f"{icons_1[m]} {m}" + (" 현황" if "라인" in m else "") + (" 통합 생산 리포트" if m == "리포트" else "")
+        if st.sidebar.button(label, use_container_width=True, type="primary" if st.session_state.current_line==m else "secondary"):
+            nav(m)
+
+# 그룹 2: 불량 수리 (구분선 후 배치 - v9.1 복구)
 st.sidebar.divider()
+menu_group_2 = ["불량 공정", "수리 리포트"]
+icons_2 = {"불량 공정":"🛠️", "수리 리포트":"📈"}
 
-# 그룹 2: 불량 수리
-if "불량 공정" in allowed:
-    if st.sidebar.button("🛠️ 불량 수리 센터", use_container_width=True, type="primary" if st.session_state.current_line=="불량 공정" else "secondary"): nav("불량 공정")
-if "수리 리포트" in allowed:
-    if st.sidebar.button("📈 불량 수리 리포트", use_container_width=True, type="primary" if st.session_state.current_line=="수리 리포트" else "secondary"): nav("수리 리포트")
+for m in menu_group_2:
+    if m in allowed:
+        label = f"{icons_2[m]} {m}" + (" 센터" if m == "불량 공정" else "")
+        if st.sidebar.button(label, use_container_width=True, type="primary" if st.session_state.current_line==m else "secondary"):
+            nav(m)
 
-# 그룹 3: 관리자
+# 그룹 3: 관리자 (구분선 후 배치)
 if st.session_state.user_role == "admin":
     st.sidebar.divider()
-    if st.sidebar.button("🔐 마스터 관리 (Admin)", use_container_width=True, type="primary" if st.session_state.current_line=="마스터 관리" else "secondary"): nav("마스터 관리")
+    if st.sidebar.button("🔐 마스터 관리 (Admin)", use_container_width=True, type="primary" if st.session_state.current_line=="마스터 관리" else "secondary"):
+        nav("마스터 관리")
 
-# 지능형 알림 배너 (고도화)
+# [고도화] 지능형 알림 배너
 bad_count = len(st.session_state.production_db[st.session_state.production_db['상태'] == "불량 처리 중"])
 if bad_count > 0:
-    st.markdown(f"<div class='alarm-banner'>⚠️ 현장 알림: 수리 대기 중인 불량 제품이 {bad_count}건 있습니다.</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='alarm-banner'>⚠️ 현장 알림: 수리 대기 중인 제품이 {bad_count}건 있습니다.</div>", unsafe_allow_html=True)
 
 # =================================================================
-# 5. 공용 컴포넌트 (v9.1 로직 복구 + 고도화 반영)
+# 5. 공용 컴포넌트 (v9.1 로직 복구 + 작업자 로그 추가)
 # =================================================================
 @st.dialog("📦 공정 입고 승인 확인")
 def confirm_entry_dialog():
@@ -134,7 +140,8 @@ def confirm_entry_dialog():
         new_row = {
             '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '라인': st.session_state.current_line, 
             'CELL': "-", '모델': st.session_state.confirm_model, '품목코드': st.session_state.confirm_item, 
-            '시리얼': st.session_state.confirm_target, '상태': '진행 중', '증상': '', '수리': '', '작업자': st.session_state.user_id
+            '시리얼': st.session_state.confirm_target, '상태': '진행 중', '증상': '', '수리': '', 
+            '작업자': st.session_state.user_id # [고도화] 작업자 자동 기록
         }
         st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_row])], ignore_index=True)
         save_to_gsheet(st.session_state.production_db)
@@ -147,10 +154,12 @@ def display_process_log(line_name, ok_label="완료"):
     l_db = st.session_state.production_db[st.session_state.production_db['라인'] == line_name]
     if line_name == "조립 라인" and st.session_state.selected_cell != "전체 CELL": 
         l_db = l_db[l_db['CELL'] == st.session_state.selected_cell]
+    
     if l_db.empty: st.info("데이터가 없습니다."); return
     
     lh = st.columns([2.5, 1, 1.5, 1.5, 2, 3])
     for col, txt in zip(lh, ["시간", "CELL", "모델", "품목코드", "시리얼", "상태제어"]): col.write(f"**{txt}**")
+    
     for idx, row in l_db.sort_values('시간', ascending=False).iterrows():
         lr = st.columns([2.5, 1, 1.5, 1.5, 2, 3])
         lr[0].write(row['시간']); lr[1].write(row['CELL']); lr[2].write(row['모델']); lr[3].write(row['품목코드']); lr[4].write(row['시리얼'])
@@ -159,11 +168,11 @@ def display_process_log(line_name, ok_label="완료"):
                 b1, b2 = st.columns(2)
                 if b1.button(ok_label, key=f"ok_{idx}"):
                     st.session_state.production_db.at[idx, '상태'] = "완료"
-                    st.session_state.production_db.at[idx, '작업자'] = st.session_state.user_id
+                    st.session_state.production_db.at[idx, '작업자'] = st.session_state.user_id # 완료 처리자 기록
                     save_to_gsheet(st.session_state.production_db); st.rerun()
                 if b2.button("🚫불량", key=f"ng_{idx}"):
                     st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"
-                    st.session_state.production_db.at[idx, '작업자'] = st.session_state.user_id
+                    st.session_state.production_db.at[idx, '작업자'] = st.session_state.user_id # 불량 처리자 기록
                     save_to_gsheet(st.session_state.production_db); st.rerun()
             elif row['상태'] == "불량 처리 중": st.markdown("<span class='status-red'>🔴 불량 처리 중</span>", unsafe_allow_html=True)
             else: st.markdown("<span class='status-green'>🟢 완료</span>", unsafe_allow_html=True)
@@ -227,7 +236,7 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
 # --- 6-3. 통합 리포트 ---
 elif st.session_state.current_line == "리포트":
     st.markdown("<h2 class='centered-title'>📊 통합 생산 리포트</h2>", unsafe_allow_html=True)
-    if st.button("🔄 데이터 최신화"): st.session_state.production_db = load_data(); st.rerun()
+    if st.button("🔄 최신 데이터 동기화"): st.session_state.production_db = load_data(); st.rerun()
     db = st.session_state.production_db
     if not db.empty:
         t_done = len(db[(db['라인'] == '포장 라인') & (db['상태'] == '완료')])
@@ -245,7 +254,7 @@ elif st.session_state.current_line == "리포트":
         with c2: st.plotly_chart(px.pie(db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 비중"), use_container_width=True)
         st.dataframe(db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
 
-# --- 6-4. 불량 수리 센터 ---
+# --- 6-4. 불량 수리 센터 (입력보존 + 미리보기) ---
 elif st.session_state.current_line == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 수리 센터</h2>", unsafe_allow_html=True)
     bad = st.session_state.production_db[st.session_state.production_db['상태'] == "불량 처리 중"]
@@ -255,10 +264,15 @@ elif st.session_state.current_line == "불량 공정":
             with st.container(border=True):
                 st.write(f"**S/N: {row['시리얼']}** ({row['모델']} / 발생: {row['라인']})")
                 c1, c2, c3 = st.columns([4, 4, 2])
-                sv = c1.text_input("불량 원인", value=st.session_state.repair_cache.get(f"s_{idx}", ""), key=f"s_{idx}")
-                av = c2.text_input("수리 조치", value=st.session_state.repair_cache.get(f"a_{idx}", ""), key=f"a_{idx}")
+                
+                # 세션 캐시를 활용한 입력값 보존
+                cache_s = st.session_state.repair_cache.get(f"s_{idx}", "")
+                cache_a = st.session_state.repair_cache.get(f"a_{idx}", "")
+                sv = c1.text_input("불량 원인", value=cache_s, key=f"s_{idx}")
+                av = c2.text_input("수리 조치", value=cache_a, key=f"a_{idx}")
                 st.session_state.repair_cache[f"s_{idx}"], st.session_state.repair_cache[f"a_{idx}"] = sv, av
                 
+                # 사진 미리보기 (UI 기능)
                 up_f = st.file_uploader("수리 사진 미리보기", type=['jpg','png','jpeg'], key=f"img_{idx}")
                 if up_f: st.image(up_f, width=250)
                 
@@ -268,7 +282,8 @@ elif st.session_state.current_line == "불량 공정":
                         st.session_state.production_db.at[idx, '증상'], st.session_state.production_db.at[idx, '수리'] = sv, av
                         st.session_state.production_db.at[idx, '작업자'] = st.session_state.user_id
                         save_to_gsheet(st.session_state.production_db)
-                        st.session_state.repair_cache.pop(f"s_{idx}", None); st.rerun()
+                        st.session_state.repair_cache.pop(f"s_{idx}", None); st.session_state.repair_cache.pop(f"a_{idx}", None)
+                        st.rerun()
 
 # --- 6-5. 수리 리포트 ---
 elif st.session_state.current_line == "수리 리포트":
@@ -280,7 +295,7 @@ elif st.session_state.current_line == "수리 리포트":
         with c2: st.plotly_chart(px.pie(rep_db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="수리 모델 비중"), use_container_width=True)
         st.dataframe(rep_db[['시간', '라인', '모델', '시리얼', '증상', '수리', '작업자']], use_container_width=True, hide_index=True)
 
-# --- 6-6. 마스터 관리 ---
+# --- 6-6. 마스터 관리 (v9.1 UI 및 기능 복구) ---
 elif st.session_state.current_line == "마스터 관리":
     st.markdown("<h2 class='centered-title'>🔐 마스터 데이터 및 계정 관리</h2>", unsafe_allow_html=True)
     if not st.session_state.admin_authenticated:
