@@ -291,26 +291,48 @@ elif st.session_state.current_line == "조립 라인":
         with st.container(border=True):
             st.subheader(f"📝 {st.session_state.selected_cell} 신규 등록")
             reg1, reg2, reg3 = st.columns(3)
-            m_choice = reg1.selectbox("모델 선택", st.session_state.master_models, key="am_m")
-            i_opts = st.session_state.master_items_dict.get(m_choice, [])
-            i_choice = reg2.selectbox("품목 선택", i_opts, key="am_i")
-            s_input = reg3.text_input("시리얼 번호 스캔")
             
-            if st.button("▶️ 조립 시작 등록", type="primary", use_container_width=True):
-                if s_input:
+            # 모델 선택 초기화 ("선택하세요" 추가)
+            m_options = ["선택하세요"] + st.session_state.master_models
+            m_choice = reg1.selectbox("모델 선택", m_options, key="am_m")
+            
+            # 모델이 선택되지 않았을 때 품목 처리
+            if m_choice == "선택하세요":
+                i_options = ["모델을 먼저 선택하세요"]
+                i_choice = reg2.selectbox("품목 선택", i_options, key="am_i", disabled=True)
+            else:
+                i_options = ["선택하세요"] + st.session_state.master_items_dict.get(m_choice, [])
+                i_choice = reg2.selectbox("품목 선택", i_options, key="am_i")
+
+            # 등록 실행 함수 정의
+            def handle_registration():
+                s_val = st.session_state.temp_serial
+                if m_choice == "선택하세요" or i_choice in ["선택하세요", "모델을 먼저 선택하세요"]:
+                    st.error("⚠️ 모델과 품목을 먼저 선택해야 합니다.")
+                    return
+                
+                if s_val:
                     db = st.session_state.production_db
-                    if not db[(db['모델'] == m_choice) & (db['품목코드'] == i_choice) & (db['시리얼'] == s_input)].empty:
-                        st.error(f"이미 등록된 시리얼입니다: {s_input}")
+                    if not db[(db['모델'] == m_choice) & (db['품목코드'] == i_choice) & (db['시리얼'] == s_val)].empty:
+                        st.toast(f"❌ 중복 시리얼: {s_val}", icon="⚠️")
                     else:
                         new_data = {
                             '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             '라인': "조립 라인", 'CELL': st.session_state.selected_cell,
-                            '모델': m_choice, '품목코드': i_choice, '시리얼': s_input,
+                            '모델': m_choice, '품목코드': i_choice, '시리얼': s_val,
                             '상태': '진행 중', '증상': '', '수리': ''
                         }
                         st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True)
-                        st.rerun()
-    
+                        st.toast(f"✅ 등록 완료: {s_val}", icon="🚀")
+                    st.session_state.temp_serial = ""
+                    st.rerun()
+
+            # 시리얼 입력란 (엔터/스캔 시 자동 등록)
+            reg3.text_input("시리얼 번호 스캔", key="temp_serial", on_change=handle_registration)
+            
+            if st.button("▶️ 조립 시작 등록 (또는 Enter)", type="primary", use_container_width=True):
+                handle_registration()
+
     st.divider()
     st.subheader("📊 조립 라인 실시간 로그")
     l_db = st.session_state.production_db[st.session_state.production_db['라인'] == "조립 라인"]
@@ -432,6 +454,7 @@ elif st.session_state.current_line == "포장 라인":
                         st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun()
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 포장완료")
+
 
 
 
