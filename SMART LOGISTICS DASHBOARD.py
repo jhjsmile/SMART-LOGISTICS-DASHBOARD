@@ -45,7 +45,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # =================================================================
-# 2. 세션 상태(Session State) 초기화 - 시스템의 뼈대
+# 2. 세션 상태(Session State) 초기화
 # =================================================================
 if 'production_db' not in st.session_state:
     st.session_state.production_db = pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리'])
@@ -77,7 +77,7 @@ if 'selected_cell' not in st.session_state:
     st.session_state.selected_cell = "CELL 1"
 
 # =================================================================
-# 3. 다이얼로그 정의 (메인 루프 진입 전 선언하여 에러 방지)
+# 3. 다이얼로그 정의
 # =================================================================
 @st.dialog("📦 공정 입고 승인 확인")
 def confirm_entry_dialog():
@@ -104,7 +104,7 @@ def confirm_entry_dialog():
         st.rerun()
 
 # =================================================================
-# 4. 사이드바 내비게이션 (명칭 및 순서 엄수)
+# 4. 사이드바 내비게이션
 # =================================================================
 st.sidebar.title("🏭 생산 공정 관리 v7.5")
 st.sidebar.markdown("---")
@@ -134,7 +134,7 @@ if st.sidebar.button("🔐 마스터 데이터 관리", use_container_width=True
     nav_to(st.session_state.current_line, is_admin=True)
 
 # =================================================================
-# 5. 마스터 데이터 관리 (미리보기 목록 복구 및 업로드 상세)
+# 5. 마스터 데이터 관리
 # =================================================================
 if st.session_state.admin_page:
     st.title("🔐 시스템 관리자 제어판")
@@ -143,11 +143,14 @@ if st.session_state.admin_page:
         _, a_col, _ = st.columns([1, 1.5, 1])
         with a_col:
             st.subheader("관리자 본인 확인")
-            p_input = st.text_input("접속 비밀번호", type="password")
-            if st.button("인증하기", use_container_width=True):
-                if p_input == ADMIN_PASSWORD:
-                    st.session_state.is_authenticated = True; st.rerun()
-                else: st.error("인증에 실패했습니다.")
+            # 1. 인증 버튼에 엔터값 추가를 위해 form 사용
+            with st.form("auth_form", clear_on_submit=False):
+                p_input = st.text_input("접속 비밀번호", type="password")
+                submit_auth = st.form_submit_button("인증하기", use_container_width=True)
+                if submit_auth:
+                    if p_input == ADMIN_PASSWORD:
+                        st.session_state.is_authenticated = True; st.rerun()
+                    else: st.error("인증에 실패했습니다.")
     else:
         st.markdown("<div class='section-title'>📋 마스터 기준 정보 개별 설정</div>", unsafe_allow_html=True)
         m_col1, m_col2 = st.columns(2)
@@ -225,11 +228,18 @@ elif st.session_state.current_line == "리포트":
         st.divider()
         c_left, c_right = st.columns([3, 2])
         with c_left:
-            st.plotly_chart(px.bar(main_db[main_db['상태'] == '완료'].groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="라인별 양품 실적"), use_container_width=True)
+            # 5. 라인별 양품 실적 글자 정렬 (title_x=0.5 추가)
+            fig_bar = px.bar(main_db[main_db['상태'] == '완료'].groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="라인별 양품 실적")
+            fig_bar.update_layout(title_x=0.5)
+            st.plotly_chart(fig_bar, use_container_width=True)
         with c_right:
-            st.plotly_chart(px.pie(main_db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 투입 비중"), use_container_width=True)
+            # 5. 모델별 투입 비중 글자 정렬 (title_x=0.5 추가)
+            fig_pie = px.pie(main_db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 투입 비중")
+            fig_pie.update_layout(title_x=0.5)
+            st.plotly_chart(fig_pie, use_container_width=True)
         
-        st.markdown("<div class='section-title'>📝 불량 및 수리 완료 상세 기록</div>", unsafe_allow_html=True)
+        # 4. 불량 및 수리 완료 상세 기록 -> 생산 현황으로 이름 변경
+        st.markdown("<div class='section-title'>📝 생산 현황</div>", unsafe_allow_html=True)
         h_df = main_db[main_db['상태'].str.contains("불량|수리|재투입", na=False)].sort_values('시간', ascending=False)
         st.dataframe(h_df, use_container_width=True, hide_index=True)
 
@@ -273,26 +283,30 @@ elif st.session_state.current_line == "조립 라인":
     if st.session_state.selected_cell != "전체 CELL":
         with st.container(border=True):
             st.subheader(f"📝 {st.session_state.selected_cell} 신규 등록")
-            reg1, reg2, reg3 = st.columns(3)
-            m_choice = reg1.selectbox("모델 선택", st.session_state.master_models, key="am_m")
-            i_opts = st.session_state.master_items_dict.get(m_choice, [])
-            i_choice = reg2.selectbox("품목 선택", i_opts, key="am_i")
-            s_input = reg3.text_input("시리얼 번호 스캔")
-            
-            if st.button("▶️ 조립 시작 등록", type="primary", use_container_width=True):
-                if s_input:
-                    db = st.session_state.production_db
-                    if not db[(db['모델'] == m_choice) & (db['품목코드'] == i_choice) & (db['시리얼'] == s_input)].empty:
-                        st.error(f"이미 등록된 시리얼입니다: {s_input}")
-                    else:
-                        new_data = {
-                            '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                            '라인': "조립 라인", 'CELL': st.session_state.selected_cell,
-                            '모델': m_choice, '품목코드': i_choice, '시리얼': s_input,
-                            '상태': '진행 중', '증상': '', '수리': ''
-                        }
-                        st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True)
-                        st.rerun()
+            # 2 & 3. 모델 선택 시 품목 선택 및 엔터값 추가를 위한 Form 구성
+            with st.form("assembly_form", clear_on_submit=False):
+                reg1, reg2, reg3 = st.columns(3)
+                m_choice = reg1.selectbox("모델 선택", st.session_state.master_models, key="am_m")
+                i_opts = st.session_state.master_items_dict.get(m_choice, [])
+                i_choice = reg2.selectbox("품목 선택", i_opts, key="am_i") # 2. 모델 선택시 품목 선택 가능
+                s_input = reg3.text_input("시리얼 번호 스캔")
+                
+                submit_assembly = st.form_submit_button("▶️ 조립 시작 등록", type="primary", use_container_width=True) # 3. 엔터값 추가
+                
+                if submit_assembly:
+                    if s_input:
+                        db = st.session_state.production_db
+                        if not db[(db['모델'] == m_choice) & (db['품목코드'] == i_choice) & (db['시리얼'] == s_input)].empty:
+                            st.error(f"이미 등록된 시리얼입니다: {s_input}")
+                        else:
+                            new_data = {
+                                '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                '라인': "조립 라인", 'CELL': st.session_state.selected_cell,
+                                '모델': m_choice, '품목코드': i_choice, '시리얼': s_input,
+                                '상태': '진행 중', '증상': '', '수리': ''
+                            }
+                            st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True)
+                            st.rerun()
     
     st.divider()
     st.subheader("📊 조립 라인 실시간 로그")
@@ -319,7 +333,7 @@ elif st.session_state.current_line == "조립 라인":
                 else: st.success("🟢 완료")
 
 # -----------------------------------------------------------------
-# (8-2) 검사 라인
+# (8-2, 8-3 검사/포장 라인 로직은 기존과 동일하게 유지됨)
 # -----------------------------------------------------------------
 elif st.session_state.current_line == "검사 라인":
     st.title("🔍 품질 검사 라인")
@@ -367,9 +381,6 @@ elif st.session_state.current_line == "검사 라인":
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 합격완료")
 
-# -----------------------------------------------------------------
-# (8-3) 포장 라인
-# -----------------------------------------------------------------
 elif st.session_state.current_line == "포장 라인":
     st.title("🚚 출하 포장 라인")
     st.markdown("<div class='section-title'>📥 포장 입고 대상 조회 (검사 합격 물량)</div>", unsafe_allow_html=True)
