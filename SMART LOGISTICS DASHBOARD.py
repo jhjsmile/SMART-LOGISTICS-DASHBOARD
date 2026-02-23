@@ -143,7 +143,6 @@ if st.session_state.admin_page:
         _, a_col, _ = st.columns([1, 1.5, 1])
         with a_col:
             st.subheader("관리자 본인 확인")
-            # [수정 1] 인증 버튼 엔터값 지원을 위한 st.form
             with st.form("admin_auth_form"):
                 p_input = st.text_input("접속 비밀번호", type="password")
                 if st.form_submit_button("인증하기", use_container_width=True):
@@ -177,40 +176,6 @@ if st.session_state.admin_page:
                 if st.button("코드 삭제 실행", use_container_width=True):
                     st.session_state.master_items_dict[m_target].remove(i_del); st.rerun()
 
-        st.divider()
-        st.markdown("<div class='section-title'>📤 CSV 대량 데이터 관리 (업로드 미리보기)</div>", unsafe_allow_html=True)
-        up_c1, up_c2 = st.columns([1, 1])
-        
-        with up_c1:
-            with st.container(border=True):
-                st.write("**파일 업로드 제어**")
-                up_file = st.file_uploader("업로드할 CSV 파일을 드래그하세요", type="csv")
-                up_opt = st.radio("적용 범위 선택", ["모델 마스터 갱신", "품목코드 마스터 갱신"], horizontal=True)
-                
-                if st.button("🚀 시스템 일괄 반영", type="primary", use_container_width=True):
-                    if up_file:
-                        st.success("데이터 검증 완료 및 반영 성공")
-                    else: st.warning("파일을 먼저 선택하세요.")
-        
-        with up_c2:
-            st.write("**👀 업로드 예정 데이터 미리보기**")
-            if up_file:
-                pre_df = pd.read_csv(up_file)
-                st.markdown("<div class='preview-box'>", unsafe_allow_html=True)
-                st.dataframe(pre_df, use_container_width=True, height=200)
-                st.markdown("</div>", unsafe_allow_html=True)
-            else:
-                st.info("파일을 업로드하면 목록이 여기에 표시됩니다.")
-
-        st.divider()
-        st.markdown("<div class='section-title'>📂 시스템 백업 및 DB 초기화</div>", unsafe_allow_html=True)
-        b_c1, b_c2, b_c3 = st.columns(3)
-        b_c1.button("💾 모델 데이터 다운로드", use_container_width=True)
-        b_c2.button("💾 품목 데이터 다운로드", use_container_width=True)
-        if b_c3.button("⚠️ 전체 생산 DB 초기화", type="secondary", use_container_width=True):
-            st.session_state.production_db = pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리'])
-            st.rerun()
-
 # =================================================================
 # 6. 생산 통합 리포트
 # =================================================================
@@ -227,13 +192,11 @@ elif st.session_state.current_line == "리포트":
         st.divider()
         c_left, c_right = st.columns([3, 2])
         
-        # [수정 5] 그래프 정렬 보강
         with c_left:
             fig_bar = px.bar(main_db[main_db['상태'] == '완료'].groupby('라인').size().reset_index(name='수량'), 
                              x='라인', y='수량', color='라인', title="라인별 양품 실적")
             fig_bar.update_layout(
-                bargap=0.8,
-                title={'text': "라인별 양품 실적", 'y':0.95, 'x':0.45, 'xanchor': 'center', 'yanchor': 'top'},
+                title={'text': "라인별 양품 실적", 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top'},
                 margin=dict(l=20, r=20, t=50, b=20)
             )
             st.plotly_chart(fig_bar, use_container_width=True)
@@ -242,12 +205,11 @@ elif st.session_state.current_line == "리포트":
             fig_pie = px.pie(main_db.groupby('모델').size().reset_index(name='수량'), 
                              values='수량', names='모델', hole=0.3, title="모델별 투입 비중")
             fig_pie.update_layout(
-                title={'text': "모델별 투입 비중", 'y':0.95, 'x':0.35, 'xanchor': 'center', 'yanchor': 'top'},
+                title={'text': "모델별 투입 비중", 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top'},
                 margin=dict(l=20, r=20, t=50, b=20)
             )
             st.plotly_chart(fig_pie, use_container_width=True)
         
-        # [수정 4] 명칭 변경: 불량 및 수리 완료 상세 기록 -> 생산 현황
         st.markdown("<div class='section-title'>📝 생산 현황</div>", unsafe_allow_html=True)
         h_df = main_db[main_db['상태'].str.contains("불량|수리|재투입", na=False)].sort_values('시간', ascending=False)
         st.dataframe(h_df, use_container_width=True, hide_index=True)
@@ -293,20 +255,38 @@ elif st.session_state.current_line == "조립 라인":
         with st.container(border=True):
             st.subheader(f"📝 {st.session_state.selected_cell} 신규 등록")
             
-            # [수정 3] 엔터값 추가를 위한 st.form
             with st.form("assembly_reg_form", clear_on_submit=False):
                 reg1, reg2, reg3 = st.columns(3)
-                # [수정 2] 모델 선택 시 품목 연동
-                m_choice = reg1.selectbox("모델 선택", st.session_state.master_models)
-                i_opts = st.session_state.master_items_dict.get(m_choice, [])
+                
+                # [수정 6] 초기 값 "선택하세요."로 표기
+                m_choice = reg1.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models)
+                
+                # 모델이 선택된 경우에만 품목 리스트 활성화
+                if m_choice != "선택하세요.":
+                    i_opts = st.session_state.master_items_dict.get(m_choice, [])
+                else:
+                    i_opts = []
                 i_choice = reg2.selectbox("품목 선택", i_opts)
+                
                 s_input = reg3.text_input("시리얼 번호 스캔")
                 
                 if st.form_submit_button("▶️ 조립 시작 등록", type="primary", use_container_width=True):
-                    if s_input:
+                    if m_choice == "선택하세요.":
+                        st.error("모델을 먼저 선택해주세요.")
+                    elif not s_input:
+                        st.error("시리얼 번호를 입력해주세요.")
+                    else:
                         db = st.session_state.production_db
-                        if not db[(db['시리얼'] == s_input) & (db['상태'] != "완료")].empty:
-                            st.error(f"이미 공정 진행 중인 시리얼입니다: {s_input}")
+                        # [수정 7] 모델/시리얼이 같아도 품목코드가 다르면 입력 가능하도록 중복 체크 로직 수정
+                        duplicate = db[
+                            (db['모델'] == m_choice) & 
+                            (db['품목코드'] == i_choice) & 
+                            (db['시리얼'] == s_input) & 
+                            (db['상태'] != "완료")
+                        ]
+                        
+                        if not duplicate.empty:
+                            st.error(f"이미 공정 진행 중인 동일 품목 시리얼입니다: {s_input}")
                         else:
                             new_data = {
                                 '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -345,8 +325,8 @@ elif st.session_state.current_line == "검사 라인":
     st.markdown("<div class='section-title'>📥 검사 입고 대상 조회 (조립 완료 물량)</div>", unsafe_allow_html=True)
     with st.container(border=True):
         f1, f2 = st.columns(2)
-        sel_m = f1.selectbox("모델 선택", ["선택하세요"] + st.session_state.master_models, key="f_m_insp")
-        if sel_m != "선택하세요":
+        sel_m = f1.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key="f_m_insp")
+        if sel_m != "선택하세요.":
             sel_i = f2.selectbox("품목 선택", ["전체"] + st.session_state.master_items_dict.get(sel_m, []), key="f_i_insp")
             db = st.session_state.production_db
             ready = db[(db['라인'] == "조립 라인") & (db['상태'] == "완료") & (db['모델'] == sel_m)]
@@ -391,8 +371,8 @@ elif st.session_state.current_line == "포장 라인":
     st.markdown("<div class='section-title'>📥 포장 입고 대상 조회 (검사 합격 물량)</div>", unsafe_allow_html=True)
     with st.container(border=True):
         f1, f2 = st.columns(2)
-        sel_m = f1.selectbox("모델 선택", ["선택하세요"] + st.session_state.master_models, key="f_m_pack")
-        if sel_m != "선택하세요":
+        sel_m = f1.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key="f_m_pack")
+        if sel_m != "선택하세요.":
             sel_i = f2.selectbox("품목 선택", ["전체"] + st.session_state.master_items_dict.get(sel_m, []), key="f_i_pack")
             db = st.session_state.production_db
             ready = db[(db['라인'] == "검사 라인") & (db['상태'] == "완료") & (db['모델'] == sel_m)]
@@ -430,8 +410,3 @@ elif st.session_state.current_line == "포장 라인":
                         st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun()
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 포장완료")
-
-
-
-
-
