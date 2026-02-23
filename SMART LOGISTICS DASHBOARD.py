@@ -239,7 +239,7 @@ elif st.session_state.current_line == "불량 공정":
                     st.rerun()
 
 # =================================================================
-# 8. 조립 라인 (6번 정정 및 7번 반영)
+# 8. 조립 라인 (폼 로직 개선)
 # =================================================================
 elif st.session_state.current_line == "조립 라인":
     st.title("📦 조립 라인 작업")
@@ -253,30 +253,29 @@ elif st.session_state.current_line == "조립 라인":
         with st.container(border=True):
             st.subheader(f"📝 {st.session_state.selected_cell} 신규 등록")
             
-            # [수정 3] 엔터값 지원을 위한 st.form
+            # 모델 선택은 폼 외부에서 처리하여 실시간으로 품목 리스트를 갱신함
+            m_choice = st.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key="main_model_select")
+            
+            # 품목과 시리얼 번호는 엔터 입력을 위해 폼 내부에 배치
             with st.form("assembly_reg_form", clear_on_submit=False):
-                reg1, reg2, reg3 = st.columns(3)
+                reg1, reg2 = st.columns(2)
                 
-                # [수정 6번 정정] 초기값 "선택하세요." 설정
-                m_choice = reg1.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models)
-                
-                # [수정 6번 정정] 모델을 선택했을 때만 품목코드 리스트를 불러옴
+                # 모델 선택 여부에 따라 품목 리스트 결정
                 if m_choice != "선택하세요.":
                     i_opts = st.session_state.master_items_dict.get(m_choice, [])
                 else:
-                    i_opts = ["모델을 먼저 선택하세요."]
+                    i_opts = ["모델을 선택하세요."]
                 
-                i_choice = reg2.selectbox("품목 선택", i_opts)
-                s_input = reg3.text_input("시리얼 번호 스캔")
+                i_choice = reg1.selectbox("품목 선택", i_opts)
+                s_input = reg2.text_input("시리얼 번호 스캔")
                 
                 if st.form_submit_button("▶️ 조립 시작 등록", type="primary", use_container_width=True):
                     if m_choice == "선택하세요.":
-                        st.error("모델을 선택해 주세요.")
+                        st.error("모델을 먼저 선택해 주세요.")
                     elif not s_input:
                         st.error("시리얼 번호를 입력해 주세요.")
                     else:
                         db = st.session_state.production_db
-                        # [수정 7] 모델/시리얼이 같아도 품목코드가 다르면 입력 가능
                         duplicate = db[
                             (db['모델'] == m_choice) & 
                             (db['품목코드'] == i_choice) & 
@@ -318,7 +317,7 @@ elif st.session_state.current_line == "조립 라인":
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 완료")
 
-# (8-2, 8-3 검사/포장 생략 없이 유지)
+# (8-2) 검사 라인
 elif st.session_state.current_line == "검사 라인":
     st.title("🔍 품질 검사 라인")
     st.markdown("<div class='section-title'>📥 검사 입고 대상 조회 (조립 완료 물량)</div>", unsafe_allow_html=True)
@@ -364,6 +363,7 @@ elif st.session_state.current_line == "검사 라인":
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 합격완료")
 
+# (8-3) 포장 라인
 elif st.session_state.current_line == "포장 라인":
     st.title("🚚 출하 포장 라인")
     st.markdown("<div class='section-title'>📥 포장 입고 대상 조회 (검사 합격 물량)</div>", unsafe_allow_html=True)
