@@ -13,12 +13,12 @@ from googleapiclient.http import MediaIoBaseUpload
 # =================================================================
 # 1. 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v15.2", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v16.1", layout="wide")
 
-# [핵심] 역할(Role) 정의
+# [핵심] 역할(Role) 정의 (명칭 변경: 생산 리포트)
 ROLES = {
-    "master": ["조립 라인", "검사 라인", "포장 라인", "리포트", "불량 공정", "수리 리포트", "마스터 관리"],
-    "control_tower": ["리포트", "수리 리포트", "마스터 관리"],
+    "master": ["조립 라인", "검사 라인", "포장 라인", "생산 리포트", "불량 공정", "수리 리포트", "마스터 관리"],
+    "control_tower": ["생산 리포트", "수리 리포트", "마스터 관리"],
     "assembly_team": ["조립 라인"],
     "qc_team": ["검사 라인", "불량 공정"],
     "packing_team": ["포장 라인"]
@@ -138,13 +138,13 @@ def nav(name): st.session_state.current_line = name; st.rerun()
 
 allowed = ROLES.get(st.session_state.user_role, [])
 
-menu_group_1 = ["조립 라인", "검사 라인", "포장 라인", "리포트"]
-icons_1 = {"조립 라인":"📦", "검사 라인":"🔍", "포장 라인":"🚚", "리포트":"📊"}
+menu_group_1 = ["조립 라인", "검사 라인", "포장 라인", "생산 리포트"]
+icons_1 = {"조립 라인":"📦", "검사 라인":"🔍", "포장 라인":"🚚", "생산 리포트":"📊"}
 g1_ok = False
 for m in menu_group_1:
     if m in allowed:
         g1_ok = True
-        label = f"{icons_1[m]} {m}" + (" 현황" if "라인" in m else "") + (" 통합 대시보드" if m == "리포트" else "")
+        label = f"{icons_1[m]} {m}" + (" 현황" if "라인" in m else "") + (" 통합 대시보드" if m == "생산 리포트" else "")
         if st.sidebar.button(label, use_container_width=True, type="primary" if st.session_state.current_line==m else "secondary"):
             nav(m)
 
@@ -304,8 +304,8 @@ if st.session_state.current_line == "조립 라인":
                 s_input = r2.text_input("시리얼 번호")
                 if st.form_submit_button("▶️ 조립 등록", use_container_width=True, type="primary"):
                     if m_choice != "선택하세요." and s_input:
-                        if not st.session_state.production_db[(st.session_state.production_db['시리얼'] == s_input) & (st.session_state.production_db['상태'] != "완료")].empty:
-                            st.error("❌ 이미 진행 중인 시리얼입니다.")
+                        is_dup = not st.session_state.production_db[(st.session_state.production_db['모델']==m_choice) & (st.session_state.production_db['품목코드']==i_choice) & (st.session_state.production_db['시리얼']==s_input) & (st.session_state.production_db['상태']!='구분선')].empty
+                        if is_dup: st.error(f"❌ 중복 생산 불가: [ {s_input} ] 이미 생산된 이력이 존재합니다.")
                         else:
                             # 1. 데이터 저장
                             new_row = {
@@ -347,9 +347,9 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
             else: st.info("대기 물량이 없습니다.")
     display_process_log(st.session_state.current_line, "합격" if st.session_state.current_line=="검사 라인" else "출고")
 
-# --- 6-3. 통합 리포트 ---
-elif st.session_state.current_line == "리포트":
-    st.markdown("<h2 class='centered-title'>📊 통합 생산 대시보드</h2>", unsafe_allow_html=True)
+# --- 6-3. 생산 리포트 통합 대시보드 ---
+elif st.session_state.current_line == "생산 리포트":
+    st.markdown("<h2 class='centered-title'>📊 생산 리포트 통합 대시보드</h2>", unsafe_allow_html=True)
     if st.button("🔄 최신 데이터 동기화"): st.session_state.production_db = load_data(); st.rerun()
     db = st.session_state.production_db
     if not db.empty:
@@ -436,7 +436,7 @@ elif st.session_state.current_line == "마스터 관리":
                 else: st.error("인증 실패")
     else:
         if st.button("🔓 관리 세션 종료", use_container_width=True):
-            st.session_state.admin_authenticated = False; nav("리포트")
+            st.session_state.admin_authenticated = False; nav("생산 리포트")
 
         st.markdown("<div class='section-title'>📋 기준정보 및 데이터 관리</div>", unsafe_allow_html=True)
         m1, m2 = st.columns(2)
