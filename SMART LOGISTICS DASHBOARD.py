@@ -232,7 +232,7 @@ elif st.session_state.current_line == "리포트":
             fig_bar = px.bar(main_db[main_db['상태'] == '완료'].groupby('라인').size().reset_index(name='수량'), 
                              x='라인', y='수량', color='라인', title="라인별 양품 실적")
             fig_bar.update_layout(
-                title={'text': "라인별 양품 실적", 'y':0.95, 'x':0.1, 'xanchor': 'center', 'yanchor': 'top'},
+                title={'text': "라인별 양품 실적", 'y':0.95, 'x':0.4, 'xanchor': 'center', 'yanchor': 'top'},
                 margin=dict(l=20, r=20, t=50, b=20)
             )
             st.plotly_chart(fig_bar, use_container_width=True)
@@ -241,7 +241,7 @@ elif st.session_state.current_line == "리포트":
             fig_pie = px.pie(main_db.groupby('모델').size().reset_index(name='수량'), 
                              values='수량', names='모델', hole=0.3, title="모델별 투입 비중")
             fig_pie.update_layout(
-                title={'text': "모델별 투입 비중", 'y':0.95, 'x':0.1, 'xanchor': 'center', 'yanchor': 'top'},
+                title={'text': "모델별 투입 비중", 'y':0.95, 'x':0.4, 'xanchor': 'center', 'yanchor': 'top'},
                 margin=dict(l=20, r=20, t=50, b=20)
             )
             st.plotly_chart(fig_pie, use_container_width=True)
@@ -429,4 +429,5 @@ elif st.session_state.current_line == "포장 라인":
                         st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun()
                 elif row['상태'] == "불량 처리 중": st.error("🔴 수리실")
                 else: st.success("🟢 포장완료")
+
 
