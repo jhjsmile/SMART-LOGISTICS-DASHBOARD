@@ -7,7 +7,7 @@ import plotly.express as px
 # =================================================================
 # 1. 전역 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v8.1", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v8.2", layout="wide")
 
 st.markdown("""
     <style>
@@ -109,7 +109,6 @@ def confirm_entry_dialog():
         st.session_state.confirm_target = None; st.rerun()
     if c2.button("❌ 취소", use_container_width=True): st.session_state.confirm_target = None; st.rerun()
 
-# 로그 출력 함수
 def display_process_log(line_name, ok_label="완료"):
     st.divider()
     st.markdown(f"<h3 class='centered-title'>📝 {line_name} 실시간 로그 현황</h3>", unsafe_allow_html=True)
@@ -135,10 +134,8 @@ def display_process_log(line_name, ok_label="완료"):
             else: st.markdown("<span class='status-green'>🟢 완료</span>", unsafe_allow_html=True)
 
 # =================================================================
-# 5. 각 라인별 구현
+# 5. 조립 라인 (중복 에러 체크 복구)
 # =================================================================
-
-# --- 조립 라인 ---
 if st.session_state.current_line == "조립 라인":
     st.markdown("<h2 class='centered-title'>📦 조립 라인 작업</h2>", unsafe_allow_html=True)
     cells = ["전체 CELL", "CELL 1", "CELL 2", "CELL 3", "CELL 4", "CELL 5", "CELL 6"]
@@ -156,7 +153,11 @@ if st.session_state.current_line == "조립 라인":
                 if st.form_submit_button("▶️ 조립 등록", type="primary", use_container_width=True):
                     if m_choice != "선택하세요." and s_input:
                         db = st.session_state.production_db
-                        if db[(db['모델']==m_choice) & (db['품목코드']==i_choice) & (db['시리얼']==s_input) & (db['상태'] != "완료")].empty:
+                        # [복구] 중복 에러 체크 로직
+                        duplicate = db[(db['시리얼'] == s_input) & (db['상태'] != "완료")]
+                        if not duplicate.empty:
+                            st.error(f"❌ 중복 오류: 시리얼 [{s_input}]은 이미 공정 진행 중입니다.")
+                        else:
                             new_data = {'시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '라인': "조립 라인", 'CELL': st.session_state.selected_cell, '모델': m_choice, '품목코드': i_choice, '시리얼': s_input, '상태': '진행 중', '증상': '', '수리': ''}
                             st.session_state.production_db = pd.concat([st.session_state.production_db, pd.DataFrame([new_data])], ignore_index=True); st.rerun()
     display_process_log("조립 라인", "완료")
@@ -182,7 +183,7 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
                         st.session_state.confirm_target, st.session_state.confirm_model, st.session_state.confirm_item = sn, sm, si; confirm_entry_dialog()
     display_process_log(st.session_state.current_line, "합격" if st.session_state.current_line=="검사 라인" else "출고")
 
-# --- 수리 센터 (활성화 비활성화 로직 검수 완료) ---
+# --- 불량 수리 센터 (수리 완료 버튼 및 아이콘) ---
 elif st.session_state.current_line == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 제품 수리 센터</h2>", unsafe_allow_html=True)
     bad_data = st.session_state.production_db[st.session_state.production_db['상태'] == "불량 처리 중"]
@@ -191,28 +192,21 @@ elif st.session_state.current_line == "불량 공정":
         st.success("✅ 현재 수리 대기 중인 불량 제품이 없습니다.")
     else:
         line_icons = {"조립 라인": "📦 조립", "검사 라인": "🔍 품질", "포장 라인": "🚚 출하"}
-        
         for idx, row in bad_data.iterrows():
             with st.container(border=True):
                 icon = line_icons.get(row['라인'], "🏭 기타")
                 st.write(f"**S/N: {row['시리얼']}** ({row['모델']} / 발생: {icon})")
-                
                 c1, c2, c3 = st.columns([4, 4, 2])
-                # 폼(Form)을 사용하지 않고 직접 입력값을 받아 버튼 활성화 상태를 실시간 체크
-                s_val = c1.text_input("불량 원인", key=f"s_input_{idx}", placeholder="원인을 입력하세요")
-                a_val = c2.text_input("수리 조치", key=f"a_input_{idx}", placeholder="조치 내용을 입력하세요")
-                
-                # 검수 로직: 공백 제거 후 텍스트가 둘 다 존재해야 False (활성화)
+                s_val = c1.text_input("불량 원인", key=f"s_in_{idx}", placeholder="원인을 입력하세요")
+                a_val = c2.text_input("수리 조치", key=f"a_in_{idx}", placeholder="조치 내용을 입력하세요")
                 is_disabled = not (s_val.strip() and a_val.strip())
-                
-                if c3.button("✅ 수리 완료", key=f"repair_btn_{idx}", use_container_width=True, disabled=is_disabled):
+                if c3.button("✅ 수리 완료", key=f"rep_btn_{idx}", use_container_width=True, disabled=is_disabled):
                     st.session_state.production_db.at[idx, '상태'] = "수리 완료(재투입)"
                     st.session_state.production_db.at[idx, '증상'] = s_val
                     st.session_state.production_db.at[idx, '수리'] = a_val
-                    st.success(f"{row['시리얼']} 수리 완료 처리되었습니다.")
                     st.rerun()
 
-# --- 리포트 및 마스터 데이터는 v8.0과 동일하게 유지 ---
+# --- 리포트 ---
 elif st.session_state.current_line == "리포트":
     st.markdown("<h2 class='centered-title'>📊 통합 생산 리포트</h2>", unsafe_allow_html=True)
     db = st.session_state.production_db
@@ -227,8 +221,10 @@ elif st.session_state.current_line == "리포트":
             fig2.update_layout(title_x=0.5)
             st.plotly_chart(fig2, use_container_width=True)
         st.divider()
+        st.markdown("<div class='section-title'>📝 생산 현황 (전체 로그)</div>", unsafe_allow_html=True)
         st.dataframe(db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
 
+# --- 마스터 관리 ---
 elif st.session_state.current_line == "마스터 관리":
     st.markdown("<h2 class='centered-title'>🔐 마스터 데이터 관리</h2>", unsafe_allow_html=True)
     if not st.session_state.admin_authenticated:
@@ -243,6 +239,6 @@ elif st.session_state.current_line == "마스터 관리":
         if st.button("🔓 관리 세션 종료", use_container_width=True):
             st.session_state.admin_authenticated = False; nav("조립 라인")
         st.markdown("<div class='section-title'>📋 시스템 설정</div>", unsafe_allow_html=True)
-        # ... (마스터 설정 로직 유지)
+        # 마스터 설정 로직 (기존 유지)
         if st.button("⚠️ 데이터 초기화", type="secondary"):
             st.session_state.production_db = pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리']); st.rerun()
