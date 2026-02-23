@@ -13,7 +13,7 @@ from googleapiclient.http import MediaIoBaseUpload
 # =================================================================
 # 1. 시스템 설정 및 스타일 정의
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 v15.9", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 v16.0", layout="wide")
 
 # [핵심] 역할(Role) 정의
 ROLES = {
@@ -138,7 +138,7 @@ if not st.session_state.login_status:
                     st.error("계정 정보를 확인하세요.")
     st.stop()
 
-# 사이드바 레이아웃
+# 사이드바 설정
 st.sidebar.markdown("### 🏭 생산 관리 시스템")
 st.sidebar.title(f"{st.session_state.user_id}님")
 if st.sidebar.button("전체 로그아웃"): 
@@ -358,7 +358,7 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
                 st.info("대기 물량이 없습니다.")
     display_process_log(st.session_state.current_line, "합격" if st.session_state.current_line=="검사 라인" else "출고")
 
-# --- 6-3. 통합 리포트 [막대 그래프 1/3 고정] ---
+# --- 6-3. 통합 리포트 [그래프 스타일 원복 및 1/3 크기] ---
 elif st.session_state.current_line == "리포트":
     st.markdown("<h2 class='centered-title'>📊 통합 생산 대시보드</h2>", unsafe_allow_html=True)
     if st.button("🔄 최신 데이터 동기화"): 
@@ -377,26 +377,22 @@ elif st.session_state.current_line == "리포트":
         met[3].metric("직행률(FTT)", f"{ftt:.1f}%")
         
         st.divider()
-        # 공정 실적(1/3) + 모델 비중(2/3)
+        # [원복] 공정별 실적(1/3) + 모델 비중(2/3)
         c1, c2 = st.columns([1, 2])
         with c1:
             fig1 = px.bar(db[db['상태']=='완료'].groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="공정별 실적")
-            fig1.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-            fig1.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.2)')
-            fig1.update_yaxes(showgrid=True, gridcolor='rgba(255,255,255,0.2)', rangemode='tozero')
+            fig1.update_yaxes(rangemode='tozero')
             st.plotly_chart(fig1, use_container_width=True)
         with c2:
             st.plotly_chart(px.pie(db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="모델별 비중"), use_container_width=True)
         
         st.divider()
         st.markdown("##### 👷 현장 작업자별 처리 건수")
-        # 작업자 실적(1/3 고정)
+        # [원복] 작업자 실적(1/3 고정)
         c3, _ = st.columns([1, 2])
         with c3:
             fig2 = px.bar(db.groupby('작업자').size().reset_index(name='건수'), x='작업자', y='건수', color='작업자')
-            fig2.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-            fig2.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.2)')
-            fig2.update_yaxes(showgrid=True, gridcolor='rgba(255,255,255,0.2)', rangemode='tozero')
+            fig2.update_yaxes(rangemode='tozero')
             st.plotly_chart(fig2, use_container_width=True)
         
         st.dataframe(db.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
@@ -446,19 +442,18 @@ elif st.session_state.current_line == "불량 공정":
                         st.success("수리 완료 및 사진 저장 성공!")
                         st.rerun()
 
-# --- 6-5. 수리 리포트 [막대 그래프 1/3 고정] ---
+# --- 6-5. 수리 리포트 [그래프 스타일 원복 및 1/3 크기] ---
 elif st.session_state.current_line == "수리 리포트":
     st.markdown("<h2 class='centered-title'>📈 불량 수리 리포트</h2>", unsafe_allow_html=True)
     rep_db = st.session_state.production_db[(st.session_state.production_db['상태'].str.contains("재투입", na=False)) | (st.session_state.production_db['수리'] != "")]
     if not rep_db.empty:
-        c1, c2 = st.columns([1, 2])
-        with c1:
+        # [원복] 막대 그래프(1/3) + 원형 차트(2/3)
+        c_rep_1, c_rep_2 = st.columns([1, 2])
+        with c_rep_1:
             fig_r1 = px.bar(rep_db.groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', title="라인별 수리 건수")
-            fig_r1.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-            fig_r1.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.2)')
-            fig_r1.update_yaxes(showgrid=True, gridcolor='rgba(255,255,255,0.2)', rangemode='tozero')
+            fig_r1.update_yaxes(rangemode='tozero')
             st.plotly_chart(fig_r1, use_container_width=True)
-        with c2:
+        with c_rep_2:
             st.plotly_chart(px.pie(rep_db.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.3, title="수리 모델 비중"), use_container_width=True)
         
         st.dataframe(rep_db[['시간', '라인', '모델', '시리얼', '증상', '수리', '작업자']], use_container_width=True, hide_index=True)
@@ -532,4 +527,3 @@ elif st.session_state.current_line == "마스터 관리":
             st.session_state.production_db = pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리', '작업자'])
             save_to_gsheet(st.session_state.production_db)
             st.rerun()
-
