@@ -121,7 +121,7 @@ def confirm_entry_dialog():
 # =================================================================
 # 5. 마스터 관리
 # =================================================================
-if st.session_state.current_line == "마스터 관리":
+elif st.session_state.current_line == "마스터 관리":
     st.title("🔐 마스터 데이터 관리")
     if not st.session_state.admin_authenticated:
         _, auth_c, _ = st.columns([1, 1, 1])
@@ -159,7 +159,7 @@ if st.session_state.current_line == "마스터 관리":
             st.session_state.production_db = pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리']); st.rerun()
 
 # =================================================================
-# 6. 조립 라인 현황 (셀 변경 시 초기화 로직 보강)
+# 6. 조립 라인 현황 (불량 처리 색상 수정)
 # =================================================================
 elif st.session_state.current_line == "조립 라인":
     st.title("📦 조립 라인 현황")
@@ -172,17 +172,12 @@ elif st.session_state.current_line == "조립 라인":
     if st.session_state.selected_cell != "전체 CELL":
         with st.container(border=True):
             st.subheader(f"📝 {st.session_state.selected_cell} 신규 등록")
-            
-            # [해결 방법] key값에 selected_cell을 포함하여 셀이 바뀔 때마다 위젯을 새로 생성(초기화)합니다.
-            m_choice = st.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, 
-                                    key=f"m_select_{st.session_state.selected_cell}")
-            
-            with st.form(f"asm_form_{st.session_state.selected_cell}", clear_on_submit=False):
+            m_choice = st.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key=f"ms_{st.session_state.selected_cell}")
+            with st.form(f"asm_f_{st.session_state.selected_cell}", clear_on_submit=False):
                 r1, r2 = st.columns(2)
-                i_opts = st.session_state.master_items_dict.get(m_choice, []) if m_choice != "선택하세요." else ["모델 선택 필요"]
+                i_opts = st.session_state.master_items_dict.get(m_choice, []) if m_choice!="선택하세요." else ["모델 선택 필요"]
                 i_choice = r1.selectbox("품목 선택", i_opts)
                 s_input = r2.text_input("시리얼 번호")
-                
                 if st.form_submit_button("▶️ 조립 등록", type="primary", use_container_width=True):
                     if m_choice != "선택하세요." and s_input:
                         db = st.session_state.production_db
@@ -205,10 +200,13 @@ elif st.session_state.current_line == "조립 라인":
                     b1, b2 = st.columns(2)
                     if b1.button("완료", key=f"ok_a_{idx}"): st.session_state.production_db.at[idx, '상태'] = "완료"; st.rerun()
                     if b2.button("🚫불량", key=f"ng_a_{idx}"): st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun()
-                else: st.success(row['상태'])
+                elif row['상태'] == "불량 처리 중":
+                    st.error("🔴 불량 처리 중") # 초록색에서 빨간색으로 수정
+                else:
+                    st.success("🟢 완료")
 
 # =================================================================
-# 7. 품질 검사 / 8. 출하 포장 
+# 7. 품질 검사 / 8. 출하 포장 (불량 시 상태 로직 수정)
 # =================================================================
 elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
     line_title = "🔍 품질 검사 현황" if st.session_state.current_line == "검사 라인" else "🚚 출하 포장 현황"
@@ -217,7 +215,7 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
     
     with st.container(border=True):
         f1, f2 = st.columns(2)
-        sm = f1.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key=f"m_sel_{st.session_state.current_line}")
+        sm = f1.selectbox("모델 선택", ["선택하세요."] + st.session_state.master_models, key=f"ms_{st.session_state.current_line}")
         si_opts = st.session_state.master_items_dict.get(sm, []) if sm != "선택하세요." else []
         si = f2.selectbox("품목 선택", ["품목을 선택하세요."] + si_opts)
         
@@ -237,6 +235,8 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
     st.divider()
     curr_log = st.session_state.production_db[st.session_state.production_db['라인'] == st.session_state.current_line]
     if not curr_log.empty:
+        lh = st.columns([3, 2, 2, 2, 3])
+        for col, txt in zip(lh, ["시간", "모델", "품목", "시리얼", "제어"]): col.write(f"**{txt}**")
         for idx, row in curr_log.sort_values('시간', ascending=False).iterrows():
             lr = st.columns([3, 2, 2, 2, 3])
             lr[0].write(row['시간']); lr[1].write(row['모델']); lr[2].write(row['품목코드']); lr[3].write(row['시리얼'])
@@ -245,8 +245,11 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
                     b1, b2 = st.columns(2)
                     btn_label = "합격" if st.session_state.current_line=="검사 라인" else "완료"
                     if b1.button(btn_label, key=f"ok_c_{idx}"): st.session_state.production_db.at[idx, '상태'] = "완료"; st.rerun()
-                    if b2.button("🚫불량", key=f"ng_c_{idx}"): st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun()
-                else: st.success("🟢 완료")
+                    if b2.button("🚫불량", key=f"ng_c_{idx}"): st.session_state.production_db.at[idx, '상태'] = "불량 처리 중"; st.rerun() # 완료에서 불량 처리 중으로 수정
+                elif row['상태'] == "불량 처리 중":
+                    st.error("🔴 불량 처리 중")
+                else:
+                    st.success("🟢 완료")
 
 # =================================================================
 # 9. 리포트 / 10. 불량 수리 센터
@@ -270,13 +273,13 @@ elif st.session_state.current_line == "리포트":
 elif st.session_state.current_line == "불량 공정":
     st.title("🛠️ 불량 수리 센터")
     bad = st.session_state.production_db[st.session_state.production_db['상태'] == "불량 처리 중"]
-    if bad.empty: st.success("대기 물량 없음")
+    if bad.empty: st.success("✅ 대기 중인 불량 제품이 없습니다.")
     else:
         for idx, row in bad.iterrows():
             with st.container(border=True):
-                st.write(f"S/N: {row['시리얼']} ({row['모델']})")
+                st.write(f"**S/N: {row['시리얼']}** ({row['모델']} / 발생: {row['라인']})")
                 c1, c2, c3 = st.columns([4, 4, 2])
-                s_val = c1.text_input("원인", key=f"s_{idx}")
-                a_val = c2.text_input("조치", key=f"a_{idx}")
+                s_val = c1.text_input("불량 원인", key=f"s_{idx}")
+                a_val = c2.text_input("수리 조치", key=f"a_{idx}")
                 if c3.button("완료 및 재투입", key=f"r_{idx}"):
                     st.session_state.production_db.at[idx, '상태'] = "수리 완료(재투입)"; st.rerun()
