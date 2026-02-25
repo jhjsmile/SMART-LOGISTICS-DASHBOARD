@@ -616,9 +616,9 @@ elif st.session_state.current_line == "마스터 관리":
     # 관리자 보안 인증
     if not st.session_state.admin_authenticated:
         with st.form("master_verify_gate"):
-            m_pw_in = st.text_input("마스터 비밀번호 입력 (admin1234)", type="password")
+            m_pw_in = st.text_input("마스터 비밀번호 입력", type="password")
             if st.form_submit_button("권한 인증"):
-                if m_pw_in == "admin1234":
+                if m_pw_in == "master1234":
                     st.session_state.admin_authenticated = True; st.rerun()
                 else: st.error("❌ 비밀번호 불일치: 접근이 거부되었습니다.")
     else:
@@ -707,6 +707,7 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
 
