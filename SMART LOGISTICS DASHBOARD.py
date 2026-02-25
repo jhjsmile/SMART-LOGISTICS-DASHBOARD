@@ -368,7 +368,7 @@ def trigger_entry_dialog():
 def draw_v17_optimized_log(line_key, ok_btn_txt="완료 처리"):
     """
     [v17.7 UI 최적화 반영] 
-    1. '공정구분' -> 'CELL구분'으로 명칭 변경
+    1. '공정구분' -> 'CELL'으로 명칭 변경
     2. 컬럼 비율 [2.2, 1, 1.5, 1.5, 1.8, 4] 조정하여 버튼 공간 확보
     """
     st.divider()
@@ -386,7 +386,7 @@ def draw_v17_optimized_log(line_key, ok_btn_txt="완료 처리"):
     
     # [UI 패치] 헤더 컬럼 비율 및 명칭 최적화
     h_row = st.columns([2.2, 1, 1.5, 1.5, 1.8, 4])
-    header_labels = ["기록 시간", "CELL구분", "생산모델", "품목코드", "S/N 시리얼", "현장 제어"]
+    header_labels = ["기록 시간", "CELL", "생산모델", "품목코드", "S/N 시리얼", "현장 제어"]
     for col, txt in zip(h_row, header_labels): 
         col.write(f"**{txt}**")
     
@@ -707,6 +707,7 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
 
