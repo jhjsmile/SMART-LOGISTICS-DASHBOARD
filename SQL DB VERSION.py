@@ -43,6 +43,13 @@ if 'user_db' not in st.session_state:
 
 if 'production_data' not in st.session_state:
     st.session_state.production_data = load_test_logs()
+    
+st.divider() # 화면 구분선
+st.subheader("🔍 시스템 디버깅 모드")
+st.write("1. 현재 연결된 시트 파일:", st.secrets["connections"]["gsheets"]["spreadsheet"])
+st.write("2. 불러온 계정 리스트 (user_db):", st.session_state.user_db)
+st.write("3. 불러온 데이터 행 개수:", len(st.session_state.production_data))
+st.divider()
 
 # 3. 메인 화면 및 로그인 로직
 # ---------------------------------------------------------
@@ -755,6 +762,7 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
 
