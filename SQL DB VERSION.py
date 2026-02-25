@@ -7,6 +7,55 @@ from streamlit_gsheets import GSheetsConnection
 import io
 from streamlit_autorefresh import st_autorefresh
 
+# 구글 서비스 연동 라이브러리
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+
+# 1. 연결 및 데이터 로드 함수 정의
+# ---------------------------------------------------------
+# 구글 시트 연결 (secrets.toml 활용)
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+def load_test_logs():
+    try:
+        # 테스트용 실적 시트 읽기
+        df = conn.read(worksheet="sql_logs_test", ttl=0)
+        return df
+    except:
+        return pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리', '작업자'])
+
+def load_test_accounts():
+    try:
+        # 테스트용 계정 시트 읽기
+        df = conn.read(worksheet="sql_accounts_test", ttl=0)
+        acc_dict = {}
+        for _, row in df.iterrows():
+            acc_dict[str(row['id'])] = {"pw": str(row['pw']), "role": str(row['role'])}
+        return acc_dict if acc_dict else {"master": {"pw": "master1234", "role": "master"}}
+    except:
+        return {"master": {"pw": "master1234", "role": "master"}}
+
+# 2. 세션 상태 초기화 (앱 실행 시 최초 1회)
+# ---------------------------------------------------------
+if 'user_db' not in st.session_state:
+    st.session_state.user_db = load_test_accounts()
+
+if 'production_data' not in st.session_state:
+    st.session_state.production_data = load_test_logs()
+
+# 3. 메인 화면 및 로그인 로직
+# ---------------------------------------------------------
+st.title("🚀 전국 공장 통합 관리 시스템 (SQL 테스트 버전)")
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime, timezone, timedelta
+from streamlit_gsheets import GSheetsConnection
+import io
+from streamlit_autorefresh import st_autorefresh
+
 # [구글 클라우드 서비스 연동] 드라이브 API 및 인증 라이브러리
 # 서비스 계정 키를 통해 이미지 업로드 및 권한 관리를 수행합니다.
 from google.oauth2 import service_account
@@ -707,6 +756,7 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
 
