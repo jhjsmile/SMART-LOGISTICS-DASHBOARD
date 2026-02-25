@@ -207,15 +207,14 @@ def load_realtime_ledger():
         return pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리', '작업자'])
 
 def push_to_cloud(df):
-    """
-    업데이트된 데이터프레임을 클라우드 구글 시트에 저장합니다.
-    성공 시 캐시를 비워 즉각적인 화면 갱신을 수행합니다.
-    """
     try:
-        gs_conn.update(data=df)
-        st.cache_data.clear()
-    except Exception as error:
-        st.error(f"클라우드 저장 실패: {error}")
+        # 기존 '시트1'이 아닌 테스트용 시트 'sql_logs_test'에 저장합니다.
+        conn.update(worksheet="sql_logs_test", data=df)
+        st.success("✅ 테스트 시트에 데이터가 성공적으로 동기화되었습니다!")
+        # 데이터가 바뀌었으므로 세션 상태도 업데이트
+        st.session_state.production_data = df
+    except Exception as e:
+        st.error(f"❌ 데이터 저장 중 오류 발생: {e}")
 
 def upload_img_to_drive(file_obj, serial_no):
     """
@@ -756,6 +755,7 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
 
