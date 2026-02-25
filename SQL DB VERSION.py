@@ -5,7 +5,6 @@ import plotly.graph_objects as go
 from datetime import datetime, timezone, timedelta
 from streamlit_gsheets import GSheetsConnection
 import io
-from streamlit_autorefresh import st_autorefresh
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
@@ -778,6 +777,7 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
 
