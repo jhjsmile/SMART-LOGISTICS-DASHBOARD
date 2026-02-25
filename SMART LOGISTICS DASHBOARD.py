@@ -205,24 +205,42 @@ if 'production_db' not in st.session_state:
     st.session_state.production_db = load_realtime_ledger()
 
 # 2) 시스템 계정 DB
+# 2) 시스템 계정 DB (로직 강화 버전)
 def load_accounts():
+    """구글 시트에서 계정을 읽어오되, 실패하거나 비어있으면 기본 계정을 반환합니다."""
+    # 비상용 기본 계정 정의
+    default_acc = {
+        "master": {"pw": "master1234", "role": "master"},
+        "admin": {"pw": "admin1234", "role": "control_tower"},
+        "line1": {"pw": "1111", "role": "assembly_team"},
+        "line2": {"pw": "2222", "role": "qc_team"},
+        "line3": {"pw": "3333", "role": "packing_team"}
+    }
+    
     try:
-        # 구글 시트의 'accounts' 워크시트를 읽어옵니다.
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(worksheet="accounts", ttl=0)
+        # 구글 시트 읽기 시도 (gs_conn 변수 사용)
+        df = gs_conn.read(worksheet="accounts", ttl=0)
+        
+        # 데이터가 없거나 비어있는 경우 기본값 반환
+        if df is None or df.empty:
+            return default_acc
+            
         acc_dict = {}
         for _, row in df.iterrows():
-            acc_dict[str(row['id'])] = {"pw": str(row['pw']), "role": str(row['role'])}
-        return acc_dict
-    except:
-        # 시트가 없거나 오류 시 요청하신 기본 계정 리스트 반환
-        return {
-            "master": {"pw": "master1234", "role": "master"},
-            "admin": {"pw": "admin1234", "role": "control_tower"},
-            "line1": {"pw": "1111", "role": "assembly_team"},
-            "line2": {"pw": "2222", "role": "qc_team"},
-            "line3": {"pw": "3333", "role": "packing_team"}
-        }
+            # ID 값이 실제로 있는 경우에만 처리
+            uid = str(row['id']).strip() if pd.notna(row['id']) else ""
+            if uid:
+                acc_dict[uid] = {
+                    "pw": str(row['pw']).strip() if pd.notna(row['pw']) else "",
+                    "role": str(row['role']).strip() if pd.notna(row['role']) else "user"
+                }
+        
+        # 변환된 결과가 있으면 결과 반환, 없으면 기본값 반환
+        return acc_dict if acc_dict else default_acc
+        
+    except Exception:
+        # 시트 접속 실패 시 무조건 기본값으로 로그인 허용
+        return default_acc
 if 'user_db' not in st.session_state:
     st.session_state.user_db = load_accounts()
 
@@ -689,5 +707,6 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
