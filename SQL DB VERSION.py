@@ -6,50 +6,66 @@ from datetime import datetime, timezone, timedelta
 from streamlit_gsheets import GSheetsConnection
 import io
 from streamlit_autorefresh import st_autorefresh
-
-# 구글 서비스 연동 라이브러리
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-# 1. 연결 및 데이터 로드 함수 정의
-# ---------------------------------------------------------
-# 구글 시트 연결 (secrets.toml 활용)
+# =================================================================
+# 1. 시스템 전역 설정 및 연결
+# =================================================================
+st.set_page_config(page_title="생산 통합 관리 시스템 SQL TEST", layout="wide")
+KST = timezone(timedelta(hours=9))
+st_autorefresh(interval=30000, key="pms_auto_refresh")
+
+# 구글 시트 연결 객체
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# [함수 정의] 테스트용 데이터 로드
 def load_test_logs():
     try:
-        # 테스트용 실적 시트 읽기
-        df = conn.read(worksheet="sql_logs_test", ttl=0)
+        df = conn.read(worksheet="sql_logs_test", ttl=0).fillna("")
         return df
     except:
         return pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리', '작업자'])
 
 def load_test_accounts():
+    default_acc = {"master": {"pw": "master1234", "role": "master"}}
     try:
-        # 테스트용 계정 시트 읽기
         df = conn.read(worksheet="sql_accounts_test", ttl=0)
+        if df is None or df.empty: return default_acc
         acc_dict = {}
         for _, row in df.iterrows():
-            acc_dict[str(row['id'])] = {"pw": str(row['pw']), "role": str(row['role'])}
-        return acc_dict if acc_dict else {"master": {"pw": "master1234", "role": "master"}}
+            uid = str(row['id']).strip() if pd.notna(row['id']) else ""
+            if uid:
+                acc_dict[uid] = {
+                    "pw": str(row['pw']).strip() if pd.notna(row['pw']) else "",
+                    "role": str(row['role']).strip() if pd.notna(row['role']) else "user"
+                }
+        return acc_dict if acc_dict else default_acc
     except:
-        return {"master": {"pw": "master1234", "role": "master"}}
+        return default_acc
 
-# 2. 세션 상태 초기화 (앱 실행 시 최초 1회)
-# ---------------------------------------------------------
+def push_to_cloud(df):
+    try:
+        conn.update(worksheet="sql_logs_test", data=df)
+        st.success("✅ 테스트 시트 동기화 완료")
+        st.session_state.production_db = df
+    except Exception as e:
+        st.error(f"저장 오류: {e}")
+
+# =================================================================
+# 2. 세션 상태 관리 (초기화)
+# =================================================================
 if 'user_db' not in st.session_state:
     st.session_state.user_db = load_test_accounts()
 
-if 'production_data' not in st.session_state:
-    st.session_state.production_data = load_test_logs()
-    
-st.divider() # 화면 구분선
-st.subheader("🔍 시스템 디버깅 모드")
-st.write("1. 현재 연결된 시트 파일:", st.secrets["connections"]["gsheets"]["spreadsheet"])
-st.write("2. 불러온 계정 리스트 (user_db):", st.session_state.user_db)
-st.write("3. 불러온 데이터 행 개수:", len(st.session_state.production_data))
-st.divider()
+if 'production_db' not in st.session_state:
+    st.session_state.production_db = load_test_logs()
+
+# [디버깅 모드 노출]
+with st.expander("🔍 시스템 디버깅 정보 (테스트 완료 후 삭제하세요)"):
+    st.write("불러온 계정 리스트:", st.session_state.user_db)
+    st.write("대상 탭 이름: sql_accounts_test")
 
 # 3. 메인 화면 및 로그인 로직
 # ---------------------------------------------------------
@@ -762,6 +778,7 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
 
