@@ -11,15 +11,15 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 # =================================================================
-# 1. 시스템 전역 설정 및 연결 (중복 제거 완료)
+# 1. 시스템 전역 설정 및 디자인
 # =================================================================
-st.set_page_config(page_title="생산 통합 관리 시스템 SQL TEST", layout="wide")
+st.set_page_config(page_title="생산 통합 관리 시스템 SQL TEST", layout="wide", initial_sidebar_state="expanded")
 KST = timezone(timedelta(hours=9))
 
-# [중요] 새로고침은 파일 상단에 한 번만 선언 (key 충돌 방지)
+# 자동 새로고침 (30초)
 st_autorefresh(interval=30000, key="pms_auto_refresh_final")
 
-# 구글 시트 연결 객체 (하나로 통일)
+# 구글 시트 연결
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # 사용자 권한 정의
@@ -31,6 +31,20 @@ ROLES = {
     "packing_team": ["포장 라인"]
 }
 
+# [디자인] 전역 CSS 스타일 반영
+st.markdown("""
+    <style>
+    .stApp { max-width: 1200px; margin: 0 auto; }
+    .stButton button { width: 100%; border-radius: 8px; font-weight: 600; white-space: nowrap !important; }
+    .centered-title { text-align: center; font-weight: bold; margin: 25px 0; color: #1a1c1e; }
+    .section-title { background-color: #f8f9fa; padding: 16px 20px; border-radius: 10px; font-weight: bold; border-left: 10px solid #007bff; }
+    .stat-box { display: flex; flex-direction: column; align-items: center; background-color: #ffffff; border-radius: 12px; padding: 22px; border: 1px solid #e9ecef; }
+    .stat-label { font-size: 0.9rem; color: #6c757d; font-weight: bold; }
+    .stat-value { font-size: 2.4rem; color: #007bff; font-weight: bold; }
+    .alarm-banner { background-color: #fff5f5; color: #c92a2a; padding: 18px; border-radius: 12px; border: 1px solid #ffa8a8; text-align: center; font-weight: bold; margin-bottom: 20px; }
+    </style>
+    """, unsafe_allow_html=True)
+
 # =================================================================
 # 2. 핵심 유틸리티 및 데이터 로드 함수
 # =================================================================
@@ -40,7 +54,6 @@ def get_now_kst_str():
 
 def load_test_logs():
     try:
-        # 통합된 시트 파일 내의 'sql_logs_test' 탭을 읽음
         df = conn.read(worksheet="sql_logs_test", ttl=0).fillna("")
         if '시리얼' in df.columns:
             df['시리얼'] = df['시리얼'].astype(str).str.replace(r'\.0$', '', regex=True)
@@ -53,16 +66,12 @@ def load_test_accounts():
     try:
         df = conn.read(worksheet="sql_accounts_test", ttl=0)
         if df is None or df.empty: return default_acc
-        
         acc_dict = {}
         for _, row in df.iterrows():
             uid = str(row['id']).strip() if pd.notna(row['id']) else ""
             if uid:
-                # [수정 포인트] 비밀번호가 숫자일 경우 소수점(.0)을 강제로 제거합니다.
                 raw_pw = str(row['pw']).strip() if pd.notna(row['pw']) else ""
-                if raw_pw.endswith('.0'):
-                    raw_pw = raw_pw[:-2]
-                
+                if raw_pw.endswith('.0'): raw_pw = raw_pw[:-2]
                 acc_dict[uid] = {
                     "pw": raw_pw,
                     "role": str(row['role']).strip() if pd.notna(row['role']) else "user"
@@ -82,47 +91,33 @@ def push_to_cloud(df):
 # =================================================================
 # 3. 세션 상태 관리
 # =================================================================
-if 'user_db' not in st.session_state:
-    st.session_state.user_db = load_test_accounts()
-
-if 'production_db' not in st.session_state:
-    st.session_state.production_db = load_test_logs()
-
+if 'user_db' not in st.session_state: st.session_state.user_db = load_test_accounts()
+if 'production_db' not in st.session_state: st.session_state.production_db = load_test_logs()
 if 'login_status' not in st.session_state: st.session_state.login_status = False
-if 'admin_authenticated' not in st.session_state: st.session_state.admin_authenticated = False
+if 'user_id' not in st.session_state: st.session_state.user_id = ""
+if 'user_role' not in st.session_state: st.session_state.user_role = ""
 if 'current_line' not in st.session_state: st.session_state.current_line = "조립 라인"
 if 'selected_cell' not in st.session_state: st.session_state.selected_cell = "CELL 1"
-
-# [디버깅 정보]
-with st.expander("🔍 시스템 연결 디버깅"):
-    st.write("현재 접속 계정 DB:", st.session_state.user_db)
-    st.write("연결 탭: sql_accounts_test / sql_logs_test")
-
-if 'master_models' not in st.session_state:
-    st.session_state.master_models = ["EPS7150", "EPS7133", "T20i", "T20C"]
-
+if 'admin_authenticated' not in st.session_state: st.session_state.admin_authenticated = False
+if 'master_models' not in st.session_state: st.session_state.master_models = ["EPS7150", "EPS7133", "T20i", "T20C"]
 if 'master_items_dict' not in st.session_state:
     st.session_state.master_items_dict = {
-        "EPS7150": ["7150-A", "7150-B"],
-        "EPS7133": ["7133-S", "7133-Standard"],
-        "T20i": ["T20i-P", "T20i-Premium"],
-        "T20C": ["T20C-S", "T20C-Standard"]
+        "EPS7150": ["7150-A", "7150-B"], "EPS7133": ["7133-S", "7133-Standard"],
+        "T20i": ["T20i-P", "T20i-Premium"], "T20C": ["T20C-S", "T20C-Standard"]
     }
 
 # =================================================================
-# 4. 로그인 및 인터페이스 (중복 제거 및 UI 유지)
+# 4. 로그인 로직 및 사이드바
 # =================================================================
-# [CSS 스타일 생략 - 기존 스타일 유지]
-st.markdown("""<style>...</style>""", unsafe_allow_html=True) # 기존 CSS 코드를 여기에 넣으세요
 
 if not st.session_state.login_status:
     _, center_l, _ = st.columns([1, 1.2, 1])
     with center_l:
-        st.title("🔐 통합 관리 시스템")
+        st.markdown("<h2 class='centered-title'>🔐 통합 관리 시스템</h2>", unsafe_allow_html=True)
         with st.form("login_form"):
             input_id = st.text_input("아이디(ID)")
             input_pw = st.text_input("비밀번호(PW)", type="password")
-            if st.form_submit_button("접속 시작"):
+            if st.form_submit_button("접속 시작", use_container_width=True):
                 db = st.session_state.user_db
                 if input_id in db and db[input_id]["pw"] == input_pw:
                     st.session_state.login_status = True
@@ -131,95 +126,37 @@ if not st.session_state.login_status:
                     st.session_state.current_line = ROLES[st.session_state.user_role][0]
                     st.rerun()
                 else:
-                    st.error("❌ 아이디 또는 비밀번호가 틀립니다.")
+                    st.error("❌ 정보가 올바르지 않습니다.")
     st.stop()
 
-# [이후 페이지 렌더링 로직(조립, 검사, 리포트 등)은 기존 v17.8 코드 유지]
-# ... (기존에 작성하신 draw_v17_optimized_log 함수 및 각 페이지 if문 코드를 이어서 붙여넣으세요)
+# --- 사이드바 구성 (로그인 성공 후 호출) ---
+st.sidebar.markdown(f"### 🏭 생산 관리 시스템")
+st.sidebar.markdown(f"**접속자: {st.session_state.user_id}**")
+if st.sidebar.button("🚪 로그아웃", use_container_width=True):
+    st.session_state.login_status = False
+    st.rerun()
+st.sidebar.divider()
 
-# =================================================================
-# 5. 핵심 비즈니스 로직 및 컴포넌트 (Core Logic)
-# =================================================================
+def handle_nav(p_name):
+    st.session_state.current_line = p_name
+    st.rerun()
 
-@st.dialog("📋 공정 단계 전환 입고 확인")
-def trigger_entry_dialog():
-    """
-    제품이 다음 공정으로 이동할 때 호출되는 팝업입니다.
-    기존 행을 업데이트하여 1인 1행 데이터 무결성을 유지합니다.
-    """
-    st.warning(f"승인 대상 S/N: [ {st.session_state.confirm_target} ]")
-    st.markdown(f"이동 공정: **{st.session_state.current_line}**")
-    st.write("---")
-    
-    c_ok, c_no = st.columns(2)
-    if c_ok.button("✅ 입고 승인", type="primary", use_container_width=True):
-        db_full = st.session_state.production_db
-        # 시리얼 번호를 고유 키로 행 검색
-        idx_match = db_full[db_full['시리얼'] == st.session_state.confirm_target].index
-        if not idx_match.empty:
-            idx = idx_match[0]
-            db_full.at[idx, '시간'] = get_now_kst_str()
-            db_full.at[idx, '라인'] = st.session_state.current_line
-            db_full.at[idx, '상태'] = '진행 중'
-            db_full.at[idx, '작업자'] = st.session_state.user_id
-            push_to_cloud(db_full)
-            
-        st.session_state.confirm_target = None
-        st.success("공정 입고 처리가 완료되었습니다."); st.rerun()
-        
-    if c_no.button("❌ 취소", use_container_width=True): 
-        st.session_state.confirm_target = None
-        st.rerun()
+my_allowed = ROLES.get(st.session_state.user_role, [])
+for p in ["조립 라인", "검사 라인", "포장 라인", "리포트", "불량 공정", "수리 리포트"]:
+    if p in my_allowed:
+        if st.sidebar.button(p, use_container_width=True, type="primary" if st.session_state.current_line == p else "secondary"):
+            handle_nav(p)
 
-def draw_v17_optimized_log(line_key, ok_btn_txt="완료 처리"):
-    """
-    [v17.7 UI 최적화 반영] 
-    1. '공정구분' -> '작업구분(CELL)'으로 명칭 변경
-    2. 컬럼 비율 [2.2, 1, 1.5, 1.5, 1.8, 4] 조정하여 버튼 공간 확보
-    """
-    st.divider()
-    st.markdown(f"<h3 class='centered-title'>📝 {line_key} 실시간 작업 원장</h3>", unsafe_allow_html=True)
-    db_source = st.session_state.production_db
-    f_df = db_source[db_source['라인'] == line_key]
-    
-    # 조립 라인은 선택된 CELL별로 필터링
-    if line_key == "조립 라인" and st.session_state.selected_cell != "전체 CELL": 
-        f_df = f_df[f_df['CELL'] == st.session_state.selected_cell]
-    
-    if f_df.empty: 
-        st.info("현재 해당 공정에 할당된 제품 데이터가 없습니다.")
-        return
-    
-    # [UI 패치] 헤더 컬럼 비율 및 명칭 최적화
-    h_row = st.columns([2.2, 1, 1.5, 1.5, 1.8, 4])
-    header_labels = ["기록 시간", "작업구분(CELL)", "생산모델", "품목코드", "S/N 시리얼", "현장 제어"]
-    for col, txt in zip(h_row, header_labels): 
-        col.write(f"**{txt}**")
-    
-    for idx, row in f_df.sort_values('시간', ascending=False).iterrows():
-        r_row = st.columns([2.2, 1, 1.5, 1.5, 1.8, 4])
-        r_row[0].write(row['시간'])
-        # 무의미한 점(dot) 대신 실제 CELL 정보를 표시하여 출처를 명확히 함
-        r_row[1].write(row['CELL'] if row['CELL'] != "-" else "N/A")
-        r_row[2].write(row['모델'])
-        r_row[3].write(row['품목코드'])
-        r_row[4].write(f"`{row['시리얼']}`")
-        
-        with r_row[5]:
-            if row['상태'] in ["진행 중", "수리 완료(재투입)"]:
-                b_grid1, b_grid2 = st.columns(2)
-                if b_grid1.button(ok_btn_txt, key=f"ok_idx_{idx}", type="secondary"):
-                    db_source.at[idx, '상태'] = "완료"
-                    db_source.at[idx, '작업자'] = st.session_state.user_id
-                    push_to_cloud(db_source); st.rerun()
-                if b_grid2.button("🚫불량", key=f"ng_idx_{idx}"):
-                    db_source.at[idx, '상태'] = "불량 처리 중"
-                    db_source.at[idx, '작업자'] = st.session_state.user_id
-                    push_to_cloud(db_source); st.rerun()
-            elif row['상태'] == "불량 처리 중":
-                st.markdown("<span class='status-red'>🔴 품질 이슈 분석 대기</span>", unsafe_allow_html=True)
-            else:
-                st.markdown("<span class='status-green'>🟢 공정 정상 완료됨</span>", unsafe_allow_html=True)
+if st.session_state.user_role == "master" or "마스터 관리" in my_allowed:
+    if st.sidebar.button("🔐 마스터 관리", use_container_width=True, type="primary" if st.session_state.current_line == "마스터 관리" else "secondary"):
+        handle_nav("마스터 관리")
+
+# [알림 배너]
+repair_wait_cnt = len(st.session_state.production_db[st.session_state.production_db['상태'] == "불량 처리 중"])
+if repair_wait_cnt > 0:
+    st.markdown(f"<div class='alarm-banner'>⚠️ 분석 대기 건수: {repair_wait_cnt}건</div>", unsafe_allow_html=True)
+
+# 이후 페이지 렌더링 로직 (조립 라인 ~ 마스터 관리 코드)를 여기에 그대로 이어 붙이시면 됩니다.
 
 # =================================================================
 # 6. 각 페이지별 렌더링 (Page Views)
@@ -513,6 +450,7 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
 
