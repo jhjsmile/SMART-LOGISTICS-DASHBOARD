@@ -35,11 +35,10 @@ st_autorefresh(interval=30000, key="pms_auto_refresh")
 # 각 사용자의 등급에 따라 사이드바 내비게이션 항목이 동적으로 제어됩니다.
 ROLES = {
     "master": ["조립 라인", "검사 라인", "포장 라인", "리포트", "불량 공정", "수리 리포트", "마스터 관리"],
-    "control_tower": ["리포트", "수리 리포트", "마스터 관리"],
-    "assembly_team": ["조립 라인"],
-    "qc_team": ["검사 라인", "불량 공정"],
-    "packing_team": ["포장 라인"],
-    "admin": ["조립 라인", "검사 라인", "포장 라인", "리포트", "불량 공정", "수리 리포트", "마스터 관리"]
+    "control_tower": ["리포트", "수리 리포트", "마스터 관리"], # 중앙 관제
+    "assembly_team": ["조립 라인"],                         # 조립 라인
+    "qc_team": ["검사 라인", "불량 공정", "수리 리포트"],     # 검사 라인
+    "packing_team": ["포장 라인"]                           # 포장 라인
 }
 
 # [정밀 검수된 CSS 스타일] - 버튼 줄바꿈 방지 및 사이드바 정렬 포함
@@ -205,9 +204,27 @@ def upload_img_to_drive(file_obj, serial_no):
 if 'production_db' not in st.session_state: 
     st.session_state.production_db = load_realtime_ledger()
 
-# 2) 시스템 계정 DB (초기 admin 계정 정의)
+# 2) 시스템 계정 DB
+def load_accounts():
+    try:
+        # 구글 시트의 'accounts' 워크시트를 읽어옵니다.
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(worksheet="accounts", ttl=0)
+        acc_dict = {}
+        for _, row in df.iterrows():
+            acc_dict[str(row['id'])] = {"pw": str(row['pw']), "role": str(row['role'])}
+        return acc_dict
+    except:
+        # 시트가 없거나 오류 시 요청하신 기본 계정 리스트 반환
+        return {
+            "master": {"pw": "master1234", "role": "master"},
+            "admin": {"pw": "admin1234", "role": "control_tower"},
+            "line1": {"pw": "1111", "role": "assembly_team"},
+            "line2": {"pw": "2222", "role": "qc_team"},
+            "line3": {"pw": "3333", "role": "packing_team"}
+        }
 if 'user_db' not in st.session_state:
-    st.session_state.user_db = {"admin": {"pw": "admin1234", "role": "admin"}}
+    st.session_state.user_db = load_accounts()
 
 # 3) 로그인 및 보안 인증 세션
 if 'login_status' not in st.session_state: st.session_state.login_status = False
@@ -628,21 +645,40 @@ elif st.session_state.current_line == "마스터 관리":
                         push_to_cloud(st.session_state.production_db); st.rerun()
                     except: st.error("파일 구조 오류: 유효한 PMS 데이터 형식이 아닙니다.")
 
-        # 섹션 2: 계정 관리
+        # 섹션 2: 계정 관리 (수정본)
         st.divider()
         st.markdown("<div class='section-title'>👤 사용자 계정 및 시스템 보안 관리</div>", unsafe_allow_html=True)
         u_c1, u_c2, u_c3 = st.columns([3, 3, 2])
         r_uid = u_c1.text_input("ID 생성")
         r_upw = u_c2.text_input("PW 설정", type="password")
-        r_url = u_c3.selectbox("권한 부여", ["user", "admin"])
         
-        if st.button("사용자 정보 업데이트 실행", use_container_width=True):
+        # 권한 부여 항목을 ROLES 설정값에 맞게 선택박스로 구현
+        r_url = u_c3.selectbox("권한 부여", list(ROLES.keys())) 
+        
+        if st.button("사용자 정보 업데이트 및 구글 시트 저장", use_container_width=True):
             if r_uid and r_upw:
+                # 1. 메모리 업데이트
                 st.session_state.user_db[r_uid] = {"pw": r_upw, "role": r_url}
-                st.success(f"사용자 '{r_uid}' 계정 설정 완료"); st.rerun()
+                
+                # 2. 구글 시트 업데이트용 데이터 준비
+                acc_df = pd.DataFrame.from_dict(st.session_state.user_db, orient='index').reset_index()
+                acc_df.columns = ['id', 'pw', 'role']
+                
+                try:
+                    # 'accounts' 워크시트에 덮어쓰기 저장
+                    gs_conn.update(worksheet="accounts", data=acc_df)
+                    st.success(f"사용자 '{r_uid}' 계정이 구글 시트에 영구 저장되었습니다.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"시트 저장 실패: {e}. 구글 시트에 'accounts' 탭이 있는지 확인하세요.")
+            else:
+                st.warning("ID와 PW를 입력해주세요.")
         
         with st.expander("현재 시스템 등록 계정 전체 리스트 확인"):
-            st.table(pd.DataFrame.from_dict(st.session_state.user_db, orient='index'))
+            if st.session_state.user_db:
+                display_acc_df = pd.DataFrame.from_dict(st.session_state.user_db, orient='index').reset_index()
+                display_acc_df.columns = ['아이디(ID)', '비밀번호(PW)', '권한역할']
+                st.table(display_acc_df)
 
         st.divider()
         # [데이터 영구 초기화]
@@ -653,4 +689,5 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
