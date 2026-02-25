@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timezone, timedelta
 from streamlit_gsheets import GSheetsConnection
 import io
+from streamlit_autorefresh import st_autorefresh
 
 # [구글 클라우드 서비스 연동] 드라이브 API 및 인증 라이브러리
 # 서비스 계정 키를 통해 이미지 업로드 및 권한 관리를 수행합니다.
@@ -24,6 +25,11 @@ st.set_page_config(
 
 # 대한민국 표준시(KST: UTC+9) 전역 타임존 설정
 KST = timezone(timedelta(hours=9))
+
+# --- 여기에 추가 ---
+# 30초마다 자동으로 전체 화면을 새로고침합니다.
+# 생산 현황판(대시보드)의 실시간성을 보장합니다.
+st_autorefresh(interval=30000, key="pms_auto_refresh")
 
 # 사용자 그룹별 메뉴 접근 권한 정의 (Role-Based Access Control)
 # 각 사용자의 등급에 따라 사이드바 내비게이션 항목이 동적으로 제어됩니다.
@@ -647,3 +653,4 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
