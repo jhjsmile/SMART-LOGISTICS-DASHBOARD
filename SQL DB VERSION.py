@@ -51,15 +51,20 @@ def load_test_logs():
 def load_test_accounts():
     default_acc = {"master": {"pw": "master1234", "role": "master"}}
     try:
-        # 통합된 시트 파일 내의 'sql_accounts_test' 탭을 읽음
         df = conn.read(worksheet="sql_accounts_test", ttl=0)
         if df is None or df.empty: return default_acc
+        
         acc_dict = {}
         for _, row in df.iterrows():
             uid = str(row['id']).strip() if pd.notna(row['id']) else ""
             if uid:
+                # [수정 포인트] 비밀번호가 숫자일 경우 소수점(.0)을 강제로 제거합니다.
+                raw_pw = str(row['pw']).strip() if pd.notna(row['pw']) else ""
+                if raw_pw.endswith('.0'):
+                    raw_pw = raw_pw[:-2]
+                
                 acc_dict[uid] = {
-                    "pw": str(row['pw']).strip() if pd.notna(row['pw']) else "",
+                    "pw": raw_pw,
                     "role": str(row['role']).strip() if pd.notna(row['role']) else "user"
                 }
         return acc_dict if acc_dict else default_acc
@@ -497,4 +502,5 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
