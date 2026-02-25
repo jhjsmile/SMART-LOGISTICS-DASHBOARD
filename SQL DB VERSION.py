@@ -80,7 +80,7 @@ def push_to_cloud(df):
         st.error(f"저장 오류: {e}")
 
 # =================================================================
-# 3. 세션 상태 관리 (최초 1회 실행)
+# 3. 세션 상태 관리
 # =================================================================
 if 'user_db' not in st.session_state:
     st.session_state.user_db = load_test_accounts()
@@ -97,6 +97,17 @@ if 'selected_cell' not in st.session_state: st.session_state.selected_cell = "CE
 with st.expander("🔍 시스템 연결 디버깅"):
     st.write("현재 접속 계정 DB:", st.session_state.user_db)
     st.write("연결 탭: sql_accounts_test / sql_logs_test")
+
+if 'master_models' not in st.session_state:
+    st.session_state.master_models = ["EPS7150", "EPS7133", "T20i", "T20C"]
+
+if 'master_items_dict' not in st.session_state:
+    st.session_state.master_items_dict = {
+        "EPS7150": ["7150-A", "7150-B"],
+        "EPS7133": ["7133-S", "7133-Standard"],
+        "T20i": ["T20i-P", "T20i-Premium"],
+        "T20C": ["T20C-S", "T20C-Standard"]
+    }
 
 # =================================================================
 # 4. 로그인 및 인터페이스 (중복 제거 및 UI 유지)
@@ -502,5 +513,6 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
