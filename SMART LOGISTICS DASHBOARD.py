@@ -139,7 +139,7 @@ def get_now_kst_str():
     return datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
 
 # 구글 시트 연동 객체 초기화 (Streamlit 전용 커넥터)
-gs_conn = st.connection(gsheets"", type=GSheetsConnection)"
+gs_conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_realtime_ledger():
 """
@@ -722,3 +722,4 @@ push_to_cloud(st.session_state.production_db); st.rerun()
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
