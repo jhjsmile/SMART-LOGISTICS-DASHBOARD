@@ -1,14 +1,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime, timezone, timedelta
 from streamlit_gsheets import GSheetsConnection
 import io
 from streamlit_autorefresh import st_autorefresh
-
-# [구글 클라우드 서비스 연동] 드라이브 API 및 인증 라이브러리
-# 서비스 계정 키를 통해 이미지 업로드 및 권한 관리를 수행합니다.
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
@@ -18,7 +14,7 @@ from googleapiclient.http import MediaIoBaseUpload
 # =================================================================
 # 애플리케이션의 타이틀과 와이드 레이아웃 설정
 st.set_page_config(
-    page_title="생산 통합 관리 시스템 v17.8",
+    page_title="생산 통합 관리 시스템 v18.0",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -26,7 +22,9 @@ st.set_page_config(
 # 대한민국 표준시(KST: UTC+9) 전역 타임존 설정
 KST = timezone(timedelta(hours=9))
 
-# --- 여기에 추가 ---
+# [V18.0 추가] 제조 반 리스트
+PRODUCTION_GROUPS = ["제조 1반", "제조 2반", "제조 3반"]
+
 # 30초마다 자동으로 전체 화면을 새로고침합니다.
 # 생산 현황판(대시보드)의 실시간성을 보장합니다.
 st_autorefresh(interval=30000, key="pms_auto_refresh")
@@ -42,89 +40,14 @@ ROLES = {
     "admin": ["조립 라인", "검사 라인", "포장 라인", "리포트", "불량 공정", "수리 리포트", "마스터 관리"]
 }
 
-# [정밀 검수된 CSS 스타일] - 버튼 줄바꿈 방지 및 사이드바 정렬 포함
 st.markdown("""
     <style>
-    /* 메인 컨테이너 최대 너비 제한 (v9.1 스타일 1200px) */
-    .stApp { 
-        max-width: 1200px; 
-        margin: 0 auto; 
-    }
-    
-    /* [v17.7 패치] 버튼 텍스트 줄바꿈 방지 및 중앙 정렬 */
-    .stButton button { 
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        margin-top: 1px; 
-        padding: 6px 10px; 
-        width: 100%; 
-        border-radius: 8px;
-        font-weight: 600;
-        white-space: nowrap !important; /* 텍스트가 밑으로 떨어지는 현상 방지 */
-        overflow: hidden;
-        text-overflow: ellipsis;
-        transition: all 0.2s ease;
-    }
-    
-    /* 타이틀 중앙 정렬 */
-    .centered-title { 
-        text-align: center; 
-        font-weight: bold; 
-        margin: 25px 0; 
-        color: #1a1c1e;
-    }
-    
-    /* v9.1 스타일 섹션 타이틀: 파란색 테두리 포인트 */
-    .section-title { 
-        background-color: #f8f9fa; 
-        color: #111; 
-        padding: 16px 20px; 
-        border-radius: 10px; 
-        font-weight: bold; 
-        margin: 10px 0 25px 0; 
-        border-left: 10px solid #007bff;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    }
-    
-    /* 대시보드 KPI 카드 디자인 (Stat Box) */
-    .stat-box {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        background-color: #ffffff; 
-        border-radius: 12px; 
-        padding: 22px; 
-        border: 1px solid #e9ecef; 
-        margin-bottom: 15px;
-        min-height: 130px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-    }
-    .stat-label { font-size: 0.9rem; color: #6c757d; font-weight: bold; margin-bottom: 8px; }
-    .stat-value { font-size: 2.4rem; color: #007bff; font-weight: bold; line-height: 1; }
-    
-    /* 수리 센터 버튼 수평 정렬용 여백 */
-    .button-spacer {
-        margin-top: 28px;
-    }
-    
-    /* 상태 표시 색상 정의 */
-    .status-red { color: #fa5252; font-weight: bold; }
-    .status-green { color: #40c057; font-weight: bold; }
-    
-    /* 알림 배너 스타일 */
-    .alarm-banner { 
-        background-color: #fff5f5; 
-        color: #c92a2a; 
-        padding: 18px; 
-        border-radius: 12px; 
-        border: 1px solid #ffa8a8; 
-        font-weight: bold; 
-        margin-bottom: 25px;
-        text-align: center;
-        box-shadow: 0 2px 10px rgba(201, 42, 42, 0.1);
-    }
+    .stApp { max-width: 1200px; margin: 0 auto; }
+    .stButton button { width: 100%; border-radius: 8px; font-weight: 600; white-space: nowrap !important; }
+    .section-title { background-color: #f8f9fa; color: #111; padding: 16px; border-radius: 10px; border-left: 10px solid #007bff; margin-bottom: 20px; }
+    .centered-title { text-align: center; font-weight: bold; margin: 25px 0; }
+    .stat-box { background-color: #ffffff; border-radius: 12px; padding: 20px; border: 1px solid #e9ecef; text-align: center; }
+    .stat-value { font-size: 2rem; color: #007bff; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -133,36 +56,23 @@ st.markdown("""
 # =================================================================
 
 def get_now_kst_str():
-    """
-    현재 한국 표준시(KST)를 생성하여 문자열 형식으로 반환합니다.
-    데이터베이스의 '시간' 컬럼에 기록되는 표준 형식입니다.
-    """
     return datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
 
-# 구글 시트 연동 객체 초기화 (Streamlit 전용 커넥터)
 gs_conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_realtime_ledger():
-    """
-    클라우드 구글 시트에서 최신 생산 데이터를 로드합니다.
-    ttl=0 설정을 통해 캐시를 우회하고 항상 최신 정보를 유지합니다.
-    """
     try:
         df = gs_conn.read(ttl=0).fillna("")
         if '시리얼' in df.columns:
-            # 엑셀 형식에서 시리얼이 숫자로 오인되어 붙는 .0을 정규식으로 제거
             df['시리얼'] = df['시리얼'].astype(str).str.replace(r'\.0$', '', regex=True)
+        # [V18.0 패치] '반' 컬럼이 없는 기존 데이터 대응
+        if '반' not in df.columns and not df.empty:
+            df['반'] = "제조 2반" # 기존 데이터는 제조 2반으로 이관
         return df
     except Exception as e:
-        # 데이터 로드 실패 시 컬럼 헤더만 있는 빈 프레임 생성
-        st.warning(f"데이터 연동 중 오류 발생: {e}")
-        return pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리', '작업자'])
+        return pd.DataFrame(columns=['시간', '반', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리', '작업자'])
 
 def push_to_cloud(df):
-    """
-    업데이트된 데이터프레임을 클라우드 구글 시트에 저장합니다.
-    성공 시 캐시를 비워 즉각적인 화면 갱신을 수행합니다.
-    """
     try:
         gs_conn.update(data=df)
         st.cache_data.clear()
