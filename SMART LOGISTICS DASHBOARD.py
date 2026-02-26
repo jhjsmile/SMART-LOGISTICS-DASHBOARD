@@ -330,7 +330,7 @@ if st.session_state.user_role == "master" or "마스터 관리" in my_allowed:
 # [실시간 상황 전파 배너]
 repair_wait_cnt = len(st.session_state.production_db[st.session_state.production_db['상태'] == "불량 처리 중"])
 if repair_wait_cnt > 0:
-st.markdown(f"<div class='alarm-banner'>⚠️ 긴급 통지: 현재 분석 대기 중인 품질 이슈가 {repair_wait_cnt}건 발생했습니다. 즉시 수리 센터를 확인하세요.</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='alarm-banner'>⚠️ 긴급 통지: 현재 분석 대기 중인 품질 이슈가 {repair_wait_cnt}건 발생했습니다. 즉시 수리 센터를 확인하세요.</div>", unsafe_allow_html=True)
 
 # =================================================================
 # 5. 핵심 비즈니스 로직 및 컴포넌트 (Core Logic)
@@ -715,6 +715,7 @@ push_to_cloud(st.session_state.production_db); st.rerun()
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
 
