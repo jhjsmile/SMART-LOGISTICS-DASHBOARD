@@ -111,30 +111,14 @@ def upload_img_to_drive(file_obj, serial_no):
 # 3. 세션 상태 관리 (Session State Initialization)
 # =================================================================
 
-# 1) 생산 실적 원장 세션 로드
-if 'production_db' not in st.session_state: 
-    st.session_state.production_db = load_realtime_ledger()
+if 'selected_group' not in st.session_state: st.session_state.selected_group = "제조 2반"
+if 'current_line' not in st.session_state: st.session_state.current_line = "조립 라인"
 
-# 2) 시스템 계정 DB (초기 admin 계정 정의)
-if 'user_db' not in st.session_state:
-    st.session_state.user_db = {"admin": {"pw": "admin1234", "role": "admin"}}
-
-# 3) 로그인 및 보안 인증 세션
-if 'login_status' not in st.session_state: st.session_state.login_status = False
-if 'user_role' not in st.session_state: st.session_state.user_role = None
-if 'admin_authenticated' not in st.session_state: st.session_state.admin_authenticated = False
-
-# 4) 생산 기준 정보 (모델 및 품목 매핑 테이블)
+# 기준 정보
 if 'master_models' not in st.session_state: 
     st.session_state.master_models = ["EPS7150", "EPS7133", "T20i", "T20C"]
-
 if 'master_items_dict' not in st.session_state:
-    st.session_state.master_items_dict = {
-        "EPS7150": ["7150-A", "7150-B"], 
-        "EPS7133": ["7133-S", "7133-Standard"], 
-        "T20i": ["T20i-P", "T20i-Premium"], 
-        "T20C": ["T20C-S", "T20C-Standard"]
-    }
+    st.session_state.master_items_dict = {"EPS7150": ["7150-A"], "EPS7133": ["7133-S"], "T20i": ["T20i-P"], "T20C": ["T20C-S"]}
 
 # 5) 공정 내비게이션 상태 변수
 if 'current_line' not in st.session_state: st.session_state.current_line = "조립 라인"
@@ -563,3 +547,4 @@ elif st.session_state.current_line == "마스터 관리":
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
