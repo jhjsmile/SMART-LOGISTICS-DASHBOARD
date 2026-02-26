@@ -338,33 +338,33 @@ if repair_wait_cnt > 0:
 
 @st.dialog("📋 공정 단계 전환 입고 확인")
 def trigger_entry_dialog():
-"""
+    """
     제품이 다음 공정으로 이동할 때 호출되는 팝업입니다.
     기존 행을 업데이트하여 1인 1행 데이터 무결성을 유지합니다.
     """
-st.warning(f"승인 대상 S/N: [ {st.session_state.confirm_target} ]")
-st.markdown(f"이동 공정: **{st.session_state.current_line}**")
-st.write("---")
-
-c_ok, c_no = st.columns(2)
-if c_ok.button("✅ 입고 승인", type="primary", use_container_width=True):
-db_full = st.session_state.production_db
-# 시리얼 번호를 고유 키로 행 검색
-idx_match = db_full[db_full['시리얼'] == st.session_state.confirm_target].index
-if not idx_match.empty:
-idx = idx_match[0]
-db_full.at[idx, '시간'] = get_now_kst_str()
-db_full.at[idx, '라인'] = st.session_state.current_line
-db_full.at[idx, '상태'] = '진행 중'
-db_full.at[idx, '작업자'] = st.session_state.user_id
-push_to_cloud(db_full)
-
-st.session_state.confirm_target = None
-st.success("공정 입고 처리가 완료되었습니다."); st.rerun()
-
-if c_no.button("❌ 취소", use_container_width=True):
-st.session_state.confirm_target = None
-st.rerun()
+    st.warning(f"승인 대상 S/N: [ {st.session_state.confirm_target} ]")
+    st.markdown(f"이동 공정: **{st.session_state.current_line}**")
+    st.write("---")
+    
+    c_ok, c_no = st.columns(2)
+    if c_ok.button("✅ 입고 승인", type="primary", use_container_width=True):
+        db_full = st.session_state.production_db
+        # 시리얼 번호를 고유 키로 행 검색
+        idx_match = db_full[db_full['시리얼'] == st.session_state.confirm_target].index
+        if not idx_match.empty:
+            idx = idx_match[0]
+            db_full.at[idx, '시간'] = get_now_kst_str()
+            db_full.at[idx, '라인'] = st.session_state.current_line
+            db_full.at[idx, '상태'] = '진행 중'
+            db_full.at[idx, '작업자'] = st.session_state.user_id
+            push_to_cloud(db_full)
+            st.session_state.confirm_target = None
+            st.success("공정 입고 처리가 완료되었습니다.")
+            st.rerun()
+            
+    if c_no.button("❌ 취소", use_container_width=True):
+        st.session_state.confirm_target = None
+        st.rerun()
 
 def draw_v17_optimized_log(line_key, ok_btn_txt="완료 처리"):
 """
@@ -715,6 +715,7 @@ push_to_cloud(st.session_state.production_db); st.rerun()
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
 
