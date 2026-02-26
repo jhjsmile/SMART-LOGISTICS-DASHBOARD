@@ -142,21 +142,20 @@ def get_now_kst_str():
 gs_conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_realtime_ledger():
-"""
+    """
     클라우드 구글 시트에서 최신 생산 데이터를 로드합니다.
     ttl=0 설정을 통해 캐시를 우회하고 항상 최신 정보를 유지합니다.
     """
-try:
-df = gs_conn.read(ttl=0).fillna("")
-if '시리얼' in df.columns:
-# 엑셀 형식에서 시리얼이 숫자로 오인되어 붙는 .0을 정규식으로 제거
-df['시리얼'] = df['시리얼'].astype(str).str.replace(r'\.0$', '', regex=True)
-return df
-except Exception as e:
-# 데이터 로드 실패 시 컬럼 헤더만 있는 빈 프레임 생성
-st.warning(f"데이터 연동 중 오류 발생: {e}")
-return pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리', '작업자'])
-
+    try:
+        df = gs_conn.read(ttl=0).fillna("")
+        if '시리얼' in df.columns:
+            # 엑셀 형식에서 시리얼이 숫자로 오인되어 붙는 .0을 정규식으로 제거
+            df['시리얼'] = df['시리얼'].astype(str).str.replace(r'\.0$', '', regex=True)
+        return df
+    except Exception as e:
+        # 데이터 로드 실패 시 컬럼 헤더만 있는 빈 프레임 생성
+        st.warning(f"데이터 연동 중 오류 발생: {e}")
+        return pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리', '작업자'])
 def push_to_cloud(df):
 """
     업데이트된 데이터프레임을 클라우드 구글 시트에 저장합니다.
@@ -729,5 +728,6 @@ push_to_cloud(st.session_state.production_db); st.rerun()
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
