@@ -157,43 +157,42 @@ def load_realtime_ledger():
         st.warning(f"데이터 연동 중 오류 발생: {e}")
         return pd.DataFrame(columns=['시간', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리', '작업자'])
 def push_to_cloud(df):
-"""
+    """
     업데이트된 데이터프레임을 클라우드 구글 시트에 저장합니다.
     성공 시 캐시를 비워 즉각적인 화면 갱신을 수행합니다.
     """
-try:
-gs_conn.update(data=df)
-st.cache_data.clear()
-except Exception as error:
-st.error(f"클라우드 저장 실패: {error}")
+    try:
+        gs_conn.update(data=df)
+        st.cache_data.clear()
+    except Exception as error:
+        st.error(f"클라우드 저장 실패: {error}")
 
 def upload_img_to_drive(file_obj, serial_no):
-"""
+    """
     수리 증빙 사진을 구글 드라이브 클라우드 폴더로 업로드합니다.
     webViewLink를 반환하여 리포트에서 사진을 조회할 수 있게 합니다.
     """
 try:
-gcp_info = st.secrets["connections"]["gsheets"]
-creds = service_account.Credentials.from_service_account_info(gcp_info)
+    gcp_info = st.secrets["connections"]["gsheets"]
+    creds = service_account.Credentials.from_service_account_info(gcp_info)
 
 # 드라이브 API 서비스 생성
-drive_svc = build('drive', 'v3', credentials=creds)
-folder_id = st.secrets["connections"]["gsheets"].get("image_folder_id")
+    drive_svc = build('drive', 'v3', credentials=creds)
+    folder_id = st.secrets["connections"]["gsheets"].get("image_folder_id")
 
-if not folder_id:
-return "❌ 클라우드 폴더 ID가 설정되지 않았습니다."
+    if not folder_id:
+        return "❌ 클라우드 폴더 ID가 설정되지 않았습니다."
 
-meta_data = {'name': f"REPAIR_{serial_no}.jpg", 'parents': [folder_id]}
-media = MediaIoBaseUpload(file_obj, mimetype=file_obj.type)
+    meta_data = {'name': f"REPAIR_{serial_no}.jpg", 'parents': [folder_id]}
+    media = MediaIoBaseUpload(file_obj, mimetype=file_obj.type)
 
 # 파일 생성 및 업로드 실행
-uploaded_file = drive_svc.files().create(
-body=meta_data, media_body=media, fields='id, webViewLink'
-).execute()
-
-return uploaded_file.get('webViewLink')
+    uploaded_file = drive_svc.files().create(
+        body=meta_data, media_body=media, fields='id, webViewLink'
+    ).execute()
+    return uploaded_file.get('webViewLink')
 except Exception as err:
-return f"⚠️ 업로드 중단: {str(err)}"
+    return f"⚠️ 업로드 중단: {str(err)}"
 
 # =================================================================
 # 3. 세션 상태 관리 (Session State Initialization)
@@ -728,6 +727,7 @@ push_to_cloud(st.session_state.production_db); st.rerun()
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
 
