@@ -498,7 +498,7 @@ elif curr_l == "마스터 관리":
     st.markdown("<h2 class='centered-title'>🔐 시스템 마스터 데이터 관리</h2>", unsafe_allow_html=True)
     if not st.session_state.admin_authenticated:
         with st.form("master_verify_gate"):
-            m_pw_in = st.text_input("마스터 비밀번호 (admin1234 / master1234)", type="password")
+            m_pw_in = st.text_input("마스터 비밀번호", type="password")
             if st.form_submit_button("권한 인증"):
                 if m_pw_in in ["admin1234", "master1234"]:
                     st.session_state.admin_authenticated = True; st.rerun()
@@ -550,3 +550,4 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v18.4 풀버전 종료 ]
 # =================================================================
+
