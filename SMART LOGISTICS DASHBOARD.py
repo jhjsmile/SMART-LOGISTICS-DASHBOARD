@@ -462,9 +462,16 @@ if target_sn in full_db['시리얼'].values:
 st.error(f"❌ 중복 오류: 시리얼 '{target_sn}'은 이미 등록되어 있는 번호입니다.")
 else:
 new_entry = {
-시간': get_now_kst_str(), '라인': "조립 라인", 'CELL': st.session_state.selected_cell,
-모델': target_model, '품목코드': target_item, '시리얼': target_sn, '상태': '진행 중',
-증상': '', '수리': '', '작업자': st.session_state.user_id
+    '시간': get_now_kst_str(), 
+    '라인': "조립 라인", 
+    'CELL': st.session_state.selected_cell,
+    '모델': target_model, 
+    '품목코드': target_item, 
+    '시리얼': target_sn, 
+    '상태': '진행 중',
+    '증상': '', 
+    '수리': '', 
+    '작업자': st.session_state.user_id
 }
 st.session_state.production_db = pd.concat([full_db, pd.DataFrame([new_entry])], ignore_index=True)
 push_to_cloud(st.session_state.production_db); st.rerun()
@@ -722,4 +729,5 @@ push_to_cloud(st.session_state.production_db); st.rerun()
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
