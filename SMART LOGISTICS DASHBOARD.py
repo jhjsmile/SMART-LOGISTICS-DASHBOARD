@@ -197,52 +197,40 @@ except Exception as err:
 # =================================================================
 # 3. 세션 상태 관리 (Session State Initialization)
 # =================================================================
-if 'current_unit' not in st.session_state: 
-    st.session_state.current_unit = "제조2반"
-
 # 1) 생산 실적 원장 세션 로드
 if 'production_db' not in st.session_state:
-st.session_state.production_db = load_realtime_ledger()
+    st.session_state.production_db = load_realtime_ledger()
 
-# 2) 시스템 계정 DB
 # 2) 시스템 계정 DB (로직 강화 버전)
 def load_accounts():
-"구글 시트에서 계정을 읽어오되, 실패하거나 비어있으면 기본 계정을 반환합니다."
-# 비상용 기본 계정 정의
-default_acc = {
-master: {"pw": "master1234", "role": "master"},
-admin: {"pw": "admin1234", "role": "control_tower"},
-line1: {"pw": "1111", "role": "assembly_team"},
-line2: {"pw": "2222", "role": "qc_team"},
-line3: {"pw": "3333", "role": "packing_team"}
-}
+    """구글 시트에서 계정을 읽어오되, 실패하거나 비어있으면 기본 계정을 반환합니다."""
+    # 비상용 기본 계정 정의
+    default_acc = {
+        "master": {"pw": "master1234", "role": "master"},
+        "admin": {"pw": "admin1234", "role": "control_tower"},
+        "line1": {"pw": "1111", "role": "assembly_team"},
+        "line2": {"pw": "2222", "role": "qc_team"},
+        "line3": {"pw": "3333", "role": "packing_team"}
+    }
+    try:
+        # 구글 시트 읽기 시도
+        df = gs_conn.read(worksheet="accounts", ttl=0)
+        if df is None or df.empty:
+            return default_acc
+        acc_dict = {}
+        for _, row in df.iterrows():
+            uid = str(row['id']).strip() if pd.notna(row['id']) else ""
+            if uid:
+                acc_dict[uid] = {
+                    "pw": str(row['pw']).strip() if pd.notna(row['pw']) else "",
+                    "role": str(row['role']).strip() if pd.notna(row['role']) else "user"
+                }
+        return acc_dict if acc_dict else default_acc
+    except Exception:
+        return default_acc
 
-try:
-# 구글 시트 읽기 시도 (gs_conn 변수 사용)
-df = gs_conn.read(worksheet="accounts", ttl=0)
-
-# 데이터가 없거나 비어있는 경우 기본값 반환
-if df is None or df.empty:
-return default_acc
-
-acc_dict = {}
-for _, row in df.iterrows():
-# ID 값이 실제로 있는 경우에만 처리
-uid = str(row['id']).strip() if pd.notna(row['id']) else ""
-if uid:
-acc_dict[uid] = {
-pw: str(row['pw']).strip() if pd.notna(row['pw']) else "",
-role: str(row['role']).strip() if pd.notna(row['role']) else "user"
-}
-
-# 변환된 결과가 있으면 결과 반환, 없으면 기본값 반환
-return acc_dict if acc_dict else default_acc
-
-except Exception:
-# 시트 접속 실패 시 무조건 기본값으로 로그인 허용
-return default_acc
 if 'user_db' not in st.session_state:
-st.session_state.user_db = load_accounts()
+    st.session_state.user_db = load_accounts()
 
 # 3) 로그인 및 보안 인증 세션
 if 'login_status' not in st.session_state: st.session_state.login_status = False
@@ -251,15 +239,15 @@ if 'admin_authenticated' not in st.session_state: st.session_state.admin_authent
 
 # 4) 생산 기준 정보 (모델 및 품목 매핑 테이블)
 if 'master_models' not in st.session_state:
-st.session_state.master_models = ["EPS7150", "EPS7133", "T20i", "T20C"]
+    st.session_state.master_models = ["EPS7150", "EPS7133", "T20i", "T20C"]
 
 if 'master_items_dict' not in st.session_state:
-st.session_state.master_items_dict = {
-EPS7150: ["7150-A", "7150-B"],
-EPS7133: ["7133-S", "7133-Standard"],
-T20i: ["T20i-P", "T20i-Premium"],
-T20C: ["T20C-S", "T20C-Standard"]
-}
+    st.session_state.master_items_dict = {
+        "EPS7150": ["7150-A", "7150-B"],
+        "EPS7133": ["7133-S", "7133-Standard"],
+        "T20i": ["T20i-P", "T20i-Premium"],
+        "T20C": ["T20C-S", "T20C-Standard"]
+    }
 
 # 5) 공정 내비게이션 상태 변수
 if 'current_line' not in st.session_state: st.session_state.current_line = "조립 라인"
@@ -727,6 +715,7 @@ push_to_cloud(st.session_state.production_db); st.rerun()
 # =================================================================
 # [ PMS v17.8 최종 소스코드 종료 ]
 # =================================================================
+
 
 
 
