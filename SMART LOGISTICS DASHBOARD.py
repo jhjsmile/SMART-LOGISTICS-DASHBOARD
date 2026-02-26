@@ -13,21 +13,24 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 # =================================================================
-# 1. 시스템 전역 설정 및 디자인 (v17.8 원본 100% 유지)
+# 1. 시스템 전역 설정 및 디자인 (v17.8 원본 유지)
 # =================================================================
 st.set_page_config(
-    page_title="생산 통합 관리 시스템 v18.3",
+    page_title="생산 통합 관리 시스템 v18.4",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# 대한민국 표준시(KST: UTC+9) 전역 타임존 설정
 KST = timezone(timedelta(hours=9))
+
+# 30초마다 자동으로 전체 화면을 새로고침합니다.
 st_autorefresh(interval=30000, key="pms_auto_refresh")
 
-# [V18.3 추가] 제조 반 리스트
+# [V18.4 추가] 제조 반 리스트 정의
 PRODUCTION_GROUPS = ["제조 1반", "제조 2반", "제조 3반"]
 
-# 사용자 그룹별 메뉴 접근 권한 정의 (원본 유지)
+# 사용자 그룹별 메뉴 접근 권한 정의 (Role-Based Access Control)
 ROLES = {
     "master": ["조립 라인", "검사 라인", "포장 라인", "리포트", "불량 공정", "수리 리포트", "마스터 관리"],
     "control_tower": ["리포트", "수리 리포트", "마스터 관리"],
@@ -37,48 +40,100 @@ ROLES = {
     "admin": ["조립 라인", "검사 라인", "포장 라인", "리포트", "불량 공정", "수리 리포트", "마스터 관리"]
 }
 
-# [v17.8 원본 CSS 스타일 100% 복원]
+# [정밀 검수된 CSS 스타일] - 버튼 줄바꿈 방지 및 사이드바 정렬 포함
 st.markdown("""
     <style>
-    .stApp { max-width: 1200px; margin: 0 auto; }
+    /* 메인 컨테이너 최대 너비 제한 */
+    .stApp { 
+        max-width: 1200px; 
+        margin: 0 auto; 
+    }
+    
+    /* [v17.7 패치] 버튼 텍스트 줄바꿈 방지 및 중앙 정렬 */
     .stButton button { 
-        display: flex; justify-content: center; align-items: center;
-        margin-top: 1px; padding: 6px 10px; width: 100%; border-radius: 8px;
-        font-weight: 600; white-space: nowrap !important; overflow: hidden;
-        text-overflow: ellipsis; transition: all 0.2s ease;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-top: 1px; 
+        padding: 6px 10px; 
+        width: 100%; 
+        border-radius: 8px;
+        font-weight: 600;
+        white-space: nowrap !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: all 0.2s ease;
     }
-    .centered-title { text-align: center; font-weight: bold; margin: 25px 0; color: #1a1c1e; }
+    
+    /* 타이틀 중앙 정렬 */
+    .centered-title { 
+        text-align: center; 
+        font-weight: bold; 
+        margin: 25px 0; 
+        color: #1a1c1e;
+    }
+    
+    /* v9.1 스타일 섹션 타이틀: 파란색 테두리 포인트 */
     .section-title { 
-        background-color: #f8f9fa; color: #111; padding: 16px 20px; 
-        border-radius: 10px; font-weight: bold; margin: 10px 0 25px 0; 
-        border-left: 10px solid #007bff; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        background-color: #f8f9fa; 
+        color: #111; 
+        padding: 16px 20px; 
+        border-radius: 10px; 
+        font-weight: bold; 
+        margin: 10px 0 25px 0; 
+        border-left: 10px solid #007bff;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
     }
+    
+    /* 대시보드 KPI 카드 디자인 (Stat Box) */
     .stat-box {
-        display: flex; flex-direction: column; justify-content: center; align-items: center;
-        background-color: #ffffff; border-radius: 12px; padding: 22px; 
-        border: 1px solid #e9ecef; margin-bottom: 15px; min-height: 130px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background-color: #ffffff; 
+        border-radius: 12px; 
+        padding: 22px; 
+        border: 1px solid #e9ecef; 
+        margin-bottom: 15px;
+        min-height: 130px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.02);
     }
     .stat-label { font-size: 0.9rem; color: #6c757d; font-weight: bold; margin-bottom: 8px; }
     .stat-value { font-size: 2.4rem; color: #007bff; font-weight: bold; line-height: 1; }
-    .button-spacer { margin-top: 28px; }
+    
+    /* 수리 센터 버튼 수평 정렬용 여백 */
+    .button-spacer {
+        margin-top: 28px;
+    }
+    
+    /* 상태 표시 색상 정의 */
     .status-red { color: #fa5252; font-weight: bold; }
     .status-green { color: #40c057; font-weight: bold; }
+    
+    /* 알림 배너 스타일 */
     .alarm-banner { 
-        background-color: #fff5f5; color: #c92a2a; padding: 18px; border-radius: 12px; 
-        border: 1px solid #ffa8a8; font-weight: bold; margin-bottom: 25px;
-        text-align: center; box-shadow: 0 2px 10px rgba(201, 42, 42, 0.1);
+        background-color: #fff5f5; 
+        color: #c92a2a; 
+        padding: 18px; 
+        border-radius: 12px; 
+        border: 1px solid #ffa8a8; 
+        font-weight: bold; 
+        margin-bottom: 25px;
+        text-align: center;
+        box-shadow: 0 2px 10px rgba(201, 42, 42, 0.1);
     }
     </style>
     """, unsafe_allow_html=True)
 
 # =================================================================
-# 2. 핵심 유틸리티 함수 (원본 복원 + 이관 로직)
+# 2. 핵심 유틸리티 함수 (Core Utilities)
 # =================================================================
 
 def get_now_kst_str():
     return datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
 
+# 구글 시트 연동 객체 초기화
 gs_conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_realtime_ledger():
@@ -87,14 +142,16 @@ def load_realtime_ledger():
         if '시리얼' in df.columns:
             df['시리얼'] = df['시리얼'].astype(str).str.replace(r'\.0$', '', regex=True)
         
-        # [V18.3 이관 로직] 기존 데이터를 제조 2반으로 맵핑
+        # [V18.4 핵심 추가] 업로드된 CSV 구조에 맞춰 '반' 컬럼 처리
         if '반' not in df.columns:
             if not df.empty:
                 df.insert(1, '반', "제조 2반")
             else:
                 df.insert(1, '반', "")
         else:
-            df['반'] = df['반'].replace("", "제조 2반")
+            # 빈 값이 있으면 기본값 제조 2반으로 보정
+            df['반'] = df['반'].apply(lambda x: "제조 2반" if x == "" else x)
+            
         return df
     except Exception as e:
         st.warning(f"데이터 연동 중 오류 발생: {e}")
@@ -116,19 +173,22 @@ def upload_img_to_drive(file_obj, serial_no):
         if not folder_id: return "❌ 클라우드 폴더 ID가 설정되지 않았습니다."
         meta_data = {'name': f"REPAIR_{serial_no}.jpg", 'parents': [folder_id]}
         media = MediaIoBaseUpload(file_obj, mimetype=file_obj.type)
-        uploaded_file = drive_svc.files().create(body=meta_data, media_body=media, fields='id, webViewLink').execute()
+        uploaded_file = drive_svc.files().create(
+            body=meta_data, media_body=media, fields='id, webViewLink'
+        ).execute()
         return uploaded_file.get('webViewLink')
-    except Exception as err: return f"⚠️ 업로드 중단: {str(err)}"
+    except Exception as err:
+        return f"⚠️ 업로드 중단: {str(err)}"
 
 # =================================================================
-# 3. 세션 상태 관리 (원본 100% 복구)
+# 3. 세션 상태 관리 (Session State Initialization)
 # =================================================================
 
 if 'production_db' not in st.session_state: 
     st.session_state.production_db = load_realtime_ledger()
 
 if 'user_db' not in st.session_state:
-    # master 계정 추가 및 초기 어드민 설정
+    # [V18.4 복구] master 계정 명시적 추가
     st.session_state.user_db = {
         "admin": {"pw": "admin1234", "role": "admin"},
         "master": {"pw": "master1234", "role": "master"}
@@ -143,8 +203,10 @@ if 'master_models' not in st.session_state:
 
 if 'master_items_dict' not in st.session_state:
     st.session_state.master_items_dict = {
-        "EPS7150": ["7150-A", "7150-B"], "EPS7133": ["7133-S", "7133-Standard"], 
-        "T20i": ["T20i-P", "T20i-Premium"], "T20C": ["T20C-S", "T20C-Standard"]
+        "EPS7150": ["7150-A", "7150-B"], 
+        "EPS7133": ["7133-S", "7133-Standard"], 
+        "T20i": ["T20i-P", "T20i-Premium"], 
+        "T20C": ["T20C-S", "T20C-Standard"]
     }
 
 if 'selected_group' not in st.session_state: st.session_state.selected_group = "제조 2반"
@@ -152,7 +214,7 @@ if 'current_line' not in st.session_state: st.session_state.current_line = "조�
 if 'selected_cell' not in st.session_state: st.session_state.selected_cell = "CELL 1"
 
 # =================================================================
-# 4. 로그인 화면 및 사이드바 (계층 구조)
+# 4. 로그인 화면 및 사이드바 내비게이션 (계층 구조)
 # =================================================================
 
 if not st.session_state.login_status:
@@ -168,7 +230,8 @@ if not st.session_state.login_status:
                     st.session_state.user_id = input_id
                     st.session_state.user_role = st.session_state.user_db[input_id]["role"]
                     st.rerun()
-                else: st.error("❌ 아이디 또는 비밀번호가 올바르지 않습니다.")
+                else: 
+                    st.error("❌ 아이디 또는 비밀번호가 올바르지 않습니다.")
     st.stop()
 
 st.sidebar.markdown("### 🏭 생산 관리 시스템")
@@ -181,9 +244,10 @@ st.sidebar.divider()
 
 my_allowed = ROLES.get(st.session_state.user_role, [])
 
-# [V18.3 핵심] 제조 반별 계층형 메뉴 구성
+# [V18.4 핵심] 제조 반별 계층형 메뉴 구성 (Expander)
 for group in PRODUCTION_GROUPS:
-    with st.sidebar.expander(f"📍 {group}", expanded=(st.session_state.selected_group == group)):
+    is_expanded = (st.session_state.selected_group == group and st.session_state.current_line in ["조립 라인", "검사 라인", "포장 라인"])
+    with st.sidebar.expander(f"📍 {group}", expanded=is_expanded):
         for p in ["조립 라인", "검사 라인", "포장 라인"]:
             if p in my_allowed:
                 is_active = (st.session_state.selected_group == group and st.session_state.current_line == p)
@@ -194,9 +258,11 @@ for group in PRODUCTION_GROUPS:
                     st.rerun()
 
 st.sidebar.divider()
+
+# 품질 및 분석 리포트 메뉴 (공통)
 for p in ["리포트", "불량 공정", "수리 리포트"]:
     if p in my_allowed:
-        if st.sidebar.button(f"{p}", key=f"nav_fixed_{p}", use_container_width=True, 
+        if st.sidebar.button(f"{p}", key=f"fixed_nav_{p}", use_container_width=True, 
                              type="primary" if st.session_state.current_line == p else "secondary"): 
             st.session_state.current_line = p
             st.rerun()
@@ -208,14 +274,14 @@ if "마스터 관리" in my_allowed:
         st.session_state.current_line = "마스터 관리"
         st.rerun()
 
-# [실시간 알림 배너 원본 복구]
-db_all = st.session_state.production_db
-repair_wait_cnt = len(db_all[(db_all['상태'] == "불량 처리 중") & (db_all['반'] == st.session_state.selected_group)])
+# [실시간 알림 배너]
+db_for_alarm = st.session_state.production_db
+repair_wait_cnt = len(db_for_alarm[(db_for_alarm['상태'] == "불량 처리 중") & (db_for_alarm['반'] == st.session_state.selected_group)])
 if repair_wait_cnt > 0:
     st.markdown(f"<div class='alarm-banner'>⚠️ 긴급 통지: {st.session_state.selected_group} 분석 대기 중인 품질 이슈가 {repair_wait_cnt}건 발생했습니다. 즉시 수리 센터를 확인하세요.</div>", unsafe_allow_html=True)
 
 # =================================================================
-# 5. 핵심 비즈니스 로직 (원본 v17.8 100% 복구)
+# 5. 핵심 비즈니스 로직 (v17.8 원본 100% 복원)
 # =================================================================
 
 @st.dialog("📋 공정 단계 전환 입고 확인")
@@ -244,6 +310,7 @@ def draw_v17_optimized_log(line_key, ok_btn_txt="완료 처리"):
     st.divider()
     st.markdown(f"<h3 class='centered-title'>📝 {st.session_state.selected_group} {line_key} 실시간 작업 원장</h3>", unsafe_allow_html=True)
     db_source = st.session_state.production_db
+    # [V18.4 필터] 선택된 반 + 선택된 라인
     f_df = db_source[(db_source['반'] == st.session_state.selected_group) & (db_source['라인'] == line_key)]
     
     if line_key == "조립 라인" and st.session_state.selected_cell != "전체 CELL": 
@@ -282,14 +349,18 @@ def draw_v17_optimized_log(line_key, ok_btn_txt="완료 처리"):
 # 6. 각 페이지별 렌더링 (v17.8 원본 로직 100% 복원)
 # =================================================================
 
+curr_g = st.session_state.selected_group
+curr_l = st.session_state.current_line
+
 # --- 6-1. 조립 라인 현황 ---
-if st.session_state.current_line == "조립 라인":
-    st.markdown(f"<h2 class='centered-title'>📦 {st.session_state.selected_group} 신규 조립 생산 라인 현황</h2>", unsafe_allow_html=True)
+if curr_l == "조립 라인":
+    st.markdown(f"<h2 class='centered-title'>📦 {curr_g} 신규 조립 생산 라인 현황</h2>", unsafe_allow_html=True)
     stations = ["전체 CELL", "CELL 1", "CELL 2", "CELL 3", "CELL 4", "CELL 5", "CELL 6"]
     station_cols = st.columns(len(stations))
     for i, name in enumerate(stations):
         if station_cols[i].button(name, type="primary" if st.session_state.selected_cell == name else "secondary"): 
             st.session_state.selected_cell = name; st.rerun()
+            
     if st.session_state.selected_cell != "전체 CELL":
         with st.container(border=True):
             st.markdown(f"#### ➕ {st.session_state.selected_cell} 신규 생산 등록")
@@ -305,22 +376,24 @@ if st.session_state.current_line == "조립 라인":
                             st.error(f"❌ 중복 오류: 시리얼 '{target_sn}'은 이미 등록되어 있는 번호입니다.")
                         else:
                             new_entry = {
-                                '시간': get_now_kst_str(), '반': st.session_state.selected_group, '라인': "조립 라인", 'CELL': st.session_state.selected_cell, 
-                                '모델': target_model, '품목코드': target_item, '시리얼': target_sn, '상태': '진행 중', '증상': '', '수리': '', '작업자': st.session_state.user_id
+                                '시간': get_now_kst_str(), '반': curr_g, '라인': "조립 라인", 'CELL': st.session_state.selected_cell, 
+                                '모델': target_model, '품목코드': target_item, '시리얼': target_sn, '상태': '진행 중', 
+                                '증상': '', '수리': '', '작업자': st.session_state.user_id
                             }
                             st.session_state.production_db = pd.concat([full_db, pd.DataFrame([new_entry])], ignore_index=True)
                             push_to_cloud(st.session_state.production_db); st.rerun()
     draw_v17_optimized_log("조립 라인", "조립 완료")
 
 # --- 6-2. 품질 / 포장 라인 현황 ---
-elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
-    pg_title_txt = f"🔍 {st.session_state.selected_group} 품질 검사 현황" if st.session_state.current_line == "검사 라인" else f"🚚 {st.session_state.selected_group} 출하 포장 현황"
-    pv_line_name = "조립 라인" if st.session_state.current_line == "검사 라인" else "검사 라인"
+elif curr_l in ["검사 라인", "포장 라인"]:
+    pg_title_txt = f"🔍 {curr_g} 품질 검사 현황" if curr_l == "검사 라인" else f"🚚 {curr_g} 출하 포장 현황"
+    pv_line_name = "조립 라인" if curr_l == "검사 라인" else "검사 라인"
     st.markdown(f"<h2 class='centered-title'>{pg_title_txt}</h2>", unsafe_allow_html=True)
     with st.container(border=True):
         st.markdown("<div class='section-title'>📥 이전 공정 완료 물량 (입고 승인 대기)</div>", unsafe_allow_html=True)
         db_raw_ref = st.session_state.production_db
-        wait_list_df = db_raw_ref[(db_raw_ref['반'] == st.session_state.selected_group) & (db_raw_ref['라인'] == pv_line_name) & (db_raw_ref['상태'] == "완료")]
+        # [V18.4 필터] 같은 반 내에서만 입고 대기 목록 필터링
+        wait_list_df = db_raw_ref[(db_raw_ref['반'] == curr_g) & (db_raw_ref['라인'] == pv_line_name) & (db_raw_ref['상태'] == "완료")]
         if not wait_list_df.empty:
             st.success(f"현재 총 {len(wait_list_df)}개의 제품이 입고 승인을 기다리고 있습니다.")
             wait_grid = st.columns(4)
@@ -329,12 +402,12 @@ elif st.session_state.current_line in ["검사 라인", "포장 라인"]:
                     st.session_state.confirm_target = row['시리얼']
                     trigger_entry_dialog()
         else: st.info("입고 가능한 대기 물량이 없습니다.")
-    draw_v17_optimized_log(st.session_state.current_line, "합격 처리" if st.session_state.current_line=="검사 라인" else "포장 완료")
+    draw_v17_optimized_log(curr_l, "합격 처리" if curr_l=="검사 라인" else "포장 완료")
 
-# --- 6-3. 통합 리포트 (원본 1.8:1.2 비율 및 스타일 100% 복원) ---
-elif st.session_state.current_line == "리포트":
+# --- 6-3. 통합 리포트 (원본 1.8:1.2 비율 복원) ---
+elif curr_l == "리포트":
     st.markdown("<h2 class='centered-title'>📊 생산 운영 통합 모니터링</h2>", unsafe_allow_html=True)
-    view_group = st.radio("조회 범위 선택", ["전체"] + PRODUCTION_GROUPS, horizontal=True, index=PRODUCTION_GROUPS.index(st.session_state.selected_group)+1)
+    view_group = st.radio("조회 범위 선택", ["전체"] + PRODUCTION_GROUPS, horizontal=True, index=PRODUCTION_GROUPS.index(curr_g)+1)
     db_rep_source = st.session_state.production_db
     if view_group != "전체": db_rep_source = db_rep_source[db_rep_source['반'] == view_group]
     
@@ -350,7 +423,8 @@ elif st.session_state.current_line == "리포트":
         chart_l, chart_r = st.columns([1.8, 1.2])
         with chart_l:
             pos_sum_df = db_rep_source.groupby('라인').size().reset_index(name='수량')
-            fig_bar_main = px.bar(pos_sum_df, x='라인', y='수량', color='라인', title="<b>[공정 단계별 제품 분포 현황]</b>", template="plotly_white")
+            fig_bar_main = px.bar(pos_sum_df, x='라인', y='수량', color='라인', title="<b>[공정 단계별 제품 분포 현황]</b>", 
+                                  color_discrete_map={"검사 라인": "#A0D1FB", "조립 라인": "#0068C9", "포장 라인": "#FFABAB"}, template="plotly_white")
             fig_bar_main.update_yaxes(dtick=1, showgrid=True, gridcolor='rgba(200,200,200,0.3)')
             st.plotly_chart(fig_bar_main, use_container_width=True)
         with chart_r:
@@ -361,16 +435,22 @@ elif st.session_state.current_line == "리포트":
         st.dataframe(db_rep_source.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
     else: st.warning("분석할 생산 데이터가 아직 존재하지 않습니다.")
 
-# --- 6-4. 불량 수리 센터 (원본 이미지 업로드 및 레이아웃 복원) ---
-elif st.session_state.current_line == "불량 공정":
+# --- 6-4. 불량 수리 센터 (원본 이미지 로직 복원) ---
+elif curr_l == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 분석 및 수리 조치 관리</h2>", unsafe_allow_html=True)
     db_bad_target = st.session_state.production_db
-    wait_list = db_bad_target[(db_bad_target['반'] == st.session_state.selected_group) & (db_bad_target['상태'] == "불량 처리 중")]
+    wait_list = db_bad_target[(db_bad_target['반'] == curr_g) & (db_bad_target['상태'] == "불량 처리 중")]
     today_dt = datetime.now(KST).date()
-    rep_done_today = len(db_bad_target[(db_bad_target['반'] == st.session_state.selected_group) & (db_bad_target['상태'] == "수리 완료(재투입)") & (db_bad_target['시간'].str.contains(str(today_dt)))])
+    # 금일 완료 판독 보정
+    def is_today(val):
+        try: return str(today_dt) in str(val)
+        except: return False
+    rep_done_today = len(db_bad_target[(db_bad_target['반'] == curr_g) & (db_bad_target['상태'] == "수리 완료(재투입)") & (db_bad_target['시간'].apply(is_today))])
+    
     stat1, stat2 = st.columns(2)
-    with stat1: st.markdown(f"<div class='stat-box'><div class='stat-label'>🛠️ {st.session_state.selected_group} 분석 대기</div><div class='stat-value' style='color:#fa5252;'>{len(wait_list)}</div></div>", unsafe_allow_html=True)
-    with stat2: st.markdown(f"<div class='stat-box'><div class='stat-label'>✅ {st.session_state.selected_group} 금일 완료</div><div class='stat-value' style='color:#40c057;'>{rep_done_today}</div></div>", unsafe_allow_html=True)
+    with stat1: st.markdown(f"<div class='stat-box'><div class='stat-label'>🛠️ {curr_g} 분석 대기</div><div class='stat-value' style='color:#fa5252;'>{len(wait_list)}</div></div>", unsafe_allow_html=True)
+    with stat2: st.markdown(f"<div class='stat-box'><div class='stat-label'>✅ {curr_g} 금일 완료</div><div class='stat-value' style='color:#40c057;'>{rep_done_today}</div></div>", unsafe_allow_html=True)
+    
     if wait_list.empty: st.success("✅ 조치 사항이 없습니다.")
     else:
         for idx, row in wait_list.iterrows():
@@ -396,7 +476,7 @@ elif st.session_state.current_line == "불량 공정":
                     else: st.error("항목을 채워주세요.")
 
 # --- 6-5. 수리 이력 리포트 ---
-elif st.session_state.current_line == "수리 리포트":
+elif curr_l == "수리 리포트":
     st.markdown("<h2 class='centered-title'>📈 품질 분석 및 수리 이력 리포트</h2>", unsafe_allow_html=True)
     view_g_r = st.radio("조회 반 선택", ["전체"] + PRODUCTION_GROUPS, horizontal=True)
     db_hist = st.session_state.production_db
@@ -413,8 +493,8 @@ elif st.session_state.current_line == "수리 리포트":
         st.dataframe(hist_df, use_container_width=True, hide_index=True)
     else: st.info("내역이 없습니다.")
 
-# --- 6-6. 마스터 정보 관리 (어드민 상세 기능 100% 복원) ---
-elif st.session_state.current_line == "마스터 관리":
+# --- 6-6. 마스터 정보 관리 (원본 100% 상세 기능 복원) ---
+elif curr_l == "마스터 관리":
     st.markdown("<h2 class='centered-title'>🔐 시스템 마스터 데이터 관리</h2>", unsafe_allow_html=True)
     if not st.session_state.admin_authenticated:
         with st.form("master_verify_gate"):
@@ -448,20 +528,25 @@ elif st.session_state.current_line == "마스터 관리":
                 f_mig = st.file_uploader("복구용 CSV 선택", type="csv")
                 if f_mig and st.button("📤 데이터 로드"):
                     try:
+                        # [V18.4 복구] 업로드된 CSV 로드 및 중복 제거
                         imp_df = pd.read_csv(f_mig)
+                        # 시리얼 컬럼이 숫자로 읽히는 경우 방지
+                        if '시리얼' in imp_df.columns:
+                            imp_df['시리얼'] = imp_df['시리얼'].astype(str).str.replace(r'\.0$', '', regex=True)
                         st.session_state.production_db = pd.concat([st.session_state.production_db, imp_df], ignore_index=True).drop_duplicates(subset=['시리얼'], keep='last')
                         push_to_cloud(st.session_state.production_db); st.rerun()
-                    except: st.error("파일 오류")
+                    except Exception as e: st.error(f"파일 로드 오류: {e}")
         st.divider()
         st.subheader("사용자 관리")
         u_c1, u_c2, u_c3 = st.columns([3, 3, 2])
         r_uid, r_upw, r_url = u_c1.text_input("ID 생성"), u_c2.text_input("PW 설정", type="password"), u_c3.selectbox("권한", ["user", "admin", "master"])
-        if st.button("사용자 생성"):
-            st.session_state.user_db[r_uid] = {"pw": r_upw, "role": r_url}; st.success("완료"); st.rerun()
+        if st.button("사용자 생성/업데이트"):
+            st.session_state.user_db[r_uid] = {"pw": r_upw, "role": r_url}; st.success(f"'{r_uid}' 계정 완료"); st.rerun()
+        with st.expander("현재 계정 리스트"): st.table(pd.DataFrame.from_dict(st.session_state.user_db, orient='index'))
         if st.button("⚠️ 실적 전체 초기화", type="secondary"):
             st.session_state.production_db = pd.DataFrame(columns=['시간','반','라인','CELL','모델','품목코드','시리얼','상태','증상','수리','작업자'])
             push_to_cloud(st.session_state.production_db); st.rerun()
 
 # =================================================================
-# [ PMS v18.3 풀버전 종료 ]
+# [ PMS v18.4 풀버전 종료 ]
 # =================================================================
