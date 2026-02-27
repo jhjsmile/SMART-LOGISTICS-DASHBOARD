@@ -421,7 +421,7 @@ if curr_l == "현황판":
 
     db_all = st.session_state.production_db
 
-    # ── 전체 요약 카드
+    # 전체 요약 카드
     st.markdown("<div class='section-title'>📊 전체 반 생산 요약</div>", unsafe_allow_html=True)
     col1, col2, col3, col4 = st.columns(4)
     col1.markdown(f"""<div class='stat-box'><div class='stat-label'>📦 총 투입</div>
@@ -435,9 +435,9 @@ if curr_l == "현황판":
 
     st.divider()
 
-    # ── 반별 현황 카드
+    # 반별 현황 카드
     st.markdown("<div class='section-title'>🏭 반별 생산 현황</div>", unsafe_allow_html=True)
-        cards_html = "<div style='display:flex; gap:12px; width:100%; box-sizing:border-box;'>"
+    cards_html = "<div style='display:flex; gap:12px; width:100%; box-sizing:border-box;'>"
     for g in PRODUCTION_GROUPS:
         gdf = db_all[db_all['반'] == g]
         완료 = len(gdf[(gdf['라인']=='포장 라인') & (gdf['상태']=='완료')])
@@ -472,11 +472,9 @@ if curr_l == "현황판":
 
     st.divider()
 
-    # ── 공정별 / 반별 차트
+    # 실시간 차트
     if not db_all.empty:
-        st.markdown(...)
-        cards_html = "<div style='display:flex; gap:12px; width:100%; box-sizing:border-box;'>"
-        for g in PRODUCTION_GROUPS:
+        st.markdown("<div class='section-title'>📈 실시간 차트</div>", unsafe_allow_html=True)
         ch1, ch2 = st.columns([1.8, 1.2])
         with ch1:
             fig = px.bar(
@@ -863,6 +861,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
