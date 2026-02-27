@@ -797,35 +797,56 @@ elif curr_l == "마스터 관리":
                 c1, c2 = st.columns(2)
                 with c1:
                     with st.container(border=True):
-                        st.subheader("신규 모델 등록")
-                        nm = st.text_input(f"{g_name} 모델명", key=f"nm_{g_name}")
+                        st.subheader("신규 모델 대량 등록")
+                        st.caption("여러 모델은 줄바꿈(Enter)으로 구분해서 입력하세요.")
+                        nm_bulk = st.text_area(f"{g_name} 모델명", key=f"nm_{g_name}", height=150,
+                                               placeholder="예시:\nEPS7150\nEPS7133\nT20i")
                         if st.button(f"{g_name} 모델 저장", key=f"nb_{g_name}"):
-                            if nm and nm not in st.session_state.group_master_models.get(g_name, []):
-                                st.session_state.group_master_models[g_name].append(nm)
-                                st.session_state.group_master_items[g_name][nm] = []
-                                st.success(f"모델 [{nm}] 등록 완료")
+                            if nm_bulk.strip():
+                                nm_list = [x.strip() for x in nm_bulk.strip().splitlines() if x.strip()]
+                                added, skipped = [], []
+                                for nm in nm_list:
+                                    if nm not in st.session_state.group_master_models.get(g_name, []):
+                                        st.session_state.group_master_models[g_name].append(nm)
+                                        st.session_state.group_master_items[g_name][nm] = []
+                                        added.append(nm)
+                                    else:
+                                        skipped.append(nm)
+                                if added:
+                                    st.success(f"등록 완료: {', '.join(added)}")
+                                if skipped:
+                                    st.warning(f"이미 존재하는 모델: {', '.join(skipped)}")
                                 st.rerun()
-                            elif not nm:
-                                st.warning("모델명을 입력해주세요.")
                             else:
-                                st.warning("이미 존재하는 모델명입니다.")
+                                st.warning("모델명을 입력해주세요.")
+
                 with c2:
                     with st.container(border=True):
-                        st.subheader("세부 품목 등록")
+                        st.subheader("세부 품목 대량 등록")
                         g_mods = st.session_state.group_master_models.get(g_name, [])
                         if g_mods:
                             sm = st.selectbox(f"{g_name} 모델 선택", g_mods, key=f"sm_{g_name}")
-                            ni = st.text_input(f"[{sm}] 품목코드", key=f"ni_{g_name}")
+                            st.caption("여러 품목은 줄바꿈(Enter)으로 구분해서 입력하세요.")
+                            ni_bulk = st.text_area(f"[{sm}] 품목코드", key=f"ni_{g_name}", height=150,
+                                                   placeholder="예시:\n7150-A\n7150-B\n7150-C")
                             if st.button(f"{g_name} 품목 저장", key=f"ib_{g_name}"):
-                                current_items = st.session_state.group_master_items[g_name].get(sm, [])
-                                if ni and ni not in current_items:
-                                    st.session_state.group_master_items[g_name][sm].append(ni)
-                                    st.success(f"품목 [{ni}] 등록 완료")
+                                if ni_bulk.strip():
+                                    ni_list = [x.strip() for x in ni_bulk.strip().splitlines() if x.strip()]
+                                    current_items = st.session_state.group_master_items[g_name].get(sm, [])
+                                    added, skipped = [], []
+                                    for ni in ni_list:
+                                        if ni not in current_items:
+                                            st.session_state.group_master_items[g_name][sm].append(ni)
+                                            added.append(ni)
+                                        else:
+                                            skipped.append(ni)
+                                    if added:
+                                        st.success(f"등록 완료: {', '.join(added)}")
+                                    if skipped:
+                                        st.warning(f"이미 존재하는 품목: {', '.join(skipped)}")
                                     st.rerun()
-                                elif not ni:
-                                    st.warning("품목코드를 입력해주세요.")
                                 else:
-                                    st.warning("이미 존재하는 품목코드입니다.")
+                                    st.warning("품목코드를 입력해주세요.")
                         else:
                             st.warning("등록된 모델이 없습니다. 왼쪽에서 모델을 먼저 등록하세요.")
 
@@ -889,6 +910,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
