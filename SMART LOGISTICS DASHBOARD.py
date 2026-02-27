@@ -505,21 +505,45 @@ elif curr_l == "마스터 관리":
                 else: st.error("접근 거부")
     else:
         st.sidebar.button("🔓 세션 잠금(Lock)", on_click=lambda: setattr(st.session_state, 'admin_authenticated', False))
-        m_col_1, m_col_2 = st.columns(2)
+        m_col_1, m_col_2 = st.columns(2)      
         with m_col_1:
-            with st.container(border=True):
-                st.subheader("모델/품목 신규 등록")
-                add_m = st.text_input("신규 모델명")
-                if st.button("모델 등록 확정"):
-                    if add_m and add_m not in st.session_state.master_models:
-                        st.session_state.master_models.append(add_m); st.session_state.master_items_dict[add_m] = []; st.rerun()
-                st.divider()
-                add_i_m = st.selectbox("품목용 모델 선택", st.session_state.master_models)
-                add_i = st.text_input("신규 품목코드")
-                if st.button("품목 등록 확정"):
-                    if add_i and add_i not in st.session_state.master_items_dict[add_i_m]:
-                        st.session_state.master_items_dict[add_i_m].append(add_i); st.rerun()
+            # [V18.6 핵심 추가] 제조 반별로 탭을 나누어 독립적인 모델/품목 관리
+            st.markdown("#### 📋 제조 반별 독립 기준정보 설정")
+            m_tabs = st.tabs(["제조 1반", "제조 2반", "제조 3반"])
+            
+            # 각 반별 탭 내부 루프
+            for i, g_name in enumerate(PRODUCTION_GROUPS):
+                with m_tabs[i]:
+                    with st.container(border=True):
+                        st.subheader(f"{g_name} 모델 등록")
+                        # 해당 반의 모델 리스트 가져오기
+                        g_models = st.session_state.group_master_models.get(g_name, [])
+                        
+                        add_m = st.text_input(f"신규 모델명 ({g_name})", key=f"add_m_{g_name}")
+                        if st.button(f"{g_name} 모델 등록 확정", key=f"btn_m_{g_name}", use_container_width=True):
+                            if add_m and add_m not in st.session_state.group_master_models[g_name]:
+                                st.session_state.group_master_models[g_name].append(add_m)
+                                st.session_state.group_master_items[g_name][add_m] = []
+                                st.success(f"{g_name}에 {add_m} 모델이 추가되었습니다.")
+                                st.rerun()
+                        
+                        st.divider()
+                        
+                        st.subheader(f"{g_name} 품목 등록")
+                        # 등록된 모델 중 하나 선택
+                        if g_models:
+                            add_i_m = st.selectbox(f"대상 모델 선택 ({g_name})", g_models, key=f"sel_m_{g_name}")
+                            add_i = st.text_input(f"신규 품목코드 ({add_i_m})", key=f"add_i_{g_name}")
+                            if st.button(f"{g_name} 품목 등록 확정", key=f"btn_i_{g_name}", use_container_width=True):
+                                if add_i and add_i not in st.session_state.group_master_items[g_name][add_i_m]:
+                                    st.session_state.group_master_items[g_name][add_i_m].append(add_i)
+                                    st.success(f"{add_i_m} 모델에 {add_i} 품목이 추가되었습니다.")
+                                    st.rerun()
+                        else:
+                            st.caption("먼저 모델을 등록해주세요.")
+
         with m_col_2:
+            # [이 부분은 기존의 데이터 백업 및 마이그레이션 코드를 그대로 유지하세요]
             with st.container(border=True):
                 st.subheader("데이터 백업 및 마이그레이션")
                 raw_csv = st.session_state.production_db.to_csv(index=False).encode('utf-8-sig')
@@ -550,4 +574,5 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v18.4 풀버전 종료 ]
 # =================================================================
+
 
