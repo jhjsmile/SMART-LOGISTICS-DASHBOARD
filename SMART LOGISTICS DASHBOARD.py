@@ -553,7 +553,6 @@ if curr_l == "조립 라인":
                         db_v.at[idx, '상태'] = "불량 처리 중"
                         push_to_cloud(db_v); st.rerun()
                 else:
-                    else:
                     if "불량" in str(row['상태']):
                         st.markdown(f"<div style='background:#fa5252; color:white; padding:6px 12px; border-radius:8px; text-align:center; font-weight:bold;'>🚫 {row['상태']}</div>", unsafe_allow_html=True)
                     else:
@@ -643,7 +642,6 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         db_s.at[idx, '상태'] = "불량 처리 중"
                         push_to_cloud(db_s); st.rerun()
                 else:
-                    else:
                     if "불량" in str(row['상태']):
                         st.markdown(f"<div style='background:#fa5252; color:white; padding:6px 12px; border-radius:8px; text-align:center; font-weight:bold;'>🚫 {row['상태']}</div>", unsafe_allow_html=True)
                     else:
@@ -880,6 +878,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
