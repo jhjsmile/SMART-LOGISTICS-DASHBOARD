@@ -349,7 +349,6 @@ if "마스터 관리" in allowed_nav:
         st.session_state.current_line = "마스터 관리"
         st.rerun()
 
-st.sidebar.divider()
 if st.sidebar.button("🚪 로그아웃", use_container_width=True):
     for key in ['login_status', 'user_role', 'user_id', 'admin_authenticated']:
         st.session_state[key] = False if key == 'login_status' else None
@@ -842,6 +841,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
