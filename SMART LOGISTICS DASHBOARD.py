@@ -388,6 +388,7 @@ if curr_l == "현황판":
 
     db_all = st.session_state.production_db
 
+    # 전체 요약 카드
     st.markdown("<div class='section-title'>📊 전체 반 생산 요약</div>", unsafe_allow_html=True)
     col1, col2, col3, col4 = st.columns(4)
     col1.markdown(
@@ -405,6 +406,29 @@ if curr_l == "현황판":
 
     st.divider()
 
+    # 실시간 차트 (반별 현황 위로 이동)
+    if not db_all.empty:
+        st.markdown("<div class='section-title'>📈 실시간 차트</div>", unsafe_allow_html=True)
+        ch1, ch2 = st.columns([1.8, 1.2])
+        with ch1:
+            fig = px.bar(
+                db_all.groupby(['반', '라인']).size().reset_index(name='수량'),
+                x='라인', y='수량', color='반', barmode='group',
+                title="<b>반별 공정 진행 현황</b>", template="plotly_white"
+            )
+            fig.update_yaxes(dtick=1)
+            st.plotly_chart(fig, use_container_width=True)
+        with ch2:
+            fig2 = px.pie(
+                db_all.groupby('상태').size().reset_index(name='수량'),
+                values='수량', names='상태', hole=0.5,
+                title="<b>전체 상태 비중</b>"
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+
+    st.divider()
+
+    # 반별 현황 카드
     st.markdown("<div class='section-title'>🏭 반별 생산 현황</div>", unsafe_allow_html=True)
     cards_html = "<div style=\"display:flex; gap:12px; width:100%; box-sizing:border-box;\">"
     for g in PRODUCTION_GROUPS:
@@ -439,6 +463,9 @@ if curr_l == "현황판":
     cards_html += "</div>"
     st.markdown(cards_html, unsafe_allow_html=True)
 
+    if db_all.empty:
+        st.info("등록된 생산 데이터가 없습니다.")
+        
     st.divider()
 
     if not db_all.empty:
