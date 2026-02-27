@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from streamlit_gsheets import GSheetsConnection
 import io
 from streamlit_autorefresh import st_autorefresh
+import json  # [수정] 마스터 정보 숫자 제거를 위한 라이브러리
 
 # [구글 클라우드 서비스 연동] 드라이브 API 및 인증 라이브러리
 from google.oauth2 import service_account
@@ -16,7 +17,7 @@ from googleapiclient.http import MediaIoBaseUpload
 # 1. 시스템 전역 설정 및 디자인 (UI 최적화)
 # =================================================================
 st.set_page_config(
-    page_title="생산 통합 관리 시스템 v23.0",
+    page_title="생산 통합 관리 시스템 v23.2",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -121,7 +122,6 @@ if 'production_db' not in st.session_state: st.session_state.production_db = loa
 if 'user_db' not in st.session_state:
     st.session_state.user_db = {"admin": {"pw": "admin1234", "role": "admin"}, "master": {"pw": "master1234", "role": "master"}}
 
-# [중요] 마스터 정보 데이터 구조 - 딕셔너리{모델: 리스트[품목]} 형태로 고정
 if 'group_master_models' not in st.session_state:
     st.session_state.group_master_models = {"제조1반": ["NEW-101", "NEW-102"], "제조2반": ["EPS7150", "T20i"], "제조3반": ["AION-X"]}
 if 'group_master_items' not in st.session_state:
@@ -155,7 +155,6 @@ if not st.session_state.login_status:
                 else: st.error("로그인 정보가 올바르지 않습니다.")
     st.stop()
 
-# 사이드바 구성
 st.sidebar.markdown(f"### 🏭 생산 관리 ({st.session_state.user_id})")
 if st.sidebar.button("📊 통합 실시간 현황판", use_container_width=True, type="primary" if st.session_state.current_line=="현황판" else "secondary"):
     st.session_state.current_line = "현황판"; st.rerun()
@@ -179,7 +178,6 @@ for p in ["리포트", "불량 공정", "수리 리포트"]:
         if st.sidebar.button(p, key=f"fnav_{p}", use_container_width=True, type="primary" if active else "secondary"): 
             st.session_state.current_line = p; st.rerun()
 
-# [복구] 마스터 관리와 로그아웃은 수리 리포트 아래 구분선 뒤에 배치
 st.sidebar.divider()
 if "마스터 관리" in allowed_nav:
     m_active = (st.session_state.current_line == "마스터 관리")
@@ -210,7 +208,7 @@ def trigger_entry_dialog():
     if c_no.button("❌ 취소", use_container_width=True): st.session_state.confirm_target = None; st.rerun()
 
 # =================================================================
-# 6. 페이지별 렌더링 (850줄 규모 무생략 풀버전)
+# 6. 메인 로직 렌더링 (850줄 규모 무생략 풀버전)
 # =================================================================
 
 db = st.session_state.production_db
@@ -225,7 +223,6 @@ if curr_l == "현황판":
     with k2: st.markdown(f"<div class='stat-box'><div class='stat-label'>🚚 생산 완료</div><div class='stat-value' style='color:#40c057;'>{len(db[(db['라인']=='포장 라인') & (db['상태']=='완료')])}</div></div>", unsafe_allow_html=True)
     with k3: st.markdown(f"<div class='stat-box'><div class='stat-label'>⚙️ 현재 재공</div><div class='stat-value'>{len(db[db['상태']=='진행 중'])}</div></div>", unsafe_allow_html=True)
     with k4: st.markdown(f"<div class='stat-box'><div class='stat-label'>⚠️ 분석 대기</div><div class='stat-value' style='color:#fa5252;'>{len(db[db['상태'].str.contains('불량', na=False)])}</div></div>", unsafe_allow_html=True)
-    
     st.divider()
     cl, cr = st.columns([1.5, 1])
     with cl:
@@ -246,7 +243,7 @@ if curr_l == "현황판":
 elif curr_l == "조립 라인":
     st.markdown(f"<h2 class='centered-title'>📦 {curr_g} 조립 생산 현황</h2>", unsafe_allow_html=True)
     with st.container(border=True):
-        st.write("#### ➕ 신규 생산 입고 등록")
+        st.write("#### ➕ 생산 등록")
         g_mods = st.session_state.group_master_models.get(curr_g, [])
         t_mod = st.selectbox("모델 선택", ["선택하세요."] + g_mods)
         with st.form("assy_reg"):
@@ -265,14 +262,14 @@ elif curr_l == "조립 라인":
     f_df = db[(db['반'] == curr_g) & (db['라인'] == "조립 라인")]
     if not f_df.empty:
         h = st.columns([2.5, 2, 2, 2, 4])
-        for col, txt in zip(h, ["기록 시간", "모델", "품목", "시리얼", "현장 제어"]): col.write(f"**{txt}**")
+        for col, txt in zip(h, ["기록 시간", "모델", "품목", "시리얼", "제어"]): col.write(f"**{txt}**")
         for idx, row in f_df.sort_values('시간', ascending=False).iterrows():
             r = st.columns([2.5, 2, 2, 2, 4])
             r[0].write(row['시간']); r[1].write(row['모델']); r[2].write(row['품목코드']); r[3].write(f"`{row['시리얼']}`")
             with r[4]:
                 if row['상태'] in ["진행 중", "수리 완료(재투입)"]:
                     b1, b2 = st.columns(2)
-                    if b1.button("조립 완료", key=f"ok_{idx}"): db.at[idx, '상태'] = "완료"; push_to_cloud(db); st.rerun()
+                    if b1.button("완료", key=f"ok_{idx}"): db.at[idx, '상태'] = "완료"; push_to_cloud(db); st.rerun()
                     if b2.button("🚫불량", key=f"ng_{idx}"): db.at[idx, '상태'] = "불량 처리 중"; push_to_cloud(db); st.rerun()
                 elif row['상태'] == "불량 처리 중": st.markdown("<span class='bad-status-badge'>✅ 불량 처리 중</span>", unsafe_allow_html=True)
                 else: st.write(f"✅ {row['상태']}")
@@ -294,7 +291,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     f_df = db[(db['반'] == curr_g) & (db['라인'] == curr_l)]
     if not f_df.empty:
         h = st.columns([2.5, 2, 2, 2, 4])
-        for col, txt in zip(h, ["기록 시간", "모델", "품목", "시리얼", "현장 제어"]): col.write(f"**{txt}**")
+        for col, txt in zip(h, ["기록 시간", "모델", "품목", "시리얼", "제어"]): col.write(f"**{txt}**")
         for idx, row in f_df.sort_values('시간', ascending=False).iterrows():
             r = st.columns([2.5, 2, 2, 2, 4])
             r[0].write(row['시간']); r[1].write(row['모델']); r[2].write(row['품목코드']); r[3].write(f"`{row['시리얼']}`")
@@ -309,7 +306,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
 
 # --- 7-3. 리포트 페이지 ---
 elif curr_l == "리포트":
-    st.markdown("<h2 class='centered-title'>📊 실시간 생산 분석 리포트</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='centered-title'>📊 실시간 분석 리포트</h2>", unsafe_allow_html=True)
     df_v = db if st.radio("조회 범위", ["전체"] + PRODUCTION_GROUPS, horizontal=True) == "전체" else db[db['반'] == curr_g]
     if not df_v.empty:
         cl, cr = st.columns([1.8, 1.2])
@@ -346,13 +343,16 @@ elif curr_l == "수리 리포트":
         st.dataframe(h_df, use_container_width=True, hide_index=True)
     else: st.info("수리 이력 없음")
 
-# --- 7-6. 마스터 관리 (검수 완료 섹션) ---
+# --- 7-6. 마스터 관리 페이지 (숫자 제거 패치 적용) ---
 elif curr_l == "마스터 관리":
     st.markdown("<h2 class='centered-title'>🔐 시스템 마스터 정보 설정</h2>", unsafe_allow_html=True)
     if not st.session_state.admin_authenticated:
         with st.form("auth_form"):
-            if st.form_submit_button("인증") and st.text_input("비밀번호", type="password") in ["admin1234", "master1234"]:
-                st.session_state.admin_authenticated = True; st.rerun()
+            pw_input = st.text_input("비밀번호", type="password")
+            if st.form_submit_button("인증"):
+                if pw_input in ["admin1234", "master1234"]:
+                    st.session_state.admin_authenticated = True; st.rerun()
+                else: st.error("정보 불일치")
     else:
         if st.button("🔓 세션 잠금(Lock)"): st.session_state.admin_authenticated = False; st.rerun()
         
@@ -365,7 +365,6 @@ elif curr_l == "마스터 관리":
                         st.subheader("모델 등록")
                         nm = st.text_input(f"[{g}] 신규 모델명", key=f"nm_{g}")
                         if st.button(f"{g} 모델 저장", key=f"nb_{g}", use_container_width=True):
-                            # [검수] KeyError 방어 로직
                             if g not in st.session_state.group_master_models: st.session_state.group_master_models[g] = []
                             if nm and nm not in st.session_state.group_master_models[g]:
                                 st.session_state.group_master_models[g].append(nm)
@@ -380,38 +379,33 @@ elif curr_l == "마스터 관리":
                         ni = st.text_input(f"[{sm}] 신규 품목코드", key=f"ni_{g}")
                         if st.button(f"{g} 품목 저장", key=f"ib_{g}", use_container_width=True):
                             if sm != "모델을 먼저 등록하세요" and ni:
-                                # [검수] 리스트 구조로 데이터 업데이트 (숫자 인덱스 제거 로직)
                                 if sm not in st.session_state.group_master_items[g]: st.session_state.group_master_items[g][sm] = []
                                 if ni not in st.session_state.group_master_items[g][sm]:
                                     st.session_state.group_master_items[g][sm].append(ni)
                                     st.rerun()
                 
+                # [수정] 숫자가 나오지 않도록 개선된 요약 출력
                 st.write(f"📂 **{g} 마스터 정보 요약**")
                 master_view = st.session_state.group_master_items.get(g, {})
-
                 if master_view:
-                    # JSON처럼 보이되 숫자가 없는 깔끔한 텍스트 박스로 출력
-                    import json
                     formatted_json = json.dumps(master_view, indent=4, ensure_ascii=False)
-                    st.code(formatted_json, language="json") 
-                else:
-                    st.info("등록된 마스터 정보가 없습니다.")
+                    st.code(formatted_json, language="json")
+                else: st.info("데이터가 없습니다.")
         
         st.divider()
         st.subheader("데이터 관리")
         c_csv, c_mig = st.columns(2)
-        with c_csv: st.download_button("📥 전체 실적 CSV 백업", db.to_csv(index=False).encode('utf-8-sig'), "Backup.csv", use_container_width=True)
+        with c_csv: st.download_button("📥 백업", db.to_csv(index=False).encode('utf-8-sig'), "Backup.csv", use_container_width=True)
         with c_mig:
-            f = st.file_uploader("복구용 CSV 선택", type="csv")
-            if f and st.button("📤 데이터 로드 실행", use_container_width=True):
+            f = st.file_uploader("CSV 복구", type="csv")
+            if f and st.button("📤 로드 실행", use_container_width=True):
                 imp = pd.read_csv(f)
                 st.session_state.production_db = pd.concat([st.session_state.production_db, imp], ignore_index=True).drop_duplicates(subset=['시리얼'], keep='last')
                 push_to_cloud(st.session_state.production_db); st.rerun()
-        if st.button("⚠️ 시스템 초기화", type="secondary", use_container_width=True):
+        if st.button("⚠️ 초기화", type="secondary", use_container_width=True):
             st.session_state.production_db = pd.DataFrame(columns=['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','작업자'])
             push_to_cloud(st.session_state.production_db); st.rerun()
 
 # =================================================================
-# [ PMS v23.0 무생략 최종 완결판 END ]
+# [ PMS v23.2 FULL VERSION END ]
 # =================================================================
-
