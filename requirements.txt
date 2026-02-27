@@ -8,3 +8,4 @@ streamlit-autorefresh
 sqlalchemy
 psycopg2-binary
 supabase
+openpyxl
