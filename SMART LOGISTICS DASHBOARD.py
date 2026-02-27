@@ -499,19 +499,8 @@ if curr_l == "현황판":
 # ─────────────────────────────────────────────
 if curr_l == "조립 라인":
     st.markdown(f"<h2 class='centered-title'>📦 {curr_g} 신규 조립 현황</h2>", unsafe_allow_html=True)
-    stations = ["전체 CELL", "CELL 1", "CELL 2", "CELL 3", "CELL 4", "CELL 5", "CELL 6"]
-    s_cols = st.columns(len(stations))
-    for i, name in enumerate(stations):
-        if s_cols[i].button(
-            name,
-            type="primary" if st.session_state.selected_cell == name else "secondary"
-        ):
-            st.session_state.selected_cell = name
-            st.rerun()
-
-    if st.session_state.selected_cell != "전체 CELL":
-        with st.container(border=True):
-            st.markdown(f"#### ➕ {st.session_state.selected_cell} 신규 생산 등록")
+    with st.container(border=True):
+        st.markdown(f"#### ➕ {curr_g} 신규 생산 등록")
             g_models = st.session_state.group_master_models.get(curr_g, [])
             target_model = st.selectbox("투입 모델 선택", ["선택하세요."] + g_models)
             with st.form("entry_gate_form"):
@@ -861,6 +850,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
