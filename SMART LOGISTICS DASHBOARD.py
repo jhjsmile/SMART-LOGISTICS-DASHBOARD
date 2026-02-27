@@ -387,9 +387,15 @@ elif curr_l == "마스터 관리":
                                     st.rerun()
                 
                 st.write(f"📂 **{g} 마스터 정보 요약**")
-                # [검수] JSON 출력 형식을 깨끗한 리스트 형태로 표시
                 master_view = st.session_state.group_master_items.get(g, {})
-                st.json(master_view)
+
+                if master_view:
+                    # JSON처럼 보이되 숫자가 없는 깔끔한 텍스트 박스로 출력
+                    import json
+                    formatted_json = json.dumps(master_view, indent=4, ensure_ascii=False)
+                    st.code(formatted_json, language="json") 
+                else:
+                    st.info("등록된 마스터 정보가 없습니다.")
         
         st.divider()
         st.subheader("데이터 관리")
@@ -408,3 +414,4 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v23.0 무생략 최종 완결판 END ]
 # =================================================================
+
