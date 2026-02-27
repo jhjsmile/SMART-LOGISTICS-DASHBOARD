@@ -815,6 +815,19 @@ elif curr_l == "마스터 관리":
                 f"PMS_{export_group}_{start_date}~{end_date}.csv",
                 use_container_width=True
             )
+
+            # 엑셀 다운로드
+            import io
+            excel_buffer = io.BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                db_export.to_excel(writer, index=False, sheet_name='생산데이터')
+            excel_data = excel_buffer.getvalue()
+            st.download_button(
+                "📊 Excel 다운로드", excel_data,
+                f"PMS_{export_group}_{start_date}~{end_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
         st.divider()
         if st.button("⚠️ 전체 데이터 초기화", type="secondary"):
             if delete_all_rows():
@@ -825,4 +838,5 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v21.0 Supabase 버전 종료 ]
 # =================================================================
+
 
