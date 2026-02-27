@@ -113,6 +113,20 @@ def get_supabase() -> Client:
     key  = st.secrets["supabase"]["key"]
     return create_client(url, key)
 
+def keep_supabase_alive():
+    """
+    Supabase 무료 플랜 7일 자동 일시정지 방지
+    앱 실행 시마다 가벼운 쿼리를 보내 활성 상태 유지
+    """
+    try:
+        sb = get_supabase()
+        sb.table("production").select("id").limit(1).execute()
+    except:
+        pass
+
+# 앱 실행 시마다 활성화 유지
+keep_supabase_alive()
+
 def get_now_kst_str() -> str:
     return datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -838,5 +852,6 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v21.0 Supabase 버전 종료 ]
 # =================================================================
+
 
 
