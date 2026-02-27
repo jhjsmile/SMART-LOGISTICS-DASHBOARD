@@ -274,7 +274,17 @@ if not st.session_state.login_status:
 # =================================================================
 
 st.sidebar.markdown("### 🏭 생산 관리 시스템 v20.0")
-st.sidebar.markdown(f"**{st.session_state.user_id} ({st.session_state.user_role})**")
+ROLE_LABELS = {
+    "master":         "👤 마스터 관리자",
+    "admin":          "👤 관리자",
+    "control_tower":  "🗼 컨트롤 타워",
+    "assembly_team":  "🔧 조립 담당자",
+    "qc_team":        "🔍 검사 담당자",
+    "packing_team":   "📦 포장 담당자",
+}
+role_label = ROLE_LABELS.get(st.session_state.user_role, st.session_state.user_role)
+st.sidebar.markdown(f"**{role_label}**")
+st.sidebar.caption(f"ID: {st.session_state.user_id}")
 
 if st.sidebar.button("🚪 로그아웃", use_container_width=True):
     for key in ['login_status', 'user_role', 'user_id', 'admin_authenticated']:
@@ -747,6 +757,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
