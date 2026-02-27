@@ -13,20 +13,24 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 # =================================================================
-# 1. 시스템 전역 설정 및 디자인
+# 1. 시스템 전역 설정 및 디자인 (v17.8 원본 스타일 유지)
 # =================================================================
 st.set_page_config(
-    page_title="생산 통합 관리 시스템 v21.0",
+    page_title="생산 통합 관리 시스템 v21.1",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# 대한민국 표준시(KST: UTC+9) 전역 타임존 설정
 KST = timezone(timedelta(hours=9))
+
+# 30초마다 자동으로 전체 화면을 새로고침합니다.
 st_autorefresh(interval=30000, key="pms_auto_refresh")
 
-# [중요] 모든 명칭에서 공백 제거 (KeyError 방지)
+# 제조 반 리스트 정의 (공백 제거 통일)
 PRODUCTION_GROUPS = ["제조1반", "제조2반", "제조3반"]
 
+# 사용자 그룹별 메뉴 접근 권한 정의
 ROLES = {
     "master": ["현황판", "조립 라인", "검사 라인", "포장 라인", "리포트", "불량 공정", "수리 리포트", "마스터 관리"],
     "admin": ["현황판", "조립 라인", "검사 라인", "포장 라인", "리포트", "불량 공정", "수리 리포트", "마스터 관리"],
@@ -35,6 +39,7 @@ ROLES = {
     "packing_team": ["포장 라인"]
 }
 
+# [v17.8 원본 CSS 스타일 복구]
 st.markdown("""
     <style>
     .stApp { max-width: 1200px; margin: 0 auto; }
@@ -77,7 +82,7 @@ def load_realtime_ledger():
         if '시리얼' in df.columns:
             df['시리얼'] = df['시리얼'].astype(str).str.replace(r'\.0$', '', regex=True)
         if '반' in df.columns:
-            df['반'] = df['반'].str.replace(" ", "") # 모든 공백 제거
+            df['반'] = df['반'].str.replace(" ", "") # 공백 제거
             df['반'] = df['반'].apply(lambda x: "제조2반" if x == "" else x)
         else:
             df.insert(1, '반', "제조2반")
@@ -103,10 +108,10 @@ def upload_img_to_drive(file_obj, serial_no):
         uploaded_file = drive_svc.files().create(body=meta_data, media_body=media, fields='id, webViewLink').execute()
         return uploaded_file.get('webViewLink')
     except Exception as err:
-        return f"⚠️ 실패: {str(err)}"
+        return f"⚠️ 이미지 업로드 실패: {str(err)}"
 
 # =================================================================
-# 3. 세션 상태 관리 (에러 방지용 완전 구조)
+# 3. 세션 상태 관리 (반별 독립 마스터 완전 초기화)
 # =================================================================
 
 if 'production_db' not in st.session_state:
@@ -142,12 +147,12 @@ if 'selected_cell' not in st.session_state: st.session_state.selected_cell = "CE
 if 'admin_authenticated' not in st.session_state: st.session_state.admin_authenticated = False
 
 # =================================================================
-# 4. 로그인 로직
+# 4. 로그인 화면
 # =================================================================
 
 if not st.session_state.login_status:
-    _, c_col, _ = st.columns([1, 1.2, 1])
-    with c_col:
+    _, center_col, _ = st.columns([1, 1.2, 1])
+    with center_col:
         st.markdown("<h2 class='centered-title'>🔐 생산 통합 관리 시스템</h2>", unsafe_allow_html=True)
         with st.form("main_login"):
             uid = st.text_input("아이디(ID)")
@@ -159,7 +164,7 @@ if not st.session_state.login_status:
                     st.session_state.user_role = st.session_state.user_db[uid]["role"]
                     st.session_state.current_line = "현황판"
                     st.rerun()
-                else: st.error("로그인 정보가 틀립니다.")
+                else: st.error("❌ 정보를 확인해 주세요.")
     st.stop()
 
 # =================================================================
@@ -174,8 +179,8 @@ st.sidebar.divider()
 allowed_nav = ROLES.get(st.session_state.user_role, [])
 
 for group in PRODUCTION_GROUPS:
-    exp = (st.session_state.selected_group == group and st.session_state.current_line in ["조립 라인", "검사 라인", "포장 라인"])
-    with st.sidebar.expander(f"📍 {group}", expanded=exp):
+    is_exp = (st.session_state.selected_group == group and st.session_state.current_line in ["조립 라인", "검사 라인", "포장 라인"])
+    with st.sidebar.expander(f"📍 {group}", expanded=is_exp):
         for p in ["조립 라인", "검사 라인", "포장 라인"]:
             if p in allowed_nav:
                 active = (st.session_state.selected_group == group and st.session_state.current_line == p)
@@ -195,7 +200,7 @@ if "마스터 관리" in allowed_nav:
     if st.sidebar.button("🔐 마스터 데이터 관리", use_container_width=True, type="primary" if active else "secondary"): 
         st.session_state.current_line = "마스터 관리"; st.rerun()
 
-if st.sidebar.button("🚪 로그아웃", use_container_width=True): 
+if st.sidebar.button("🚪 안전 로그아웃", use_container_width=True): 
     st.session_state.login_status = False; st.rerun()
 
 # =================================================================
@@ -219,38 +224,38 @@ def trigger_entry_dialog():
             db_full.at[idx, '작업자'] = st.session_state.user_id
             push_to_cloud(db_full)
         st.session_state.confirm_target = None
-        st.success("완료되었습니다."); st.rerun()
+        st.success("입고 완료!"); st.rerun()
     if c_no.button("❌ 취소", use_container_width=True): 
         st.session_state.confirm_target = None; st.rerun()
 
 # =================================================================
-# 7. 페이지별 렌더링 (800줄 이상 풀 로직)
+# 7. 페이지별 렌더링 (800줄 이상 풀 버전)
 # =================================================================
 
 db = st.session_state.production_db
 curr_g = st.session_state.selected_group
 curr_l = st.session_state.current_line
 
-# --- 7-0. 통합 현황판 (로그인 초기 화면) ---
+# --- 7-0. 통합 현황판 (초기 화면) ---
 if curr_l == "현황판":
     st.markdown("<h2 class='centered-title'>📊 생산 통합 실시간 현황판</h2>", unsafe_allow_html=True)
     
     k1, k2, k3, k4 = st.columns(4)
     with k1: st.markdown(f"<div class='stat-box'><div class='stat-label'>📦 누적 투입량</div><div class='stat-value'>{len(db)}</div></div>", unsafe_allow_html=True)
-    with k2: st.markdown(f"<div class='stat-box'><div class='stat-label'>🚚 생산 완료</div><div class='stat-value' style='color:#40c057;'>{len(db[(db['라인']=='포장 라인') & (db['상태']=='완료')])}</div></div>", unsafe_allow_html=True)
-    with k3: st.markdown(f"<div class='stat-box'><div class='stat-label'>⚙️ 현재 재공</div><div class='stat-value'>{len(db[db['상태']=='진행 중'])}</div></div>", unsafe_allow_html=True)
-    with k4: st.markdown(f"<div class='stat-box'><div class='stat-label'>⚠️ 불량/수리</div><div class='stat-value' style='color:#fa5252;'>{len(db[db['상태'].str.contains('불량', na=False)])}</div></div>", unsafe_allow_html=True)
+    with k2: st.markdown(f"<div class='stat-box'><div class='stat-label'>🚚 최종 포장 실적</div><div class='stat-value' style='color:#40c057;'>{len(db[(db['라인']=='포장 라인') & (db['상태']=='완료')])}</div></div>", unsafe_allow_html=True)
+    with k3: st.markdown(f"<div class='stat-box'><div class='stat-label'>⚙️ 현재 공정 재공</div><div class='stat-value'>{len(db[db['상태']=='진행 중'])}</div></div>", unsafe_allow_html=True)
+    with k4: st.markdown(f"<div class='stat-box'><div class='stat-label'>⚠️ 분석 대기 불량</div><div class='stat-value' style='color:#fa5252;'>{len(db[db['상태'].str.contains('불량', na=False)])}</div></div>", unsafe_allow_html=True)
 
     st.divider()
     cl, cr = st.columns([1.5, 1])
     with cl:
-        st.markdown("#### 📈 반별 생산 흐름")
+        st.markdown("#### 📈 반별 공정 현황 분포")
         if not db.empty:
             fig_bar = px.histogram(db, x="반", color="라인", barmode="group", template="plotly_white",
                                    color_discrete_map={"조립 라인": "#0068C9", "검사 라인": "#A0D1FB", "포장 라인": "#FFABAB"})
             st.plotly_chart(fig_bar, use_container_width=True)
     with cr:
-        st.markdown("#### 🏆 반별 합격 비율")
+        st.markdown("#### 🏆 반별 목표 달성률")
         rates = []
         for g in PRODUCTION_GROUPS:
             tot = len(db[db['반']==g])
@@ -259,10 +264,10 @@ if curr_l == "현황판":
         fig_r = px.bar(pd.DataFrame(rates), x="반", y="비율", range_y=[0,100], text_auto='.1f', color="비율")
         st.plotly_chart(fig_r, use_container_width=True)
     
-    st.markdown("<div class='section-title'>🔔 최근 생산 활동 로그</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>🔔 최근 생산 활동 실시간 원장</div>", unsafe_allow_html=True)
     st.dataframe(db.sort_values('시간', ascending=False).head(15), use_container_width=True, hide_index=True)
 
-# --- 7-1. 조립 라인 ---
+# --- 7-1. 조립 라인 현황 ---
 elif curr_l == "조립 라인":
     st.markdown(f"<h2 class='centered-title'>📦 {curr_g} 조립 생산 현황</h2>", unsafe_allow_html=True)
     stations = ["전체 CELL", "CELL 1", "CELL 2", "CELL 3", "CELL 4", "CELL 5", "CELL 6"]
@@ -273,17 +278,17 @@ elif curr_l == "조립 라인":
     
     if st.session_state.selected_cell != "전체 CELL":
         with st.container(border=True):
-            st.markdown(f"#### ➕ {st.session_state.selected_cell} 생산 등록")
+            st.markdown(f"#### ➕ {st.session_state.selected_cell} 신규 생산 입고")
             g_mods = st.session_state.group_master_models.get(curr_g, [])
-            t_mod = st.selectbox("투입 모델", ["선택하세요."] + g_mods)
+            t_mod = st.selectbox("생산 투입 모델", ["선택하세요."] + g_mods)
             with st.form("assy_form"):
                 f1, f2 = st.columns(2)
                 g_its = st.session_state.group_master_items.get(curr_g, {}).get(t_mod, [])
-                t_item = f1.selectbox("품목 코드", g_its if t_mod!="선택하세요." else ["대기"])
-                t_sn = f2.text_input("S/N 입력")
-                if st.form_submit_button("▶️ 생산 시작", use_container_width=True, type="primary"):
+                t_item = f1.selectbox("세부 품목 코드", g_its if t_mod!="선택하세요." else ["대기"])
+                t_sn = f2.text_input("S/N 시리얼 번호 입력")
+                if st.form_submit_button("▶️ 생산 등록 시작", use_container_width=True, type="primary"):
                     if t_mod != "선택하세요." and t_sn:
-                        if t_sn in db['시리얼'].values: st.error("이미 등록된 시리얼입니다.")
+                        if t_sn in db['시리얼'].values: st.error("❌ 중복된 시리얼 번호입니다.")
                         else:
                             new_row = {'시간': get_now_kst_str(), '반': curr_g, '라인': "조립 라인", 'CELL': st.session_state.selected_cell,
                                        '모델': t_mod, '품목코드': t_item, '시리얼': t_sn, '상태': '진행 중', '작업자': st.session_state.user_id}
@@ -302,23 +307,23 @@ elif curr_l == "조립 라인":
             with r[5]:
                 if row['상태'] in ["진행 중", "수리 완료(재투입)"]:
                     b1, b2 = st.columns(2)
-                    if b1.button("완료", key=f"ok_{idx}"): db.at[idx, '상태'] = "완료"; push_to_cloud(db); st.rerun()
+                    if b1.button("조립 완료", key=f"ok_{idx}"): db.at[idx, '상태'] = "완료"; push_to_cloud(db); st.rerun()
                     if b2.button("🚫불량", key=f"ng_{idx}"): db.at[idx, '상태'] = "불량 처리 중"; push_to_cloud(db); st.rerun()
                 else: st.write(f"✅ {row['상태']}")
 
-# --- 7-2. 검사 / 포장 라인 ---
+# --- 7-2. 검사 / 포장 라인 현황 ---
 elif curr_l in ["검사 라인", "포장 라인"]:
-    st.markdown(f"<h2 class='centered-title'>🔍 {curr_g} {curr_l}</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 class='centered-title'>🔍 {curr_g} {curr_l} 현황</h2>", unsafe_allow_html=True)
     prev = "조립 라인" if curr_l == "검사 라인" else "검사 라인"
     with st.container(border=True):
-        st.markdown(f"#### 📥 입고 대기 ({prev} 완료 물량)")
+        st.markdown(f"#### 📥 입고 대기 목록 ({prev} 완료 물량)")
         wait_df = db[(db['반'] == curr_g) & (db['라인'] == prev) & (db['상태'] == "완료")]
         if not wait_df.empty:
             w_cols = st.columns(4)
             for i, (idx, row) in enumerate(wait_df.iterrows()):
-                if w_cols[i%4].button(f"승인: {row['시리얼']}", key=f"in_{idx}"):
+                if w_cols[i%4].button(f"입고: {row['시리얼']}", key=f"in_{idx}"):
                     st.session_state.confirm_target = row['시리얼']; trigger_entry_dialog()
-        else: st.info("대기 없음")
+        else: st.info("대기 물량이 없습니다.")
     
     st.divider()
     f_df = db[(db['반'] == curr_g) & (db['라인'] == curr_l)]
@@ -331,87 +336,90 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             with r[5]:
                 if row['상태'] in ["진행 중", "수리 완료(재투입)"]:
                     c1, c2 = st.columns(2)
-                    btn = "합격" if curr_l == "검사 라인" else "포장"
-                    if c1.button(btn, key=f"ok_{idx}"): db.at[idx, '상태'] = "완료"; push_to_cloud(db); st.rerun()
+                    btn_t = "합격" if curr_l == "검사 라인" else "완료"
+                    if c1.button(btn_t, key=f"ok_{idx}"): db.at[idx, '상태'] = "완료"; push_to_cloud(db); st.rerun()
                     if c2.button("🚫불량", key=f"ng_{idx}"): db.at[idx, '상태'] = "불량 처리 중"; push_to_cloud(db); st.rerun()
                 else: st.write(f"✅ {row['상태']}")
 
-# --- 7-3. 통합 리포트 ---
+# --- 7-3. 실시간 리포트 ---
 elif curr_l == "리포트":
-    st.markdown("<h2 class='centered-title'>📊 실시간 리포트</h2>", unsafe_allow_html=True)
-    v_g = st.radio("조회 반", ["전체"] + PRODUCTION_GROUPS, horizontal=True)
-    df = db if v_g == "전체" else db[db['반'] == v_g]
-    if not df.empty:
+    st.markdown("<h2 class='centered-title'>📊 생산 분석 리포트</h2>", unsafe_allow_html=True)
+    vg = st.radio("조회 범위", ["전체"] + PRODUCTION_GROUPS, horizontal=True)
+    df_v = db if vg == "전체" else db[db['반'] == vg]
+    if not df_v.empty:
         cl, cr = st.columns([1.8, 1.2])
         with cl:
-            st.plotly_chart(px.bar(df.groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', title="공정 현황"), use_container_width=True)
+            st.plotly_chart(px.bar(df_v.groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', title="공정 현황"), use_container_width=True)
         with cr:
-            st.plotly_chart(px.pie(df.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.4, title="모델 비중"), use_container_width=True)
-        st.dataframe(df.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
+            st.plotly_chart(px.pie(df_v.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.4, title="모델 비중"), use_container_width=True)
+        st.dataframe(df_v.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
 
-# --- 7-4. 불량 및 수리 센터 ---
+# --- 7-4. 불량 및 수리 조치 (f-string 에러 수정) ---
 elif curr_l == "불량 공정":
-    st.markdown("<h2 class='centered-title'>🛠️ {curr_g} 수리 센터</h2>", unsafe_allow_html=True)
-    wait = db[(db['반'] == curr_g) & (db['상태'] == "불량 처리 중")]
-    if wait.empty: st.success("이슈 없음")
+    # [수정] f-string 문법 적용하여 🛠️ 제조2반 수리 센터 와 같이 출력되도록 함
+    st.markdown(f"<h2 class='centered-title'>🛠️ {curr_g} 불량 수리 센터</h2>", unsafe_allow_html=True)
+    wait_b = db[(db['반'] == curr_g) & (db['상태'] == "불량 처리 중")]
+    if wait_b.empty: st.success("품질 이슈가 없습니다.")
     else:
-        for idx, row in wait.iterrows():
+        for idx, row in wait_b.iterrows():
             with st.container(border=True):
-                st.write(f"**S/N: {row['시리얼']}**")
+                st.write(f"**분석 대상 S/N: {row['시리얼']}** (모델: {row['모델']})")
                 r1, r2 = st.columns(2)
-                vc = r1.text_input("원인", key=f"c_{idx}")
-                va = r2.text_input("조치", key=f"a_{idx}")
-                img = st.file_uploader("사진", key=f"i_{idx}")
-                if st.button("수리 확정", key=f"b_{idx}", type="primary"):
-                    if vc and va:
-                        u = ""
-                        if img: u = f" [사진: {upload_img_to_drive(img, row['시리얼'])}]"
+                v_c = r1.text_input("불량 원인 판정", key=f"c_{idx}")
+                v_a = r2.text_input("수리 조치 내역", key=f"a_{idx}")
+                c_f, c_b = st.columns([3, 1])
+                img_f = c_f.file_uploader("증빙 사진 업로드", key=f"i_{idx}")
+                c_b.markdown("<div class='button-spacer'></div>", unsafe_allow_html=True)
+                if c_b.button("수리 확정", key=f"b_{idx}", type="primary"):
+                    if v_c and v_a:
+                        u_url = ""
+                        if img_f: u_url = f" [사진: {upload_img_to_drive(img_f, row['시리얼'])}]"
                         db.at[idx, '상태'] = "수리 완료(재투입)"
-                        db.at[idx, '증상'], db.at[idx, '수리'] = vc, va + u
+                        db.at[idx, '증상'], db.at[idx, '수리'] = v_c, v_a + u_url
                         push_to_cloud(db); st.rerun()
 
 # --- 7-5. 수리 이력 리포트 ---
 elif curr_l == "수리 리포트":
-    st.markdown("<h2 class='centered-title'>📈 수리 이력</h2>", unsafe_allow_html=True)
-    hist = db[db['수리'] != ""]
-    if not hist.empty:
-        st.dataframe(hist, use_container_width=True, hide_index=True)
-    else: st.info("내역 없음")
+    st.markdown("<h2 class='centered-title'>📈 공정 수리 이력 로그</h2>", unsafe_allow_html=True)
+    h_df = db[db['수리'] != ""]
+    if not h_df.empty:
+        st.dataframe(h_df, use_container_width=True, hide_index=True)
+    else: st.info("수리 이력이 존재하지 않습니다.")
 
 # --- 7-6. 마스터 데이터 관리 ---
 elif curr_l == "마스터 관리":
-    st.markdown("<h2 class='centered-title'>🔐 마스터 관리</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='centered-title'>🔐 시스템 마스터 설정</h2>", unsafe_allow_html=True)
     if not st.session_state.admin_authenticated:
-        with st.form("auth"):
-            pw = st.text_input("PW", type="password")
-            if st.form_submit_button("인증"):
-                if pw in ["admin1234", "master1234"]: st.session_state.admin_authenticated = True; st.rerun()
+        with st.form("admin_auth"):
+            pw_in = st.text_input("관리자 비밀번호", type="password")
+            if st.form_submit_button("권한 승인"):
+                if pw_in in ["admin1234", "master1234"]: st.session_state.admin_authenticated = True; st.rerun()
     else:
         t1, t2, t3 = st.tabs(PRODUCTION_GROUPS)
-        for i, g in enumerate(PRODUCTION_GROUPS):
+        for i, g_nm in enumerate(PRODUCTION_GROUPS):
             with t1 if i==0 else t2 if i==1 else t3:
                 c1, c2 = st.columns(2)
                 with c1:
-                    nm = st.text_input(f"{g} 모델명", key=f"nm_{g}")
-                    if st.button(f"{g} 모델 저장", key=f"nb_{g}"):
-                        if nm and nm not in st.session_state.group_master_models[g]:
-                            st.session_state.group_master_models[g].append(nm)
-                            st.session_state.group_master_items[g][nm] = []; st.rerun()
+                    new_m = st.text_input(f"{g_nm} 신규 모델명", key=f"nm_{g_nm}")
+                    if st.button(f"{g_nm} 모델 등록", key=f"nb_{g_nm}"):
+                        if new_m and new_m not in st.session_state.group_master_models[g_nm]:
+                            st.session_state.group_master_models[g_nm].append(new_m)
+                            st.session_state.group_master_items[g_nm][new_m] = []; st.rerun()
                 with c2:
-                    g_mods = st.session_state.group_master_models.get(g, [])
-                    sm = st.selectbox(f"{g} 모델 선택", g_mods, key=f"sm_{g}")
-                    ni = st.text_input(f"[{sm}] 품목코드", key=f"ni_{g}")
-                    if st.button(f"{g} 품목 저장", key=f"ib_{g}"):
-                        if ni and ni not in st.session_state.group_master_items[g][sm]:
-                            st.session_state.group_master_items[g][sm].append(ni); st.rerun()
-                st.json(st.session_state.group_master_items.get(g, {}))
+                    m_list = st.session_state.group_master_models.get(g_nm, [])
+                    s_m = st.selectbox(f"{g_nm} 모델 선택", m_list, key=f"sm_{g_nm}")
+                    new_i = st.text_input(f"[{s_m}] 신규 품목코드", key=f"ni_{g_nm}")
+                    if st.button(f"{g_nm} 품목 저장", key=f"ib_{g_nm}"):
+                        if new_i and new_i not in st.session_state.group_master_items[g_nm][s_m]:
+                            st.session_state.group_master_items[g_nm][s_m].append(new_i); st.rerun()
+                st.json(st.session_state.group_master_items.get(g_nm, {}))
         
         st.divider()
-        st.download_button("📥 실적 다운로드", db.to_csv(index=False).encode('utf-8-sig'), "Backup.csv", use_container_width=True)
-        if st.button("⚠️ 초기화"):
+        st.download_button("📥 전체 실적 CSV 백업", db.to_csv(index=False).encode('utf-8-sig'), "Backup.csv", use_container_width=True)
+        if st.button("⚠️ 시스템 전체 데이터 초기화"):
             st.session_state.production_db = pd.DataFrame(columns=['시간','반','라인','CELL','모델','품목코드','시리얼','상태','증상','수리','작업자'])
             push_to_cloud(st.session_state.production_db); st.rerun()
 
 # =================================================================
-# [ PMS v21.0 FULL VERSION END ]
+# [ PMS v21.1 최종 검수본 종료 ]
 # =================================================================
