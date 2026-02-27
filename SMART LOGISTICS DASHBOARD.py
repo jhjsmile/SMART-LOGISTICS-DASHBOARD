@@ -16,7 +16,7 @@ from googleapiclient.http import MediaIoBaseUpload
 # 1. 시스템 전역 설정 및 디자인 (v17.8 원본 100% 유지)
 # =================================================================
 st.set_page_config(
-    page_title="생산 통합 관리 시스템 v19.0",
+    page_title="생산 통합 관리 시스템 v19.1",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -27,7 +27,7 @@ KST = timezone(timedelta(hours=9))
 # 30초마다 자동으로 전체 화면을 새로고침합니다.
 st_autorefresh(interval=30000, key="pms_auto_refresh")
 
-# 제조 반 리스트 정의
+# [검수 포인트] 제조 반 리스트 정의
 PRODUCTION_GROUPS = ["제조 1반", "제조 2반", "제조 3반"]
 
 # 사용자 그룹별 메뉴 접근 권한 정의 (master 계정 권한 풀림 방지)
@@ -89,14 +89,14 @@ def load_realtime_ledger():
         df = gs_conn.read(ttl=0).fillna("")
         if '시리얼' in df.columns:
             df['시리얼'] = df['시리얼'].astype(str).str.replace(r'\.0$', '', regex=True)
-        # 반 컬럼 이관 및 보정 로직
-        if '반' not in df.columns:
-            if not df.empty:
-                df.insert(1, '반', "제조 2반")
-            else:
-                df.insert(1, '반', "")
+        
+        # [V19.1 검수] 데이터 표준화 (공백 제거하여 '제조2반'과 '제조 2반' 일치)
+        if '반' in df.columns:
+            df['반'] = df['반'].str.replace(" ", "") # 공백 제거
+            df['반'] = df['반'].apply(lambda x: "제조2반" if x == "" else x)
         else:
-            df['반'] = df['반'].apply(lambda x: "제조 2반" if x == "" else x)
+            df.insert(1, '반', "제조2반")
+            
         return df
     except Exception as e:
         return pd.DataFrame(columns=['시간', '반', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리', '작업자'])
@@ -134,28 +134,28 @@ if 'user_db' not in st.session_state:
         "master": {"pw": "master1234", "role": "master"}
     }
 
-# 반별 독립 마스터 데이터 (초기값 설정)
+# 반별 독립 마스터 데이터 (초기값 설정 - CSV 모델 포함)
 if 'group_master_models' not in st.session_state:
     st.session_state.group_master_models = {
-        "제조 1반": ["NEW-101", "NEW-102"],
-        "제조 2반": ["EPS7150", "EPS7133", "T20i", "T20C"],
-        "제조 3반": ["AION-X", "AION-Z"]
+        "제조1반": ["EPS100", "EPS200"],
+        "제조2반": ["EPS7150", "EPS7133", "T20i", "T20C"],
+        "제조3반": ["AION-X", "AION-Z"]
     }
 
 if 'group_master_items' not in st.session_state:
     st.session_state.group_master_items = {
-        "제조 1반": {"NEW-101": ["101-A"], "NEW-102": ["102-A"]},
-        "제조 2반": {
+        "제조1반": {"EPS100": ["100-A"], "EPS200": ["200-A"]},
+        "제조2반": {
             "EPS7150": ["7150-A", "7150-B"], "EPS7133": ["7133-S", "7133-Standard"],
             "T20i": ["T20i-P", "T20i-Premium"], "T20C": ["T20C-S", "T20C-Standard"]
         },
-        "제조 3반": {"AION-X": ["AX-PRO"], "AION-Z": ["AZ-ULTRA"]}
+        "제조3반": {"AION-X": ["AX-PRO"], "AION-Z": ["AZ-ULTRA"]}
     }
 
 if 'login_status' not in st.session_state: st.session_state.login_status = False
 if 'user_role' not in st.session_state: st.session_state.user_role = None
 if 'admin_authenticated' not in st.session_state: st.session_state.admin_authenticated = False
-if 'selected_group' not in st.session_state: st.session_state.selected_group = "제조 2반"
+if 'selected_group' not in st.session_state: st.session_state.selected_group = "제조2반"
 if 'current_line' not in st.session_state: st.session_state.current_line = "조립 라인"
 if 'selected_cell' not in st.session_state: st.session_state.selected_cell = "CELL 1"
 
@@ -192,8 +192,9 @@ if st.sidebar.button("🚪 로그아웃", use_container_width=True):
 st.sidebar.divider()
 allowed_nav = ROLES.get(st.session_state.user_role, [])
 
-# 제조 반별 메뉴 그룹
-for group in PRODUCTION_GROUPS:
+# 제조 반별 메뉴 그룹 (정규화된 반 명칭 사용)
+NAV_GROUPS = ["제조1반", "제조2반", "제조3반"]
+for group in NAV_GROUPS:
     exp = (st.session_state.selected_group == group and st.session_state.current_line in ["조립 라인", "검사 라인", "포장 라인"])
     with st.sidebar.expander(f"📍 {group}", expanded=exp):
         for p in ["조립 라인", "검사 라인", "포장 라인"]:
@@ -274,7 +275,7 @@ if curr_l == "조립 라인":
                             st.session_state.production_db = pd.concat([db, pd.DataFrame([new_row])], ignore_index=True)
                             push_to_cloud(st.session_state.production_db); st.rerun()
 
-    # 원장 뷰어 (v17.8 레이아웃)
+    # 원장 뷰어
     st.divider()
     db_v = st.session_state.production_db
     f_df = db_v[(db_v['반'] == curr_g) & (db_v['라인'] == "조립 라인")]
@@ -325,10 +326,10 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     if c2.button("🚫불량", key=f"ng_{idx}"): db_s.at[idx, '상태'] = "불량 처리 중"; push_to_cloud(db_s); st.rerun()
                 else: st.write(f"✅ {row['상태']}")
 
-# --- 7-3. 통합 리포트 페이지 ---
+# --- 7-3. 통합 리포트 페이지 (그래프 복구) ---
 elif curr_l == "리포트":
     st.markdown("<h2 class='centered-title'>📊 생산 운영 통합 모니터링</h2>", unsafe_allow_html=True)
-    v_group = st.radio("조회 범위", ["전체"] + PRODUCTION_GROUPS, horizontal=True)
+    v_group = st.radio("조회 범위", ["전체"] + NAV_GROUPS, horizontal=True)
     df = st.session_state.production_db
     if v_group != "전체": df = df[df['반'] == v_group]
     
@@ -342,11 +343,11 @@ elif curr_l == "리포트":
         st.divider()
         cl, cr = st.columns([1.8, 1.2])
         with cl:
-            fig_b = px.bar(df.groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', title="공정별 분포", template="plotly_white")
+            fig_b = px.bar(df.groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', color='라인', title="<b>[공정 단계별 제품 분포 현황]</b>", template="plotly_white")
             fig_b.update_yaxes(dtick=1)
             st.plotly_chart(fig_b, use_container_width=True)
         with cr:
-            fig_p = px.pie(df.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.5, title="모델 비중")
+            fig_p = px.pie(df.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.5, title="<b>[생산 모델별 비중]</b>")
             st.plotly_chart(fig_p, use_container_width=True)
         st.dataframe(df.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
 
@@ -380,19 +381,35 @@ elif curr_l == "불량 공정":
                         db.at[idx, '증상'], db.at[idx, '수리'] = v_c, v_a + u
                         push_to_cloud(db); st.rerun()
 
-# --- 7-5. 마스터 관리 (반별 독립 모델 설정 완전판) ---
+# --- 7-5. 수리 이력 리포트 (V19.1 복구 섹션) ---
+elif curr_l == "수리 리포트":
+    st.markdown("<h2 class='centered-title'>📈 품질 분석 및 수리 이력 리포트</h2>", unsafe_allow_html=True)
+    db_hist = st.session_state.production_db
+    hist_df = db_hist[db_hist['수리'] != ""]
+    if not hist_df.empty:
+        c_l, c_r = st.columns([1.8, 1.2])
+        with c_l:
+            fig_hb = px.bar(hist_df.groupby('라인').size().reset_index(name='수량'), x='라인', y='수량', title="공정별 이슈 빈도")
+            st.plotly_chart(fig_hb, use_container_width=True)
+        with c_r:
+            fig_hp = px.pie(hist_df.groupby('모델').size().reset_index(name='수량'), values='수량', names='모델', hole=0.4, title="모델별 불량 비중")
+            st.plotly_chart(fig_hp, use_container_width=True)
+        st.dataframe(hist_df, use_container_width=True, hide_index=True)
+    else: st.info("기록된 이슈 내역이 없습니다.")
+
+# --- 7-6. 마스터 관리 (반별 독립 모델 설정 완전판) ---
 elif curr_l == "마스터 관리":
     st.markdown("<h2 class='centered-title'>🔐 시스템 마스터 데이터 관리</h2>", unsafe_allow_html=True)
     if not st.session_state.admin_authenticated:
         with st.form("admin_verify"):
-            pw = st.text_input("비밀번호", type="password")
+            pw = st.text_input("마스터 비밀번호", type="password")
             if st.form_submit_button("인증"):
                 if pw in ["admin1234", "master1234"]: st.session_state.admin_authenticated = True; st.rerun()
                 else: st.error("거부됨")
     else:
         st.markdown("<div class='section-title'>📋 반별 독립 모델/품목 설정</div>", unsafe_allow_html=True)
-        tabs = st.tabs(["제조 1반 설정", "제조 2반 설정", "제조 3반 설정"])
-        for i, g_name in enumerate(PRODUCTION_GROUPS):
+        tabs = st.tabs(["제조1반 설정", "제조2반 설정", "제조3반 설정"])
+        for i, g_name in enumerate(NAV_GROUPS):
             with tabs[i]:
                 c1, c2 = st.columns(2)
                 with c1:
@@ -406,23 +423,29 @@ elif curr_l == "마스터 관리":
                 with c2:
                     with st.container(border=True):
                         st.subheader("세부 품목")
-                        sm = st.selectbox("모델 선택", st.session_state.group_master_models[g_name], key=f"sm_{g_name}")
-                        ni = st.text_input(f"{sm} 품목코드", key=f"ni_{g_name}")
+                        sm = st.selectbox(f"{g_name} 모델 선택", st.session_state.group_master_models[g_name], key=f"sm_{g_name}")
+                        ni = st.text_input(f"[{sm}] 품목코드", key=f"ni_{g_name}")
                         if st.button(f"{g_name} 품목 저장", key=f"ib_{g_name}"):
                             if ni and ni not in st.session_state.group_master_items[g_name][sm]:
                                 st.session_state.group_master_items[g_name][sm].append(ni); st.rerun()
                 st.json(st.session_state.group_master_items[g_name])
         
         st.divider()
-        st.subheader("데이터 백업 및 초기화")
-        c_csv, c_mig = st.columns(2)
-        with c_csv:
+        st.subheader("계정 및 데이터 관리")
+        ac1, ac2 = st.columns(2)
+        with ac1:
+            with st.form("user_mgmt"):
+                st.write("**사용자 계정 생성/업데이트**")
+                nu, np, nr = st.text_input("ID"), st.text_input("PW", type="password"), st.selectbox("Role", ["admin", "master", "assembly_team", "qc_team", "packing_team"])
+                if st.form_submit_button("사용자 저장"):
+                    st.session_state.user_db[nu] = {"pw": np, "role": nr}; st.success(f"{nu} 저장됨")
+        with ac2:
+            st.write("**시스템 데이터 관리**")
             csv = st.session_state.production_db.to_csv(index=False).encode('utf-8-sig')
             st.download_button("📥 CSV 다운로드", csv, "PMS_Backup.csv", use_container_width=True)
-        with c_mig:
-            f = st.file_uploader("복구용 CSV", type="csv")
-            if f and st.button("📤 로드"):
-                imp = pd.read_csv(f)
+            f_imp = st.file_uploader("데이터 로드", type="csv")
+            if f_imp and st.button("📤 로드 시작"):
+                imp = pd.read_csv(f_imp)
                 st.session_state.production_db = pd.concat([st.session_state.production_db, imp], ignore_index=True).drop_duplicates(subset=['시리얼'], keep='last')
                 push_to_cloud(st.session_state.production_db); st.rerun()
         if st.button("⚠️ 전체 데이터 초기화", type="secondary"):
@@ -430,5 +453,5 @@ elif curr_l == "마스터 관리":
             push_to_cloud(st.session_state.production_db); st.rerun()
 
 # =================================================================
-# [ PMS v19.0 FULL VERSION END ]
+# [ PMS v19.1 최종 검수본 종료 ]
 # =================================================================
