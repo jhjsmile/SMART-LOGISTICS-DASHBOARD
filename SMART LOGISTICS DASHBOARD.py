@@ -64,8 +64,8 @@ st.markdown("""
         border: 1px solid #e9ecef; margin-bottom: 15px; min-height: 130px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.02);
     }
-    .stat-label { font-size: 0.9rem; color: #6c757d; font-weight: bold; margin-bottom: 8px; }
-    .stat-value { font-size: 2.4rem; color: #007bff; font-weight: bold; line-height: 1; }
+    .stat-label { font-size: clamp(0.6rem, 1.2vw, 0.9rem); color: #6c757d; font-weight: bold; margin-bottom: 8px; }
+    .stat-value { font-size: clamp(1rem, 2vw, 2.4rem); color: #007bff; font-weight: bold; line-height: 1; }
     .button-spacer { margin-top: 28px; }
     .status-red { color: #fa5252; font-weight: bold; }
     .status-green { color: #40c057; font-weight: bold; }
@@ -841,6 +841,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
