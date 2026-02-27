@@ -105,9 +105,8 @@ def verify_pw(plain: str, hashed: str) -> bool:
 def get_master_pw_hash() -> str | None:
     try:
         return st.secrets["master_admin_pw_hash"]
-    except Exception:
-        # secrets 읽기 실패 시 직접 해시값 사용
-        return "2f4ff906544400016f18e4eaad872b2849a5d488e7f0ace2225144497db601e3"
+    except (KeyError, AttributeError):
+        return None
 
 # =================================================================
 # 3. 핵심 유틸리티 함수
@@ -745,4 +744,5 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
