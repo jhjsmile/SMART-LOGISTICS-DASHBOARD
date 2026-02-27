@@ -286,21 +286,24 @@ role_label = ROLE_LABELS.get(st.session_state.user_role, st.session_state.user_r
 st.sidebar.markdown(f"**{role_label}**")
 st.sidebar.caption(f"ID: {st.session_state.user_id}")
 
-if st.sidebar.button("🚪 로그아웃", use_container_width=True):
-    for key in ['login_status', 'user_role', 'user_id', 'admin_authenticated']:
-        st.session_state[key] = False if key == 'login_status' else None
-    st.rerun()
-
 st.sidebar.divider()
 allowed_nav = ROLES.get(st.session_state.user_role, [])
 
-# ─────────────────────────────────────────────
-# [개선 1 적용] NAV_GROUPS 제거, PRODUCTION_GROUPS 단일 사용
-# ─────────────────────────────────────────────
+# 메인 현황판 (최상단)
+if st.sidebar.button(
+    "🏠 메인 현황판", use_container_width=True,
+    type="primary" if st.session_state.current_line == "현황판" else "secondary"
+):
+    st.session_state.current_line = "현황판"
+    st.rerun()
+
+st.sidebar.divider()
+
+# 반별 메뉴
 for group in PRODUCTION_GROUPS:
     exp = (
         st.session_state.selected_group == group
-        and st.session_state.current_line in ["조립 라인", "검사 라인", "포장 라인"]
+        and st.session_state.current_line in ["조립 라인", "검사 라인", "포장 라인", "불량 공정"]
     )
     with st.sidebar.expander(f"📍 {group}", expanded=exp):
         for p in ["조립 라인", "검사 라인", "포장 라인"]:
@@ -314,15 +317,21 @@ for group in PRODUCTION_GROUPS:
                     st.session_state.selected_group = group
                     st.session_state.current_line   = p
                     st.rerun()
+        # 불량 공정 (제조3반 하단 - 마지막 반에만 표시)
+        if group == PRODUCTION_GROUPS[-1] and "불량 공정" in allowed_nav:
+            st.sidebar.divider()
+            if st.button(
+                "🚫 불량 공정", key=f"nav_defect",
+                use_container_width=True,
+                type="primary" if st.session_state.current_line == "불량 공정" else "secondary"
+            ):
+                st.session_state.current_line = "불량 공정"
+                st.rerun()
 
-if st.sidebar.button(
-    "🏠 메인 현황판", use_container_width=True,
-    type="primary" if st.session_state.current_line == "현황판" else "secondary"
-):
-    st.session_state.current_line = "현황판"
-    st.rerun()
 st.sidebar.divider()
-for p in ["생산 현황 리포트", "불량 공정", "수리 현황 리포트"]:
+
+# 리포트 메뉴
+for p in ["생산 현황 리포트", "수리 현황 리포트"]:
     if p in allowed_nav:
         if st.sidebar.button(
             p, key=f"fnav_{p}", use_container_width=True,
@@ -331,6 +340,7 @@ for p in ["생산 현황 리포트", "불량 공정", "수리 현황 리포트"]
             st.session_state.current_line = p
             st.rerun()
 
+# 마스터 관리 + 로그아웃 (최하단)
 if "마스터 관리" in allowed_nav:
     st.sidebar.divider()
     if st.sidebar.button(
@@ -339,6 +349,12 @@ if "마스터 관리" in allowed_nav:
     ):
         st.session_state.current_line = "마스터 관리"
         st.rerun()
+
+st.sidebar.divider()
+if st.sidebar.button("🚪 로그아웃", use_container_width=True):
+    for key in ['login_status', 'user_role', 'user_id', 'admin_authenticated']:
+        st.session_state[key] = False if key == 'login_status' else None
+    st.rerun()
 
 # =================================================================
 # 7. 공용 다이얼로그 컴포넌트
@@ -827,6 +843,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
