@@ -872,12 +872,20 @@ elif curr_l == "마스터 관리":
             empty_df = pd.DataFrame(
                 columns=['시간', '반', '라인', 'CELL', '모델', '품목코드', '시리얼', '상태', '증상', '수리', '작업자']
             )
-            push_to_cloud(empty_df)
-            st.rerun()
+            try:
+                # 병합 없이 직접 덮어쓰기
+                gs_conn.update(data=empty_df)
+                st.cache_data.clear()
+                st.session_state.production_db = empty_df
+                st.success("전체 데이터가 초기화되었습니다.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"초기화 실패: {e}")
 
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
