@@ -1,11 +1,8 @@
 streamlit>=1.31.0
 pandas
 plotly
-st-gsheets-connection
 google-api-python-client
 google-auth
 streamlit-autorefresh
-sqlalchemy
-psycopg2-binary
 supabase
 openpyxl
