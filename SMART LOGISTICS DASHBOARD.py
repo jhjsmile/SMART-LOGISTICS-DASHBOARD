@@ -103,12 +103,11 @@ def verify_pw(plain: str, hashed: str) -> bool:
 # ─────────────────────────────────────────────
 def get_master_pw_hash() -> str | None:
     try:
-        # 방법 1: 직접 키 접근
-        return st.secrets["master_admin_pw_hash"]
+        # connections.gsheets 안에서 읽기 시도
+        return st.secrets["connections"]["gsheets"]["master_admin_pw_hash"]
     except Exception:
         try:
-            # 방법 2: get 방식으로 접근
-            return st.secrets.get("master_admin_pw_hash", None)
+            return st.secrets["master_admin_pw_hash"]
         except Exception:
             return None
 
@@ -751,6 +750,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
