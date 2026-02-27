@@ -137,21 +137,20 @@ if 'user_db' not in st.session_state:
 # 반별 독립 마스터 데이터 (초기값 설정 - CSV 모델 포함)
 if 'group_master_models' not in st.session_state:
     st.session_state.group_master_models = {
-        "제조1반": ["EPS100", "EPS200"],
+        "제조1반": ["NEW-101", "NEW-102"],  # 공백 제거
         "제조2반": ["EPS7150", "EPS7133", "T20i", "T20C"],
         "제조3반": ["AION-X", "AION-Z"]
     }
 
 if 'group_master_items' not in st.session_state:
     st.session_state.group_master_items = {
-        "제조1반": {"EPS100": ["100-A"], "EPS200": ["200-A"]},
+        "제조1반": {"NEW-101": ["101-A"], "NEW-102": ["102-A"]},
         "제조2반": {
             "EPS7150": ["7150-A", "7150-B"], "EPS7133": ["7133-S", "7133-Standard"],
             "T20i": ["T20i-P", "T20i-Premium"], "T20C": ["T20C-S", "T20C-Standard"]
         },
         "제조3반": {"AION-X": ["AX-PRO"], "AION-Z": ["AZ-ULTRA"]}
     }
-
 if 'login_status' not in st.session_state: st.session_state.login_status = False
 if 'user_role' not in st.session_state: st.session_state.user_role = None
 if 'admin_authenticated' not in st.session_state: st.session_state.admin_authenticated = False
@@ -423,12 +422,18 @@ elif curr_l == "마스터 관리":
                 with c2:
                     with st.container(border=True):
                         st.subheader("세부 품목")
-                        sm = st.selectbox(f"{g_name} 모델 선택", st.session_state.group_master_models[g_name], key=f"sm_{g_name}")
-                        ni = st.text_input(f"[{sm}] 품목코드", key=f"ni_{g_name}")
-                        if st.button(f"{g_name} 품목 저장", key=f"ib_{g_name}"):
-                            if ni and ni not in st.session_state.group_master_items[g_name][sm]:
-                                st.session_state.group_master_items[g_name][sm].append(ni); st.rerun()
-                st.json(st.session_state.group_master_items[g_name])
+                        # .get()을 사용하여 해당 반 이름이 없더라도 에러가 나지 않게 방어
+                        g_mods = st.session_state.group_master_models.get(g_name, [])
+        
+                        if g_mods:
+                            sm = st.selectbox(f"{g_name} 모델 선택", g_mods, key=f"sm_{g_name}")
+                            ni = st.text_input(f"[{sm}] 품목코드", key=f"ni_{g_name}")
+                            if st.button(f"{g_name} 품목 저장", key=f"ib_{g_name}"):
+                               if ni and ni not in st.session_state.group_master_items[g_name][sm]:
+                                   st.session_state.group_master_items[g_name][sm].append(ni)
+                                   st.rerun()
+                        else:
+                            st.warning("등록된 모델이 없습니다. 왼쪽에서 모델을 먼저 등록하세요.")
         
         st.divider()
         st.subheader("계정 및 데이터 관리")
@@ -455,3 +460,4 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v19.1 최종 검수본 종료 ]
 # =================================================================
+
