@@ -319,7 +319,6 @@ for group in PRODUCTION_GROUPS:
                     st.rerun()
         # 불량 공정 (제조3반 하단 - 마지막 반에만 표시)
         if group == PRODUCTION_GROUPS[-1] and "불량 공정" in allowed_nav:
-            st.sidebar.divider()
             if st.sidebar.button(
                 "🚫 불량 공정", key="nav_defect",
                 use_container_width=True,
@@ -843,6 +842,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
