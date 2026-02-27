@@ -499,44 +499,63 @@ if curr_l == "현황판":
 # ─────────────────────────────────────────────
 if curr_l == "조립 라인":
     st.markdown(f"<h2 class='centered-title'>📦 {curr_g} 신규 조립 현황</h2>", unsafe_allow_html=True)
+
     with st.container(border=True):
         st.markdown(f"#### ➕ {curr_g} 신규 생산 등록")
-            g_models = st.session_state.group_master_models.get(curr_g, [])
-            target_model = st.selectbox("투입 모델 선택", ["선택하세요."] + g_models)
-            with st.form("entry_gate_form"):
-                f_c1, f_c2 = st.columns(2)
-                g_items = st.session_state.group_master_items.get(curr_g, {}).get(target_model, [])
-                target_item = f_c1.selectbox(
-                    "품목 코드",
-                    g_items if target_model != "선택하세요." else ["모델 선택 대기"]
-                )
-                target_sn = f_c2.text_input("제품 시리얼(S/N) 입력")
-                if st.form_submit_button("▶️ 생산 시작 등록", use_container_width=True, type="primary"):
-                    if target_model != "선택하세요." and target_sn.strip():
-                        db = st.session_state.production_db
-                        if target_sn.strip() in db['시리얼'].values:
-                            st.error("이미 등록된 시리얼입니다.")
-                        else:
-                            new_row = {
-                                '시간':   get_now_kst_str(),
-                                '반':     curr_g,
-                                '라인':   "조립 라인",
-                                'CELL':   st.session_state.selected_cell,
-                                '모델':   target_model,
-                                '품목코드': target_item,
-                                '시리얼': target_sn.strip(),
-                                '상태':   '진행 중',
-                                '증상':   '',
-                                '수리':   '',
-                                '작업자': st.session_state.user_id
-                            }
-                            updated = pd.concat(
-                                [db, pd.DataFrame([new_row])], ignore_index=True
-                            )
-                            push_to_cloud(updated)
-                            st.rerun()
+        g_models = st.session_state.group_master_models.get(curr_g, [])
+        target_model = st.selectbox("투입 모델 선택", ["선택하세요."] + g_models)
+        with st.form("entry_gate_form"):
+            f_c1, f_c2 = st.columns(2)
+            g_items = st.session_state.group_master_items.get(curr_g, {}).get(target_model, [])
+            target_item = f_c1.selectbox(
+                "품목 코드",
+                g_items if target_model != "선택하세요." else ["모델 선택 대기"]
+            )
+            target_sn = f_c2.text_input("제품 시리얼(S/N) 입력")
+            if st.form_submit_button("▶️ 생산 시작 등록", use_container_width=True, type="primary"):
+                if target_model != "선택하세요." and target_sn.strip():
+                    db = st.session_state.production_db
+                    if target_sn.strip() in db['시리얼'].values:
+                        st.error("이미 등록된 시리얼입니다.")
                     else:
-                        st.warning("모델과 시리얼을 모두 입력해주세요.")
+                        new_row = {
+                            '시간': get_now_kst_str(), '반': curr_g, '라인': "조립 라인",
+                            'CELL': "", '모델': target_model, '품목코드': target_item,
+                            '시리얼': target_sn.strip(), '상태': '진행 중',
+                            '증상': '', '수리': '', '작업자': st.session_state.user_id
+                        }
+                        updated = pd.concat([db, pd.DataFrame([new_row])], ignore_index=True)
+                        push_to_cloud(updated)
+                        st.rerun()
+                else:
+                    st.warning("모델과 시리얼을 모두 입력해주세요.")
+
+    st.divider()
+    db_v = st.session_state.production_db
+    f_df = db_v[(db_v['반'] == curr_g) & (db_v['라인'] == "조립 라인")]
+
+    if not f_df.empty:
+        h = st.columns([2.2, 1.5, 1.5, 1.8, 4])
+        for col, txt in zip(h, ["기록 시간", "모델", "품목", "시리얼", "현장 제어"]):
+            col.write(f"**{txt}**")
+        for idx, row in f_df.sort_values('시간', ascending=False).iterrows():
+            r = st.columns([2.2, 1.5, 1.5, 1.8, 4])
+            r[0].write(row['시간'])
+            r[1].write(row['모델']); r[2].write(row['품목코드'])
+            r[3].write(f"`{row['시리얼']}`")
+            with r[4]:
+                if row['상태'] in ["진행 중", "수리 완료(재투입)"]:
+                    b1, b2 = st.columns(2)
+                    if b1.button("조립 완료", key=f"ok_{idx}"):
+                        db_v.at[idx, '상태'] = "완료"
+                        push_to_cloud(db_v); st.rerun()
+                    if b2.button("🚫불량", key=f"ng_{idx}"):
+                        db_v.at[idx, '상태'] = "불량 처리 중"
+                        push_to_cloud(db_v); st.rerun()
+                else:
+                    st.write(f"✅ {row['상태']}")
+    else:
+        st.info("등록된 생산 내역이 없습니다.")
 
     st.divider()
     db_v = st.session_state.production_db
@@ -850,6 +869,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
