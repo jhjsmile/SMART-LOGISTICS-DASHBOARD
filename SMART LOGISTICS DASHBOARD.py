@@ -11,8 +11,6 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-st.markdown("<h3 style='color:red;'>HTML 테스트</h3>", unsafe_allow_html=True)
-
 # =================================================================
 # 1. 시스템 전역 설정 및 디자인 (v20.0)
 # =================================================================
@@ -439,36 +437,36 @@ if curr_l == "현황판":
 
     # 반별 현황 카드
     st.markdown("<div class='section-title'>🏭 반별 생산 현황</div>", unsafe_allow_html=True)
-    cards_html = "<div style='display:flex; gap:12px; width:100%; box-sizing:border-box;'>"
+    cards_html = "<div style=\"display:flex; gap:12px; width:100%; box-sizing:border-box;\">"
     for g in PRODUCTION_GROUPS:
         gdf = db_all[db_all['반'] == g]
         완료 = len(gdf[(gdf['라인']=='포장 라인') & (gdf['상태']=='완료')])
         재공 = len(gdf[gdf['상태']=='진행 중'])
         불량 = len(gdf[gdf['상태'].str.contains('불량', na=False)])
         투입 = len(gdf)
-        cards_html += f"""
-        <div style='flex:1; background:#1e1e1e; border:1px solid #333; border-radius:14px; padding:16px; box-sizing:border-box; min-width:0;'>
-            <div style='font-size:clamp(0.9rem, 1.5vw, 1.1rem); font-weight:bold; margin-bottom:12px; color:#fff;'>📍 {g}</div>
-            <div style='background:#2a2a2a; border-radius:10px; padding:12px; text-align:center; margin-bottom:10px;'>
-                <div style='font-size:clamp(0.6rem, 1vw, 0.8rem); color:#aaa; font-weight:bold; margin-bottom:4px;'>총 투입</div>
-                <div style='font-size:clamp(1.2rem, 2.5vw, 2rem); color:#4dabf7; font-weight:bold;'>{투입} EA</div>
-            </div>
-            <div style='display:flex; gap:6px;'>
-                <div style='flex:1; background:#2a2a2a; border-radius:10px; padding:10px 4px; text-align:center; min-width:0;'>
-                    <div style='font-size:clamp(0.5rem, 0.9vw, 0.72rem); color:#aaa; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>✅ 완료</div>
-                    <div style='font-size:clamp(1rem, 2vw, 1.6rem); color:#40c057; font-weight:bold;'>{완료}</div>
-                </div>
-                <div style='flex:1; background:#2a2a2a; border-radius:10px; padding:10px 4px; text-align:center; min-width:0;'>
-                    <div style='font-size:clamp(0.5rem, 0.9vw, 0.72rem); color:#aaa; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>🏗️ 작업중</div>
-                    <div style='font-size:clamp(1rem, 2vw, 1.6rem); color:#4dabf7; font-weight:bold;'>{재공}</div>
-                </div>
-                <div style='flex:1; background:#2a2a2a; border-radius:10px; padding:10px 4px; text-align:center; min-width:0;'>
-                    <div style='font-size:clamp(0.5rem, 0.9vw, 0.72rem); color:#aaa; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>🚨 불량</div>
-                    <div style='font-size:clamp(1rem, 2vw, 1.6rem); color:#fa5252; font-weight:bold;'>{불량}</div>
-                </div>
-            </div>
-        </div>
-        """
+        cards_html += (
+            f"<div style=\"flex:1; background:#1e1e1e; border:1px solid #333; border-radius:14px; padding:16px; box-sizing:border-box; min-width:0;\">"
+            f"<div style=\"font-size:clamp(0.9rem, 1.5vw, 1.1rem); font-weight:bold; margin-bottom:12px; color:#fff;\">📍 {g}</div>"
+            f"<div style=\"background:#2a2a2a; border-radius:10px; padding:12px; text-align:center; margin-bottom:10px;\">"
+            f"<div style=\"font-size:clamp(0.6rem, 1vw, 0.8rem); color:#aaa; font-weight:bold; margin-bottom:4px;\">총 투입</div>"
+            f"<div style=\"font-size:clamp(1.2rem, 2.5vw, 2rem); color:#4dabf7; font-weight:bold;\">{투입} EA</div>"
+            f"</div>"
+            f"<div style=\"display:flex; gap:6px;\">"
+            f"<div style=\"flex:1; background:#2a2a2a; border-radius:10px; padding:10px 4px; text-align:center; min-width:0;\">"
+            f"<div style=\"font-size:clamp(0.5rem, 0.9vw, 0.72rem); color:#aaa; font-weight:bold; white-space:nowrap;\">✅ 완료</div>"
+            f"<div style=\"font-size:clamp(1rem, 2vw, 1.6rem); color:#40c057; font-weight:bold;\">{완료}</div>"
+            f"</div>"
+            f"<div style=\"flex:1; background:#2a2a2a; border-radius:10px; padding:10px 4px; text-align:center; min-width:0;\">"
+            f"<div style=\"font-size:clamp(0.5rem, 0.9vw, 0.72rem); color:#aaa; font-weight:bold; white-space:nowrap;\">🏗️ 작업중</div>"
+            f"<div style=\"font-size:clamp(1rem, 2vw, 1.6rem); color:#4dabf7; font-weight:bold;\">{재공}</div>"
+            f"</div>"
+            f"<div style=\"flex:1; background:#2a2a2a; border-radius:10px; padding:10px 4px; text-align:center; min-width:0;\">"
+            f"<div style=\"font-size:clamp(0.5rem, 0.9vw, 0.72rem); color:#aaa; font-weight:bold; white-space:nowrap;\">🚨 불량</div>"
+            f"<div style=\"font-size:clamp(1rem, 2vw, 1.6rem); color:#fa5252; font-weight:bold;\">{불량}</div>"
+            f"</div>"
+            f"</div>"
+            f"</div>"
+        )
     cards_html += "</div>"
     st.markdown(cards_html, unsafe_allow_html=True)
 
@@ -863,6 +861,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
