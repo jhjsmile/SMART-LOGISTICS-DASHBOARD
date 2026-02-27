@@ -45,7 +45,7 @@ ROLES = {
 
 st.markdown("""
     <style>
-    .stApp { max-width: 1200px; margin: 0 auto; }
+    .stApp { max-width: 1200px; margin: 0 auto; overflow-x: hidden; }
     .stButton button {
         display: flex; justify-content: center; align-items: center;
         margin-top: 1px; padding: 6px 10px; width: 100%; border-radius: 8px;
@@ -60,9 +60,11 @@ st.markdown("""
     }
     .stat-box {
         display: flex; flex-direction: column; justify-content: center; align-items: center;
-        background-color: #ffffff; border-radius: 12px; padding: 22px;
-        border: 1px solid #e9ecef; margin-bottom: 15px; min-height: 130px;
+        background-color: #ffffff; border-radius: 12px; padding: 16px 8px;
+        border: 1px solid #e9ecef; margin-bottom: 8px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        width: 100%; box-sizing: border-box;
+        overflow: hidden; word-break: keep-all;
     }
     .stat-label { font-size: clamp(0.6rem, 1.2vw, 0.9rem); color: #6c757d; font-weight: bold; margin-bottom: 8px; }
     .stat-value { font-size: clamp(1rem, 2vw, 2.4rem); color: #007bff; font-weight: bold; line-height: 1; }
@@ -856,6 +858,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
