@@ -240,7 +240,7 @@ if 'user_role'           not in st.session_state: st.session_state.user_role    
 if 'user_id'             not in st.session_state: st.session_state.user_id             = None
 if 'admin_authenticated' not in st.session_state: st.session_state.admin_authenticated = False
 if 'selected_group'      not in st.session_state: st.session_state.selected_group      = "제조2반"
-if 'current_line'        not in st.session_state: st.session_state.current_line        = "조립 라인"
+if 'current_line' not in st.session_state: st.session_state.current_line = "현황판"
 if 'selected_cell'       not in st.session_state: st.session_state.selected_cell       = "CELL 1"
 if 'confirm_target'      not in st.session_state: st.session_state.confirm_target      = None
 
@@ -315,6 +315,12 @@ for group in PRODUCTION_GROUPS:
                     st.session_state.current_line   = p
                     st.rerun()
 
+if st.sidebar.button(
+    "🏠 메인 현황판", use_container_width=True,
+    type="primary" if st.session_state.current_line == "현황판" else "secondary"
+):
+    st.session_state.current_line = "현황판"
+    st.rerun()
 st.sidebar.divider()
 for p in ["리포트", "불량 공정", "수리 리포트"]:
     if p in allowed_nav:
@@ -389,6 +395,70 @@ if st.session_state.get("confirm_target"):
 
 curr_g = st.session_state.selected_group
 curr_l = st.session_state.current_line
+
+# ─────────────────────────────────────────────
+# 8-0. 메인 현황판 (초기 진입 화면)
+# ─────────────────────────────────────────────
+if curr_l == "현황판":
+    st.markdown("<h2 class='centered-title'>🏭 생산 통합 현황판</h2>", unsafe_allow_html=True)
+    st.caption(f"🕐 마지막 업데이트: {get_now_kst_str()}")
+
+    db_all = st.session_state.production_db
+
+    # ── 전체 요약 카드
+    st.markdown("<div class='section-title'>📊 전체 반 생산 요약</div>", unsafe_allow_html=True)
+    col1, col2, col3, col4 = st.columns(4)
+    col1.markdown(f"""<div class='stat-box'><div class='stat-label'>📦 총 투입</div>
+        <div class='stat-value'>{len(db_all)}</div></div>""", unsafe_allow_html=True)
+    col2.markdown(f"""<div class='stat-box'><div class='stat-label'>✅ 최종 완료</div>
+        <div class='stat-value'>{len(db_all[(db_all['라인']=='포장 라인') & (db_all['상태']=='완료')])}</div></div>""", unsafe_allow_html=True)
+    col3.markdown(f"""<div class='stat-box'><div class='stat-label'>⚙️ 재공 중</div>
+        <div class='stat-value'>{len(db_all[db_all['상태']=='진행 중'])}</div></div>""", unsafe_allow_html=True)
+    col4.markdown(f"""<div class='stat-box'><div class='stat-label'>🚨 불량 이슈</div>
+        <div class='stat-value'>{len(db_all[db_all['상태'].str.contains('불량', na=False)])}</div></div>""", unsafe_allow_html=True)
+
+    st.divider()
+
+    # ── 반별 현황 카드
+    st.markdown("<div class='section-title'>🏭 반별 생산 현황</div>", unsafe_allow_html=True)
+    g_cols = st.columns(3)
+    for i, g in enumerate(PRODUCTION_GROUPS):
+        gdf = db_all[db_all['반'] == g]
+        완료 = len(gdf[(gdf['라인']=='포장 라인') & (gdf['상태']=='완료')])
+        재공 = len(gdf[gdf['상태']=='진행 중'])
+        불량 = len(gdf[gdf['상태'].str.contains('불량', na=False)])
+        with g_cols[i]:
+            with st.container(border=True):
+                st.markdown(f"#### 📍 {g}")
+                st.metric("총 투입", f"{len(gdf)} EA")
+                m1, m2, m3 = st.columns(3)
+                m1.metric("완료", f"{완료}")
+                m2.metric("재공", f"{재공}")
+                m3.metric("🚨 불량", f"{불량}")
+
+    st.divider()
+
+    # ── 공정별 / 반별 차트
+    if not db_all.empty:
+        st.markdown("<div class='section-title'>📈 실시간 차트</div>", unsafe_allow_html=True)
+        ch1, ch2 = st.columns([1.8, 1.2])
+        with ch1:
+            fig = px.bar(
+                db_all.groupby(['반', '라인']).size().reset_index(name='수량'),
+                x='라인', y='수량', color='반', barmode='group',
+                title="<b>반별 공정 진행 현황</b>", template="plotly_white"
+            )
+            fig.update_yaxes(dtick=1)
+            st.plotly_chart(fig, use_container_width=True)
+        with ch2:
+            fig2 = px.pie(
+                db_all.groupby('상태').size().reset_index(name='수량'),
+                values='수량', names='상태', hole=0.5,
+                title="<b>전체 상태 비중</b>"
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+    else:
+        st.info("등록된 생산 데이터가 없습니다.")
 
 # ─────────────────────────────────────────────
 # 8-1. 조립 라인
@@ -757,6 +827,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
