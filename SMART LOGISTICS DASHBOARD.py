@@ -474,7 +474,9 @@ if curr_l == "현황판":
 
     # ── 공정별 / 반별 차트
     if not db_all.empty:
-        st.markdown("<div class='section-title'>📈 실시간 차트</div>", unsafe_allow_html=True)
+        st.markdown(...)
+        cards_html = "<div style='display:flex; gap:12px; width:100%; box-sizing:border-box;'>"
+        for g in PRODUCTION_GROUPS:
         ch1, ch2 = st.columns([1.8, 1.2])
         with ch1:
             fig = px.bar(
@@ -861,6 +863,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
