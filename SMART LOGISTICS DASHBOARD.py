@@ -443,9 +443,9 @@ if curr_l == "현황판":
         불량 = len(gdf[gdf['상태'].str.contains('불량', na=False)])
         with g_cols[i]:
             with st.container(border=True):
-                st.markdown(f"#### 📍 {g}")
+                st.markdown(f"<div style='font-size:clamp(0.9rem, 1.5vw, 1.2rem); font-weight:bold; margin-bottom:8px;'>📍 {g}</div>", unsafe_allow_html=True)
                 st.markdown(f"""
-                    <div class='stat-box'>
+                    <div class='stat-box' style='width:100%; box-sizing:border-box;'>
                         <div class='stat-label'>총 투입</div>
                         <div class='stat-value'>{len(gdf)} EA</div>
                     </div>
@@ -856,6 +856,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
