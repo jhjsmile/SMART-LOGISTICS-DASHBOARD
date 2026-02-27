@@ -779,9 +779,42 @@ elif curr_l == "마스터 관리":
 
         with ac2:
             st.write("**시스템 데이터 관리**")
-            csv_data = st.session_state.production_db.to_csv(index=False).encode('utf-8-sig')
-            st.download_button("📥 CSV 백업 다운로드", csv_data, "PMS_Backup.csv", use_container_width=True)
-
+            
+            db_export = st.session_state.production_db.copy()
+            
+            # 반 필터
+            export_group = st.selectbox(
+                "반 선택", ["전체"] + PRODUCTION_GROUPS, key="export_group"
+            )
+            
+            # 날짜 필터
+            ex_c1, ex_c2 = st.columns(2)
+            start_date = ex_c1.date_input("시작 날짜", key="export_start")
+            end_date   = ex_c2.date_input("종료 날짜", key="export_end")
+            
+            # 필터 적용
+            if export_group != "전체":
+                db_export = db_export[db_export['반'] == export_group]
+            
+            if '시간' in db_export.columns and not db_export.empty:
+                try:
+                    db_export['시간_dt'] = pd.to_datetime(db_export['시간'])
+                    db_export = db_export[
+                        (db_export['시간_dt'].dt.date >= start_date) &
+                        (db_export['시간_dt'].dt.date <= end_date)
+                    ]
+                    db_export = db_export.drop(columns=['시간_dt'])
+                except:
+                    pass
+            
+            st.caption(f"📋 조회 결과: **{len(db_export)}건**")
+            
+            csv_data = db_export.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                "📥 CSV 다운로드", csv_data,
+                f"PMS_{export_group}_{start_date}~{end_date}.csv",
+                use_container_width=True
+            )
         st.divider()
         if st.button("⚠️ 전체 데이터 초기화", type="secondary"):
             if delete_all_rows():
@@ -792,3 +825,4 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v21.0 Supabase 버전 종료 ]
 # =================================================================
+
