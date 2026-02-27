@@ -388,25 +388,6 @@ if curr_l == "현황판":
 
     db_all = st.session_state.production_db
 
-    # 전체 요약 카드
-    st.markdown("<div class='section-title'>📊 전체 반 생산 요약</div>", unsafe_allow_html=True)
-    col1, col2, col3, col4 = st.columns(4)
-    col1.markdown(
-        f"<div class='stat-box'><div class='stat-label'>📦 총 투입</div>"
-        f"<div class='stat-value'>{len(db_all)}</div></div>", unsafe_allow_html=True)
-    col2.markdown(
-        f"<div class='stat-box'><div class='stat-label'>✅ 최종 완료</div>"
-        f"<div class='stat-value'>{len(db_all[(db_all['라인']=='포장 라인') & (db_all['상태']=='완료')])}</div></div>", unsafe_allow_html=True)
-    col3.markdown(
-        f"<div class='stat-box'><div class='stat-label'>🏗️ 작업 중</div>"
-        f"<div class='stat-value'>{len(db_all[db_all['상태']=='진행 중'])}</div></div>", unsafe_allow_html=True)
-    col4.markdown(
-        f"<div class='stat-box'><div class='stat-label'>🚨 불량 이슈</div>"
-        f"<div class='stat-value'>{len(db_all[db_all['상태'].str.contains('불량', na=False)])}</div></div>", unsafe_allow_html=True)
-
-    st.divider()
-
-    # 실시간 차트
     # 실시간 차트 (최상단)
     if not db_all.empty:
         st.markdown("<div class='section-title'>📈 실시간 차트</div>", unsafe_allow_html=True)
@@ -875,6 +856,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v21.0 Supabase 버전 종료 ]
 # =================================================================
+
 
 
 
