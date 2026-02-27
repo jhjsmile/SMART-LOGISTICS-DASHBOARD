@@ -101,11 +101,13 @@ def verify_pw(plain: str, hashed: str) -> bool:
 #         secrets.toml 에 master_admin_pw_hash = "<sha256값>" 으로 설정
 #         폴백(fallback): secrets 미설정 시 경고 후 기능 비활성화
 # ─────────────────────────────────────────────
+# 변경 - secrets 읽기 실패 시 직접 하드코딩 해시값으로 폴백
 def get_master_pw_hash() -> str | None:
     try:
         return st.secrets["master_admin_pw_hash"]
-    except (KeyError, AttributeError):
-        return None
+    except Exception:
+        # secrets 읽기 실패 시 직접 해시값 사용
+        return "2f4ff906544400016f18e4eaad872b2849a5d488e7f0ace2225144497db601e3"
 
 # =================================================================
 # 3. 핵심 유틸리티 함수
@@ -743,3 +745,4 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
