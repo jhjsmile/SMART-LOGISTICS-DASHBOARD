@@ -417,15 +417,14 @@ if curr_l == "현황판":
                 title="<b>반별 공정 진행 현황</b>", template="plotly_white"
             )
             fig.update_yaxes(dtick=1)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key="dashboard_bar")
         with ch2:
             fig2 = px.pie(
                 db_all.groupby('상태').size().reset_index(name='수량'),
                 values='수량', names='상태', hole=0.5,
                 title="<b>전체 상태 비중</b>"
             )
-            st.plotly_chart(fig2, use_container_width=True)
-
+            st.plotly_chart(fig2, use_container_width=True, key="dashboard_pie")
     st.divider()
 
     # 반별 현황 카드
@@ -882,6 +881,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v21.0 Supabase 버전 종료 ]
 # =================================================================
+
 
 
 
