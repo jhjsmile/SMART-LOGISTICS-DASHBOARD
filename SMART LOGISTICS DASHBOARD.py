@@ -449,18 +449,18 @@ if curr_l == "현황판":
                         <div class='stat-label'>총 투입</div>
                         <div class='stat-value'>{len(gdf)} EA</div>
                     </div>
-                    <div style='display:flex; gap:8px; margin-top:8px;'>
-                        <div class='stat-box' style='flex:1; min-height:80px;'>
-                            <div class='stat-label'>✅ 완료</div>
-                            <div class='stat-value'>{완료}</div>
+                    <div style='display:flex; gap:6px; margin-top:8px;'>
+                        <div style='flex:1; background:#fff; border-radius:10px; border:1px solid #e9ecef; padding:10px 4px; text-align:center;'>
+                            <div style='font-size:clamp(0.55rem, 1vw, 0.75rem); color:#6c757d; font-weight:bold; white-space:nowrap;'>✅ 완료</div>
+                            <div style='font-size:clamp(1rem, 1.8vw, 1.8rem); color:#40c057; font-weight:bold;'>{완료}</div>
                         </div>
-                        <div class='stat-box' style='flex:1; min-height:80px;'>
-                            <div class='stat-label'>🏗️ 작업 중</div>
-                            <div class='stat-value'>{재공}</div>
+                        <div style='flex:1; background:#fff; border-radius:10px; border:1px solid #e9ecef; padding:10px 4px; text-align:center;'>
+                            <div style='font-size:clamp(0.55rem, 1vw, 0.75rem); color:#6c757d; font-weight:bold; white-space:nowrap;'>🏗️ 작업중</div>
+                            <div style='font-size:clamp(1rem, 1.8vw, 1.8rem); color:#007bff; font-weight:bold;'>{재공}</div>
                         </div>
-                        <div class='stat-box' style='flex:1; min-height:80px;'>
-                            <div class='stat-label'>🚨 불량</div>
-                            <div class='stat-value' style='color:#fa5252;'>{불량}</div>
+                        <div style='flex:1; background:#fff; border-radius:10px; border:1px solid #e9ecef; padding:10px 4px; text-align:center;'>
+                            <div style='font-size:clamp(0.55rem, 1vw, 0.75rem); color:#6c757d; font-weight:bold; white-space:nowrap;'>🚨 불량</div>
+                            <div style='font-size:clamp(1rem, 1.8vw, 1.8rem); color:#fa5252; font-weight:bold;'>{불량}</div>
                         </div>
                     </div>
                 """, unsafe_allow_html=True)
@@ -856,6 +856,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
