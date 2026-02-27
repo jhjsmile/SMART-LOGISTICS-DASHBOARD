@@ -444,11 +444,26 @@ if curr_l == "현황판":
         with g_cols[i]:
             with st.container(border=True):
                 st.markdown(f"#### 📍 {g}")
-                st.metric("총 투입", f"{len(gdf)} EA")
-                m1, m2, m3 = st.columns(3)
-                m1.metric("완료", f"{완료}")
-                m2.metric("재공", f"{재공}")
-                m3.metric("🚨 불량", f"{불량}")
+                st.markdown(f"""
+                    <div class='stat-box'>
+                        <div class='stat-label'>총 투입</div>
+                        <div class='stat-value'>{len(gdf)} EA</div>
+                    </div>
+                    <div style='display:flex; gap:8px; margin-top:8px;'>
+                        <div class='stat-box' style='flex:1; min-height:80px;'>
+                            <div class='stat-label'>✅ 완료</div>
+                            <div class='stat-value'>{완료}</div>
+                        </div>
+                        <div class='stat-box' style='flex:1; min-height:80px;'>
+                            <div class='stat-label'>🏗️ 작업 중</div>
+                            <div class='stat-value'>{재공}</div>
+                        </div>
+                        <div class='stat-box' style='flex:1; min-height:80px;'>
+                            <div class='stat-label'>🚨 불량</div>
+                            <div class='stat-value' style='color:#fa5252;'>{불량}</div>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
 
     st.divider()
 
@@ -841,6 +856,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
