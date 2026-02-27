@@ -713,9 +713,9 @@ elif curr_l == "불량 공정":
         for idx, row in wait.iterrows():
             with st.container(border=True):
                 st.markdown(
-                    f"**S/N: {row['시리얼']}** &nbsp;|&nbsp; "
                     f"모델: `{row['모델']}` &nbsp;|&nbsp; "
-                    f"코드: `{row['품목코드']}`"
+                    f"코드: `{row['품목코드']}` &nbsp;|&nbsp; "
+                    f"**S/N: {row['시리얼']}**"
                 )
                 r1, r2 = st.columns(2)
                 v_c = r1.text_input("불량 원인", key=f"c_{idx}")
