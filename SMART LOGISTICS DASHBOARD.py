@@ -406,7 +406,7 @@ if curr_l == "현황판":
 
     st.divider()
 
-    # 실시간 차트 (반별 현황 위로 이동)
+    # 실시간 차트
     if not db_all.empty:
         st.markdown("<div class='section-title'>📈 실시간 차트</div>", unsafe_allow_html=True)
         ch1, ch2 = st.columns([1.8, 1.2])
@@ -425,6 +425,7 @@ if curr_l == "현황판":
                 title="<b>전체 상태 비중</b>"
             )
             st.plotly_chart(fig2, use_container_width=True, key="dashboard_pie")
+
     st.divider()
 
     # 반별 현황 카드
@@ -464,32 +465,6 @@ if curr_l == "현황판":
 
     if db_all.empty:
         st.info("등록된 생산 데이터가 없습니다.")
-        
-    st.divider()
-
-    if not db_all.empty:
-        st.markdown("<div class='section-title'>📈 실시간 차트</div>", unsafe_allow_html=True)
-        ch1, ch2 = st.columns([1.8, 1.2])
-        with ch1:
-            fig = px.bar(
-                db_all.groupby(['반', '라인']).size().reset_index(name='수량'),
-                x='라인', y='수량', color='반', barmode='group',
-                title="<b>반별 공정 진행 현황</b>", template="plotly_white"
-            )
-            fig.update_yaxes(dtick=1)
-            st.plotly_chart(fig, use_container_width=True)
-        with ch2:
-            fig2 = px.pie(
-                db_all.groupby('상태').size().reset_index(name='수량'),
-                values='수량', names='상태', hole=0.5,
-                title="<b>전체 상태 비중</b>"
-            )
-            st.plotly_chart(fig2, use_container_width=True)
-
-    st.divider()
-
-    st.markdown("<div class='section-title'>🏭 반별 생산 현황</div>", unsafe_allow_html=True)
-    cards_html = "<div style=\"display:flex; gap:12px; width:100%; box-sizing:border-box;\">"
 
 # ─────────────────────────────────────────────
 # 8-1. 조립 라인
@@ -881,6 +856,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v21.0 Supabase 버전 종료 ]
 # =================================================================
+
 
 
 
