@@ -426,7 +426,7 @@ if curr_l == "현황판":
         <div class='stat-value'>{len(db_all)}</div></div>""", unsafe_allow_html=True)
     col2.markdown(f"""<div class='stat-box'><div class='stat-label'>✅ 최종 완료</div>
         <div class='stat-value'>{len(db_all[(db_all['라인']=='포장 라인') & (db_all['상태']=='완료')])}</div></div>""", unsafe_allow_html=True)
-    col3.markdown(f"""<div class='stat-box'><div class='stat-label'>⚙️ 재공 중</div>
+    col3.markdown(f"""<div class='stat-box'><div class='stat-label'>🏗️ 작업 중</div>
         <div class='stat-value'>{len(db_all[db_all['상태']=='진행 중'])}</div></div>""", unsafe_allow_html=True)
     col4.markdown(f"""<div class='stat-box'><div class='stat-label'>🚨 불량 이슈</div>
         <div class='stat-value'>{len(db_all[db_all['상태'].str.contains('불량', na=False)])}</div></div>""", unsafe_allow_html=True)
@@ -841,6 +841,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v20.0 종료 ]
 # =================================================================
+
 
 
 
