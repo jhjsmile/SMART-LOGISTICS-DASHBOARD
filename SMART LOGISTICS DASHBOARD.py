@@ -512,7 +512,7 @@ elif st.session_state.cal_action == "edit":
 # =================================================================
 
 def render_calendar():
-    sch_df   = st.session_state.schedule_db
+    sch_df    = st.session_state.schedule_db
     cal_year  = st.session_state.cal_year
     cal_month = st.session_state.cal_month
     can_edit  = st.session_state.user_role in CALENDAR_EDIT_ROLES
@@ -526,17 +526,14 @@ def render_calendar():
         else:
             st.session_state.cal_month -= 1
         st.rerun()
-
     if h2.button("오늘", use_container_width=True):
         st.session_state.cal_year  = datetime.now(KST).year
         st.session_state.cal_month = datetime.now(KST).month
         st.rerun()
-
     h3.markdown(
         f"<h3 style='text-align:center; margin:0; padding:6px;'>{cal_year}년 {cal_month}월</h3>",
         unsafe_allow_html=True
     )
-
     if h4.button("다음달 ▶", use_container_width=True):
         if cal_month == 12:
             st.session_state.cal_year  += 1
@@ -544,51 +541,89 @@ def render_calendar():
         else:
             st.session_state.cal_month += 1
         st.rerun()
-
-    view_mode = h5.selectbox("보기", ["주별", "월별"], index=0 if st.session_state.cal_view == "주별" else 1, key="cal_view_select", label_visibility="collapsed")
+    view_mode = h5.selectbox("보기", ["주별", "월별"],
+        index=0 if st.session_state.cal_view == "주별" else 1,
+        key="cal_view_select", label_visibility="collapsed")
     if view_mode != st.session_state.cal_view:
         st.session_state.cal_view = view_mode
         st.rerun()
 
+    # hover 확대 + 클릭 스타일 CSS
+    st.markdown("""
+        <style>
+        .cal-cell {
+            background: #1e1e1e;
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 8px 6px;
+            min-height: 120px;
+            box-sizing: border-box;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+            cursor: pointer;
+        }
+        .cal-cell:hover {
+            transform: scale(1.06);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            border-color: #4dabf7 !important;
+            z-index: 999;
+            position: relative;
+        }
+        .cal-cell.today {
+            background: #1a472a;
+            border: 2px solid #40c057 !important;
+        }
+        .cal-day-num {
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 5px;
+            font-size: 0.95rem;
+        }
+        .cal-event {
+            border-radius: 4px;
+            padding: 3px 5px;
+            margin-bottom: 3px;
+            font-size: 0.62rem;
+            line-height: 1.3;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     # 색상 범례
-    legend_html = "<div style='display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;'>"
+    legend_html = "<div style='display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;'>"
     for cat, color in SCHEDULE_COLORS.items():
         legend_html += f"<span style='background:{color}; color:#fff; padding:3px 10px; border-radius:12px; font-size:0.75rem; font-weight:bold;'>{cat}</span>"
     legend_html += "</div>"
     st.markdown(legend_html, unsafe_allow_html=True)
 
     # 요일 헤더
-    days_kr = ["월", "화", "수", "목", "금", "토", "일"]
-    header_cols = st.columns(7)
+    days_kr   = ["월", "화", "수", "목", "금", "토", "일"]
+    hdr_cols  = st.columns(7)
     for i, d in enumerate(days_kr):
         color = "#fa5252" if d == "일" else "#4dabf7" if d == "토" else "#ccc"
-        header_cols[i].markdown(
-            f"<div style='text-align:center; font-weight:bold; color:{color}; padding:8px; background:#2a2a2a; border-radius:6px;'>{d}</div>",
+        hdr_cols[i].markdown(
+            f"<div style='text-align:center; font-weight:bold; color:{color}; "
+            f"padding:8px; background:#2a2a2a; border-radius:6px;'>{d}</div>",
             unsafe_allow_html=True
         )
 
-    today = date.today()
-    cal_weeks = calendar.monthcalendar(cal_year, cal_month)
+    today      = date.today()
+    cal_weeks  = calendar.monthcalendar(cal_year, cal_month)
 
-    # 주별 보기: 현재 주만 표시
+    # 주별 보기
     if st.session_state.cal_view == "주별":
-        # 현재 주 찾기
-        current_week_idx = 0
-        for wi, week in enumerate(cal_weeks):
-            for day in week:
-                if day == today.day and cal_year == today.year and cal_month == today.month:
-                    current_week_idx = wi
-                    break
         if 'cal_week_idx' not in st.session_state:
-            st.session_state.cal_week_idx = current_week_idx
+            for wi, week in enumerate(cal_weeks):
+                if today.day in week and cal_year == today.year and cal_month == today.month:
+                    st.session_state.cal_week_idx = wi
+                    break
+            else:
+                st.session_state.cal_week_idx = 0
 
-        # 주 이동 버튼
         w1, w2, w3 = st.columns([1, 4, 1])
         if w1.button("◀ 이전주"):
             if st.session_state.cal_week_idx > 0:
                 st.session_state.cal_week_idx -= 1
             else:
-                # 이전 달 마지막 주로
                 if cal_month == 1:
                     st.session_state.cal_year  -= 1
                     st.session_state.cal_month  = 12
@@ -597,10 +632,11 @@ def render_calendar():
                 prev_weeks = calendar.monthcalendar(st.session_state.cal_year, st.session_state.cal_month)
                 st.session_state.cal_week_idx = len(prev_weeks) - 1
             st.rerun()
-
-        week_num = st.session_state.cal_week_idx + 1
-        w2.markdown(f"<p style='text-align:center; margin:8px 0;'>{cal_year}년 {cal_month}월 {week_num}주차</p>", unsafe_allow_html=True)
-
+        w2.markdown(
+            f"<p style='text-align:center; margin:8px 0;'>"
+            f"{cal_year}년 {cal_month}월 {st.session_state.cal_week_idx + 1}주차</p>",
+            unsafe_allow_html=True
+        )
         if w3.button("다음주 ▶"):
             if st.session_state.cal_week_idx < len(cal_weeks) - 1:
                 st.session_state.cal_week_idx += 1
@@ -617,48 +653,54 @@ def render_calendar():
     else:
         weeks_to_show = cal_weeks
 
-    # 달력 셀 렌더링
+    # 셀 렌더링
     for week in weeks_to_show:
         week_cols = st.columns(7)
         for i, day in enumerate(week):
             with week_cols[i]:
                 if day == 0:
                     st.markdown("<div style='min-height:120px;'></div>", unsafe_allow_html=True)
-                else:
-                    day_str  = f"{cal_year}-{cal_month:02d}-{day:02d}"
-                    day_data = sch_df[sch_df['날짜'] == day_str] if not sch_df.empty else pd.DataFrame()
-                    is_today = (today == date(cal_year, cal_month, day))
-                    bg     = "#1a472a" if is_today else "#1e1e1e"
-                    border = "2px solid #40c057" if is_today else "1px solid #444"
+                    continue
 
-                    cell_html = (
-                        f"<div style='background:{bg}; border:{border}; border-radius:8px; "
-                        f"padding:6px; min-height:120px; box-sizing:border-box;'>"
-                        f"<div style='font-weight:bold; color:#fff; margin-bottom:4px; font-size:0.9rem;'>{day}</div>"
-                    )
-                    if not day_data.empty:
-                        for _, row in day_data.iterrows():
-                            cat   = row.get('카테고리', '기타')
-                            color = SCHEDULE_COLORS.get(cat, "#888")
-                            label = row.get('모델명','') or row.get('특이사항','')
-                            qty   = row.get('조립수', 0)
-                            cell_html += (
-                                f"<div style='background:{color}22; border-left:3px solid {color}; "
-                                f"border-radius:4px; padding:3px 5px; margin-bottom:3px; font-size:0.62rem; cursor:pointer;'>"
-                                f"<span style='color:{color}; font-weight:bold;'>[{cat}]</span> "
-                                f"<span style='color:#eee;'>{label}</span>"
-                                f"{f' <span style=\"color:#aaa;\">({qty}대)</span>' if qty else ''}"
-                                f"</div>"
-                            )
-                    cell_html += "</div>"
-                    st.markdown(cell_html, unsafe_allow_html=True)
+                day_str  = f"{cal_year}-{cal_month:02d}-{day:02d}"
+                day_data = sch_df[sch_df['날짜'] == day_str] if not sch_df.empty else pd.DataFrame()
+                is_today = (today == date(cal_year, cal_month, day))
+                today_cls = " today" if is_today else ""
+                border    = "2px solid #40c057" if is_today else "1px solid #444"
+                bg        = "#1a472a" if is_today else "#1e1e1e"
 
-                    # 버튼 영역
-                    if can_edit:
-                        if st.button("＋", key=f"add_{day_str}", use_container_width=True):
-                            st.session_state.cal_action      = "add"
-                            st.session_state.cal_action_data = day_str
-                            st.rerun()
+                # 셀 HTML
+                cell_html = (
+                    f"<div class='cal-cell{today_cls}' style='background:{bg}; border:{border};'>"
+                    f"<div class='cal-day-num'>{day}{'  ✅' if is_today else ''}</div>"
+                )
+                event_count = 0
+                if not day_data.empty:
+                    for _, row in day_data.iterrows():
+                        cat   = row.get('카테고리', '기타')
+                        color = SCHEDULE_COLORS.get(cat, "#888")
+                        label = (row.get('모델명','') or row.get('특이사항',''))[:12]
+                        qty   = row.get('조립수', 0)
+                        cell_html += (
+                            f"<div class='cal-event' style='background:{color}22; border-left:3px solid {color};'>"
+                            f"<span style='color:{color}; font-weight:bold;'>[{cat}]</span> "
+                            f"<span style='color:#eee;'>{label}</span>"
+                            f"{f' <span style=\"color:#aaa;\">({qty}대)</span>' if qty else ''}"
+                            f"</div>"
+                        )
+                        event_count += 1
+                if event_count == 0 and can_edit:
+                    cell_html += "<div style='color:#555; font-size:0.6rem; text-align:center; margin-top:8px;'>클릭하여 추가</div>"
+                cell_html += "</div>"
+                st.markdown(cell_html, unsafe_allow_html=True)
+
+                # 날짜 버튼 (클릭 → 상세 팝업)
+                btn_label = f"📅 {day}일" if event_count == 0 else f"📅 {day}일 ({event_count}건)"
+                if st.button(btn_label, key=f"day_btn_{day_str}", use_container_width=True):
+                    st.session_state.cal_selected_date = day_str
+                    st.session_state.cal_action        = "view_day"
+                    st.session_state.cal_action_data   = day_str
+                    st.rerun()
 
                     if not day_data.empty:
                         for _, row in day_data.iterrows():
@@ -1177,3 +1219,4 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v22.0 캘린더 버전 종료 ]
 # =================================================================
+
