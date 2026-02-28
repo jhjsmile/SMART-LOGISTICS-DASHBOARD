@@ -588,14 +588,16 @@ def render_calendar():
 
         w1, w2, w3 = st.columns([1, 4, 1])
         if w1.button("◀ 이전주", use_container_width=True):
-            if st.session_state.cal_week_idx > 0:
-                st.session_state.cal_week_idx -= 1
-            else:
-                if cal_month == 1: st.session_state.cal_year -= 1; st.session_state.cal_month = 12
-                else: st.session_state.cal_month -= 1
-                prev_weeks = calendar.monthcalendar(st.session_state.cal_year, st.session_state.cal_month)
-                st.session_state.cal_week_idx = len(prev_weeks) - 1
-            st.rerun()
+        st.session_state.cal_action = None
+        st.session_state.cal_action_data = None
+        if st.session_state.cal_week_idx > 0:
+            st.session_state.cal_week_idx -= 1
+        else:
+            if cal_month == 1: st.session_state.cal_year -= 1; st.session_state.cal_month = 12
+            else: st.session_state.cal_month -= 1
+            prev_weeks = calendar.monthcalendar(st.session_state.cal_year, st.session_state.cal_month)
+            st.session_state.cal_week_idx = len(prev_weeks) - 1
+        st.rerun()
         w2.markdown(
             f"<p style='text-align:center; margin:8px 0;'>{cal_year}년 {cal_month}월 {st.session_state.cal_week_idx+1}주차</p>",
             unsafe_allow_html=True)
@@ -1099,3 +1101,4 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v22.1 종료 ]
 # =================================================================
+
