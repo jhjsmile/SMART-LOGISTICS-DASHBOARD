@@ -238,51 +238,55 @@ def upload_img_to_drive(file_obj, serial_no: str) -> str:
 # 4. 캘린더 다이얼로그
 # =================================================================
 
-@st.dialog("📅 일정 추가")
-def dialog_add_schedule(selected_date: str):
+@st.dialog("📅 일정 상세")
+def dialog_view_day(selected_date: str):
     can_edit = st.session_state.user_role in CALENDAR_EDIT_ROLES
-    if not can_edit:
-        st.warning("일정 추가 권한이 없습니다.")
-        if st.button("닫기"):
-            st.rerun()
-        return
+    sch_df   = st.session_state.schedule_db
+    day_data = sch_df[sch_df['날짜'] == selected_date] if not sch_df.empty else pd.DataFrame()
 
-    st.markdown(f"**날짜: {selected_date}**")
-    with st.form("add_sch_form"):
-        cat     = st.selectbox("카테고리", list(SCHEDULE_COLORS.keys()))
-        pn      = st.text_input("P/N (품목코드)")
-        model   = st.text_input("모델명")
-        qty     = st.number_input("조립수", min_value=0, step=1)
-        ship    = st.text_input("출하계획")
-        note    = st.text_input("특이사항")
-        if st.form_submit_button("✅ 등록", use_container_width=True, type="primary"):
-            if model.strip() or note.strip():
-                new_sch = {
-                    '날짜':     selected_date,
-                    '카테고리': cat,
-                    'pn':       pn.strip(),
-                    '모델명':   model.strip(),
-                    '조립수':   int(qty),
-                    '출하계획': ship.strip(),
-                    '특이사항': note.strip(),
-                    '작성자':   st.session_state.user_id
-                }
-                if insert_schedule(new_sch):
-                    st.session_state.schedule_db = load_schedule()
-                    st.session_state.cal_action  = None
-                    st.rerun()
-            else:
-                st.warning("모델명 또는 특이사항을 입력해주세요.")
+    st.markdown(f"### 📆 {selected_date}")
 
-@st.dialog("✏️ 일정 수정/삭제")
-def dialog_edit_schedule(sch_id: int):
-    can_edit = st.session_state.user_role in CALENDAR_EDIT_ROLES
-    sch_df = st.session_state.schedule_db
-    row = sch_df[sch_df['id'] == sch_id]
-    if row.empty:
-        st.warning("일정을 찾을 수 없습니다.")
-        if st.button("닫기"):
+    if not day_data.empty:
+        for _, row in day_data.iterrows():
+            cat   = row.get('카테고리', '기타')
+            color = SCHEDULE_COLORS.get(cat, "#888")
+            with st.container(border=True):
+                st.markdown(
+                    f"<span style='background:{color}; color:#fff; padding:2px 10px; "
+                    f"border-radius:10px; font-size:0.8rem; font-weight:bold;'>{cat}</span>",
+                    unsafe_allow_html=True
+                )
+                c1, c2 = st.columns(2)
+                c1.markdown(f"**P/N:** {row.get('pn','')}")
+                c2.markdown(f"**모델명:** {row.get('모델명','')}")
+                c3, c4 = st.columns(2)
+                c3.markdown(f"**조립수:** {row.get('조립수',0)}대")
+                c4.markdown(f"**출하계획:** {row.get('출하계획','')}")
+                if row.get('특이사항','').strip():
+                    st.markdown(f"⚠️ **특이사항:** {row.get('특이사항','')}")
+                if can_edit:
+                    e1, e2 = st.columns(2)
+                    if e1.button("✏️ 수정", key=f"mod_{row['id']}"):
+                        st.session_state.cal_action      = "edit"
+                        st.session_state.cal_action_data = int(row['id'])
+                        st.rerun()
+                    if e2.button("🗑️ 삭제", key=f"del_{row['id']}"):
+                        delete_schedule(int(row['id']))
+                        st.session_state.schedule_db = load_schedule()
+                        st.session_state.cal_action  = None
+                        st.rerun()
+    else:
+        st.info("등록된 일정이 없습니다.")
+
+    st.divider()
+    if can_edit:
+        if st.button("➕ 이 날짜에 일정 추가", use_container_width=True, type="primary"):
+            st.session_state.cal_action      = "add"
+            st.session_state.cal_action_data = selected_date
             st.rerun()
+    if st.button("닫기", use_container_width=True):
+        st.session_state.cal_action = None
+        st.rerun()
         return
 
     row = row.iloc[0]
@@ -502,7 +506,9 @@ if st.session_state.get("confirm_target"):
     trigger_entry_dialog()
 
 # 캘린더 다이얼로그 처리
-if st.session_state.cal_action == "add":
+if st.session_state.cal_action == "view_day":
+    dialog_view_day(st.session_state.cal_action_data)
+elif st.session_state.cal_action == "add":
     dialog_add_schedule(st.session_state.cal_action_data)
 elif st.session_state.cal_action == "edit":
     dialog_edit_schedule(st.session_state.cal_action_data)
