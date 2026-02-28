@@ -248,8 +248,9 @@ def dialog_view_day(selected_date: str):
 
     if not day_data.empty:
         for _, row in day_data.iterrows():
-            cat   = row.get('카테고리', '기타')
+            cat   = str(row.get('카테고리', '기타')) if row.get('카테고리') else '기타'
             color = SCHEDULE_COLORS.get(cat, "#888")
+            row_id = row.get('id', None)
             with st.container(border=True):
                 st.markdown(
                     f"<span style='background:{color}; color:#fff; padding:2px 10px; "
@@ -262,16 +263,17 @@ def dialog_view_day(selected_date: str):
                 c3, c4 = st.columns(2)
                 c3.markdown(f"**조립수:** {row.get('조립수',0)}대")
                 c4.markdown(f"**출하계획:** {row.get('출하계획','')}")
-                if row.get('특이사항','').strip():
-                    st.markdown(f"⚠️ **특이사항:** {row.get('특이사항','')}")
-                if can_edit:
+                note = str(row.get('특이사항',''))
+                if note.strip() and note != 'nan':
+                    st.markdown(f"⚠️ **특이사항:** {note}")
+                if can_edit and row_id:
                     e1, e2 = st.columns(2)
-                    if e1.button("✏️ 수정", key=f"mod_{row['id']}"):
+                    if e1.button("✏️ 수정", key=f"mod_{row_id}"):
                         st.session_state.cal_action      = "edit"
-                        st.session_state.cal_action_data = int(row['id'])
+                        st.session_state.cal_action_data = int(row_id)
                         st.rerun()
-                    if e2.button("🗑️ 삭제", key=f"del_{row['id']}"):
-                        delete_schedule(int(row['id']))
+                    if e2.button("🗑️ 삭제", key=f"del_{row_id}"):
+                        delete_schedule(int(row_id))
                         st.session_state.schedule_db = load_schedule()
                         st.session_state.cal_action  = None
                         st.rerun()
@@ -1225,4 +1227,5 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v22.0 캘린더 버전 종료 ]
 # =================================================================
+
 
