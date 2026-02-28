@@ -181,6 +181,49 @@ def delete_all_rows() -> bool:
         st.error(f"초기화 실패: {e}")
         return False
 
+# 생산 일정 관련 DB 함수
+def load_schedule() -> pd.DataFrame:
+    try:
+        sb = get_supabase()
+        res = sb.table("production_schedule").select("*").order("날짜", desc=False).execute()
+        if res.data:
+            df = pd.DataFrame(res.data)
+            drop_cols = [c for c in ['id', 'created_at'] if c in df.columns]
+            df = df.drop(columns=drop_cols).fillna("")
+            return df
+        return pd.DataFrame(columns=['날짜','pn','모델명','조립수','출하계획','특이사항','작성자'])
+    except Exception as e:
+        st.warning(f"일정 로드 실패: {e}")
+        return pd.DataFrame(columns=['날짜','pn','모델명','조립수','출하계획','특이사항','작성자'])
+
+def insert_schedule(row: dict) -> bool:
+    try:
+        sb = get_supabase()
+        sb.table("production_schedule").insert(row).execute()
+        return True
+    except Exception as e:
+        st.error(f"일정 등록 실패: {e}")
+        return False
+
+def delete_schedule(row_id: int) -> bool:
+    try:
+        sb = get_supabase()
+        sb.table("production_schedule").delete().eq("id", row_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"일정 삭제 실패: {e}")
+        return False
+
+def load_schedule_with_id() -> pd.DataFrame:
+    try:
+        sb = get_supabase()
+        res = sb.table("production_schedule").select("*").order("날짜", desc=False).execute()
+        if res.data:
+            return pd.DataFrame(res.data).fillna("")
+        return pd.DataFrame(columns=['id','날짜','pn','모델명','조립수','출하계획','특이사항','작성자'])
+    except:
+        return pd.DataFrame(columns=['id','날짜','pn','모델명','조립수','출하계획','특이사항','작성자'])
+
 def upload_img_to_drive(file_obj, serial_no: str) -> str:
     try:
         gcp_info = st.secrets["connections"]["gsheets"]
@@ -199,6 +242,8 @@ def upload_img_to_drive(file_obj, serial_no: str) -> str:
 # =================================================================
 # 4. 세션 상태 초기화
 # =================================================================
+if 'schedule_db' not in st.session_state:
+    st.session_state.schedule_db = load_schedule()
 
 if 'production_db' not in st.session_state:
     st.session_state.production_db = load_realtime_ledger()
@@ -466,6 +511,85 @@ if curr_l == "현황판":
     if db_all.empty:
         st.info("등록된 생산 데이터가 없습니다.")
 
+    st.divider()
+
+    # 생산 일정 달력
+    st.markdown("<div class='section-title'>📅 생산 일정 현황</div>", unsafe_allow_html=True)
+    sch_df = st.session_state.schedule_db
+
+    if sch_df.empty:
+        st.info("등록된 생산 일정이 없습니다.")
+    else:
+        # 날짜 목록 추출
+        dates = sorted(sch_df['날짜'].unique())
+
+        # 주별로 묶기
+        import calendar
+        from datetime import date
+
+        # 날짜를 주별로 그룹화
+        date_objs = []
+        for d in dates:
+            try:
+                date_objs.append(datetime.strptime(d, '%Y-%m-%d').date())
+            except:
+                pass
+
+        if date_objs:
+            min_date = min(date_objs)
+            max_date = max(date_objs)
+
+            # 해당 월 전체 달력 표시
+            cal_year  = min_date.year
+            cal_month = min_date.month
+
+            st.caption(f"📆 {cal_year}년 {cal_month}월")
+
+            # 요일 헤더
+            days_kr = ["월", "화", "수", "목", "금", "토", "일"]
+            header_cols = st.columns(7)
+            for i, d in enumerate(days_kr):
+                color = "#fa5252" if d == "일" else "#4dabf7" if d == "토" else "#fff"
+                header_cols[i].markdown(
+                    f"<div style='text-align:center; font-weight:bold; color:{color}; padding:8px; background:#2a2a2a; border-radius:6px;'>{d}</div>",
+                    unsafe_allow_html=True
+                )
+
+            # 달력 생성
+            cal = calendar.monthcalendar(cal_year, cal_month)
+            for week in cal:
+                week_cols = st.columns(7)
+                for i, day in enumerate(week):
+                    with week_cols[i]:
+                        if day == 0:
+                            st.markdown("<div style='min-height:80px;'></div>", unsafe_allow_html=True)
+                        else:
+                            day_str = f"{cal_year}-{cal_month:02d}-{day:02d}"
+                            day_data = sch_df[sch_df['날짜'] == day_str]
+                            is_today = (date.today() == date(cal_year, cal_month, day))
+                            bg = "#1a472a" if is_today else "#1e1e1e"
+                            border = "2px solid #40c057" if is_today else "1px solid #333"
+
+                            cell_html = f"<div style='background:{bg}; border:{border}; border-radius:8px; padding:6px; min-height:80px;'>"
+                            cell_html += f"<div style='font-weight:bold; color:#fff; margin-bottom:4px;'>{day}</div>"
+
+                            if not day_data.empty:
+                                for _, row in day_data.iterrows():
+                                    cell_html += (
+                                        f"<div style='background:#2a2a2a; border-radius:4px; padding:3px 5px; margin-bottom:3px; font-size:0.65rem;'>"
+                                        f"<span style='color:#4dabf7;'>{row['모델명']}</span>"
+                                        f"<span style='color:#aaa;'> {row['조립수']}대</span>"
+                                        f"</div>"
+                                    )
+                                    if row.get('특이사항', '').strip():
+                                        cell_html += (
+                                            f"<div style='color:#ffd43b; font-size:0.6rem; padding:2px 4px;'>"
+                                            f"⚠️ {row['특이사항']}"
+                                            f"</div>"
+                                        )
+                            cell_html += "</div>"
+                            st.markdown(cell_html, unsafe_allow_html=True)
+
 # ─────────────────────────────────────────────
 # 8-1. 조립 라인
 # ─────────────────────────────────────────────
@@ -715,6 +839,87 @@ elif curr_l == "마스터 관리":
                 else:
                     st.error("비밀번호가 올바르지 않습니다.")
     else:
+        # 생산 일정 관리
+        st.markdown("<div class='section-title'>📅 생산 일정 관리</div>", unsafe_allow_html=True)
+
+        sch_tab1, sch_tab2 = st.tabs(["➕ 직접 입력", "📂 엑셀 업로드"])
+
+        with sch_tab1:
+            with st.form("schedule_form"):
+                sc1, sc2, sc3 = st.columns(3)
+                sch_date  = sc1.date_input("날짜", key="sch_date")
+                sch_pn    = sc2.text_input("P/N (품목코드)")
+                sch_model = sc3.text_input("모델명")
+                sc4, sc5, sc6 = st.columns(3)
+                sch_qty   = sc4.number_input("조립수", min_value=0, step=1)
+                sch_ship  = sc5.text_input("출하계획")
+                sch_note  = sc6.text_input("특이사항")
+                if st.form_submit_button("📅 일정 등록", use_container_width=True, type="primary"):
+                    if sch_model.strip():
+                        new_sch = {
+                            '날짜':     str(sch_date),
+                            'pn':       sch_pn.strip(),
+                            '모델명':   sch_model.strip(),
+                            '조립수':   int(sch_qty),
+                            '출하계획': sch_ship.strip(),
+                            '특이사항': sch_note.strip(),
+                            '작성자':   st.session_state.user_id
+                        }
+                        if insert_schedule(new_sch):
+                            st.session_state.schedule_db = load_schedule()
+                            st.success("일정 등록 완료!")
+                            st.rerun()
+                    else:
+                        st.warning("모델명을 입력해주세요.")
+
+        with sch_tab2:
+            st.caption("엑셀 파일 형식: 날짜 / P/N / 모델명 / 조립수 / 출하계획 / 특이사항")
+            uploaded_sch = st.file_uploader("엑셀 파일 업로드", type=["xlsx", "xls"], key="sch_upload")
+            if uploaded_sch:
+                try:
+                    sch_excel = pd.read_excel(uploaded_sch)
+                    st.dataframe(sch_excel, use_container_width=True)
+                    if st.button("📤 일정 업로드 확정", type="primary"):
+                        success_cnt = 0
+                        for _, row in sch_excel.iterrows():
+                            new_sch = {
+                                '날짜':     str(row.get('날짜', '')),
+                                'pn':       str(row.get('P/N', '')),
+                                '모델명':   str(row.get('모델명', '')),
+                                '조립수':   int(row.get('조립수', 0)),
+                                '출하계획': str(row.get('출하계획', '')),
+                                '특이사항': str(row.get('특이사항', '')),
+                                '작성자':   st.session_state.user_id
+                            }
+                            if insert_schedule(new_sch):
+                                success_cnt += 1
+                        st.session_state.schedule_db = load_schedule()
+                        st.success(f"{success_cnt}건 업로드 완료!")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"파일 읽기 실패: {e}")
+
+        # 등록된 일정 목록
+        st.markdown("**📋 등록된 일정 목록**")
+        sch_list = load_schedule_with_id()
+        if not sch_list.empty:
+            for _, row in sch_list.iterrows():
+                r1, r2, r3, r4, r5, r6, r7 = st.columns([1.2, 1.5, 2, 0.8, 1.5, 2, 0.8])
+                r1.write(row.get('날짜', ''))
+                r2.write(row.get('pn', ''))
+                r3.write(row.get('모델명', ''))
+                r4.write(f"{row.get('조립수', 0)}대")
+                r5.write(row.get('출하계획', ''))
+                r6.write(row.get('특이사항', ''))
+                if r7.button("🗑️", key=f"del_sch_{row['id']}"):
+                    delete_schedule(int(row['id']))
+                    st.session_state.schedule_db = load_schedule()
+                    st.rerun()
+        else:
+            st.info("등록된 일정이 없습니다.")
+
+        st.divider()
+        
         st.markdown("<div class='section-title'>📋 반별 독립 모델/품목 설정</div>", unsafe_allow_html=True)
         tabs = st.tabs([f"{g} 설정" for g in PRODUCTION_GROUPS])
 
@@ -856,6 +1061,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v21.0 Supabase 버전 종료 ]
 # =================================================================
+
 
 
 
