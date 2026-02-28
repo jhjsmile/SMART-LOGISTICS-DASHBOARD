@@ -588,10 +588,10 @@ def render_calendar():
 
         w1, w2, w3 = st.columns([1, 4, 1])
         if w1.button("◀ 이전주", use_container_width=True):
-        st.session_state.cal_action = None
-        st.session_state.cal_action_data = None
-        if st.session_state.cal_week_idx > 0:
-            st.session_state.cal_week_idx -= 1
+            st.session_state.cal_action = None
+            st.session_state.cal_action_data = None
+            if st.session_state.cal_week_idx > 0:
+                st.session_state.cal_week_idx -= 1
         else:
             if cal_month == 1: st.session_state.cal_year -= 1; st.session_state.cal_month = 12
             else: st.session_state.cal_month -= 1
@@ -602,6 +602,8 @@ def render_calendar():
             f"<p style='text-align:center; margin:8px 0;'>{cal_year}년 {cal_month}월 {st.session_state.cal_week_idx+1}주차</p>",
             unsafe_allow_html=True)
         if w3.button("다음주 ▶", use_container_width=True):
+            st.session_state.cal_action = None
+            st.session_state.cal_action_data = None
             if st.session_state.cal_week_idx < len(cal_weeks) - 1:
                 st.session_state.cal_week_idx += 1
             else:
@@ -609,7 +611,6 @@ def render_calendar():
                 else: st.session_state.cal_month += 1
                 st.session_state.cal_week_idx = 0
             st.rerun()
-
         weeks_to_show = [cal_weeks[min(st.session_state.cal_week_idx, len(cal_weeks)-1)]]
     else:
         weeks_to_show = cal_weeks
@@ -1101,4 +1102,3 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v22.1 종료 ]
 # =================================================================
-
