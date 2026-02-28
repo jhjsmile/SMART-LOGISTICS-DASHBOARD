@@ -248,8 +248,8 @@ def dialog_view_day(selected_date: str):
 
     if not day_data.empty:
         for _, row in day_data.iterrows():
-            cat   = str(row.get('카테고리', '기타')) if row.get('카테고리') else '기타'
-            color = SCHEDULE_COLORS.get(cat, "#888")
+            cat    = str(row.get('카테고리', '기타')) if row.get('카테고리') else '기타'
+            color  = SCHEDULE_COLORS.get(cat, "#888")
             row_id = row.get('id', None)
             with st.container(border=True):
                 st.markdown(
@@ -1226,6 +1226,7 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v22.0 캘린더 버전 종료 ]
 # =================================================================
+
 
 
 
