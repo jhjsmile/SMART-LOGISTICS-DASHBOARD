@@ -537,15 +537,18 @@ def render_calendar():
     # 헤더
     h1, h2, h3, h4, h5 = st.columns([1, 1, 3, 1, 1])
     if h1.button("◀ 이전달", use_container_width=True):
+        st.session_state.cal_action = None; st.session_state.cal_action_data = None
         if cal_month == 1: st.session_state.cal_year -= 1; st.session_state.cal_month = 12
         else: st.session_state.cal_month -= 1
         st.rerun()
     if h2.button("오늘", use_container_width=True):
+        st.session_state.cal_action = None; st.session_state.cal_action_data = None
         st.session_state.cal_year  = datetime.now(KST).year
         st.session_state.cal_month = datetime.now(KST).month
         st.rerun()
     h3.markdown(f"<h3 style='text-align:center; margin:0; padding:6px;'>{cal_year}년 {cal_month}월</h3>", unsafe_allow_html=True)
     if h4.button("다음달 ▶", use_container_width=True):
+        st.session_state.cal_action = None; st.session_state.cal_action_data = None
         if cal_month == 12: st.session_state.cal_year += 1; st.session_state.cal_month = 1
         else: st.session_state.cal_month += 1
         st.rerun()
@@ -588,22 +591,20 @@ def render_calendar():
 
         w1, w2, w3 = st.columns([1, 4, 1])
         if w1.button("◀ 이전주", use_container_width=True):
-            st.session_state.cal_action = None
-            st.session_state.cal_action_data = None
+            st.session_state.cal_action = None; st.session_state.cal_action_data = None
             if st.session_state.cal_week_idx > 0:
                 st.session_state.cal_week_idx -= 1
-        else:
-            if cal_month == 1: st.session_state.cal_year -= 1; st.session_state.cal_month = 12
-            else: st.session_state.cal_month -= 1
-            prev_weeks = calendar.monthcalendar(st.session_state.cal_year, st.session_state.cal_month)
-            st.session_state.cal_week_idx = len(prev_weeks) - 1
-        st.rerun()
+            else:
+                if cal_month == 1: st.session_state.cal_year -= 1; st.session_state.cal_month = 12
+                else: st.session_state.cal_month -= 1
+                prev_weeks = calendar.monthcalendar(st.session_state.cal_year, st.session_state.cal_month)
+                st.session_state.cal_week_idx = len(prev_weeks) - 1
+            st.rerun()
         w2.markdown(
             f"<p style='text-align:center; margin:8px 0;'>{cal_year}년 {cal_month}월 {st.session_state.cal_week_idx+1}주차</p>",
             unsafe_allow_html=True)
         if w3.button("다음주 ▶", use_container_width=True):
-            st.session_state.cal_action = None
-            st.session_state.cal_action_data = None
+            st.session_state.cal_action = None; st.session_state.cal_action_data = None
             if st.session_state.cal_week_idx < len(cal_weeks) - 1:
                 st.session_state.cal_week_idx += 1
             else:
@@ -611,6 +612,7 @@ def render_calendar():
                 else: st.session_state.cal_month += 1
                 st.session_state.cal_week_idx = 0
             st.rerun()
+
         weeks_to_show = [cal_weeks[min(st.session_state.cal_week_idx, len(cal_weeks)-1)]]
     else:
         weeks_to_show = cal_weeks
