@@ -12,10 +12,10 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 # =================================================================
-# 1. 시스템 전역 설정 (v22.1)
+# 1. 시스템 전역 설정 (v22.2 - 반응형)
 # =================================================================
 st.set_page_config(
-    page_title="생산 통합 관리 시스템 v22.1",
+    page_title="생산 통합 관리 시스템 v22.2",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -23,8 +23,8 @@ st.set_page_config(
 KST = timezone(timedelta(hours=9))
 st_autorefresh(interval=30000, key="pms_auto_refresh")
 
-PRODUCTION_GROUPS    = ["제조1반", "제조2반", "제조3반"]
-CALENDAR_EDIT_ROLES  = ["master", "admin", "control_tower"]
+PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
+CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower"]
 
 ROLES = {
     "master":        ["조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
@@ -54,19 +54,30 @@ SCHEDULE_COLORS = {
 
 st.markdown("""
     <style>
-    .stApp { max-width: 1200px; margin: 0 auto; overflow-x: hidden; }
+    /* ── 전체 너비 활용 (max-width 제거) ── */
+    .stApp { overflow-x: hidden; }
+    .block-container {
+        max-width: 100% !important;
+        padding: 1.5rem 2.5rem 2rem 2.5rem !important;
+    }
+
+    /* ── 버튼 ── */
     .stButton button {
         display: flex; justify-content: center; align-items: center;
         margin-top: 1px; padding: 6px 10px; width: 100%; border-radius: 8px;
         font-weight: 600; white-space: nowrap !important; overflow: hidden;
         text-overflow: ellipsis; transition: all 0.2s ease;
     }
-    .centered-title { text-align: center; font-weight: bold; margin: 25px 0; }
+
+    /* ── 공통 타이틀/섹션 ── */
+    .centered-title { text-align: center; font-weight: bold; margin: 20px 0; }
     .section-title {
-        background-color: #f8f9fa; color: #111; padding: 16px 20px;
-        border-radius: 10px; font-weight: bold; margin: 10px 0 25px 0;
+        background-color: #f8f9fa; color: #111; padding: 14px 20px;
+        border-radius: 10px; font-weight: bold; margin: 8px 0 20px 0;
         border-left: 10px solid #007bff; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
     }
+
+    /* ── 통계 박스 (반응형) ── */
     .stat-box {
         display: flex; flex-direction: column; justify-content: center; align-items: center;
         background-color: #ffffff; border-radius: 12px; padding: 16px 8px;
@@ -75,32 +86,57 @@ st.markdown("""
         width: 100%; box-sizing: border-box; overflow: hidden;
     }
     .stat-label {
-        font-size: clamp(0.6rem, 1.2vw, 0.9rem); color: #6c757d;
+        font-size: clamp(0.55rem, 1vw, 0.9rem); color: #6c757d;
         font-weight: bold; margin-bottom: 8px; white-space: nowrap;
     }
     .stat-value {
-        font-size: clamp(1rem, 2vw, 2.4rem); color: #007bff;
+        font-size: clamp(1.2rem, 2.5vw, 3rem); color: #007bff;
         font-weight: bold; line-height: 1; white-space: nowrap;
     }
+
     .button-spacer { margin-top: 28px; }
-    /* 캘린더 hover 확대 */
+
+    /* ── 캘린더 셀 (반응형 + hover 확대) ── */
     .cal-cell {
-        background: #1e1e1e; border: 1px solid #444; border-radius: 8px;
-        padding: 8px 6px; min-height: 120px; box-sizing: border-box;
+        background: #1e1e1e;
+        border: 1px solid #444;
+        border-radius: 8px;
+        padding: clamp(4px, 0.8vw, 10px);
+        min-height: clamp(90px, 10vw, 150px);
+        box-sizing: border-box;
         transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
         cursor: pointer;
     }
     .cal-cell:hover {
-        transform: scale(1.06);
-        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        transform: scale(1.05);
+        box-shadow: 0 8px 28px rgba(0,0,0,0.55);
         border-color: #4dabf7 !important;
-        z-index: 999; position: relative;
+        z-index: 999;
+        position: relative;
     }
-    .cal-cell.today { background: #1a472a; border: 2px solid #40c057 !important; }
-    .cal-day-num { font-weight: bold; color: #fff; margin-bottom: 5px; font-size: 0.95rem; }
+    .cal-cell.today {
+        background: #1a472a;
+        border: 2px solid #40c057 !important;
+    }
+    .cal-day-num {
+        font-weight: bold; color: #fff; margin-bottom: 4px;
+        font-size: clamp(0.7rem, 1.1vw, 1rem);
+    }
     .cal-event {
-        border-radius: 4px; padding: 3px 5px; margin-bottom: 3px;
-        font-size: 0.62rem; line-height: 1.3;
+        border-radius: 4px; padding: 2px 5px; margin-bottom: 3px;
+        font-size: clamp(0.48rem, 0.75vw, 0.68rem); line-height: 1.3;
+    }
+
+    /* ── 반응형 breakpoints ── */
+    @media (max-width: 900px) {
+        .block-container { padding: 1rem 1rem 1.5rem 1rem !important; }
+        .stat-value { font-size: 1.4rem; }
+        .cal-cell { min-height: 75px; }
+    }
+    @media (min-width: 1600px) {
+        .stat-value { font-size: 3rem; }
+        .cal-cell { min-height: 160px; }
+        .cal-event { font-size: 0.72rem; }
     }
     </style>
 """, unsafe_allow_html=True)
@@ -429,7 +465,11 @@ if not st.session_state.login_status:
 # 7. 사이드바
 # =================================================================
 
-st.sidebar.markdown("### 🏭 생산 관리 시스템 v22.1")
+def clear_cal():
+    st.session_state.cal_action      = None
+    st.session_state.cal_action_data = None
+
+st.sidebar.markdown("### 🏭 생산 관리 시스템 v22.2")
 st.sidebar.markdown(f"**{ROLE_LABELS.get(st.session_state.user_role, '')}**")
 st.sidebar.caption(f"ID: {st.session_state.user_id}")
 st.sidebar.divider()
@@ -438,11 +478,10 @@ allowed_nav = ROLES.get(st.session_state.user_role, [])
 
 if st.sidebar.button("🏠 메인 현황판", use_container_width=True,
     type="primary" if st.session_state.current_line == "현황판" else "secondary"):
-    st.session_state.production_db   = load_realtime_ledger()
-    st.session_state.schedule_db     = load_schedule()
-    st.session_state.current_line    = "현황판"
-    st.session_state.cal_action      = None
-    st.session_state.cal_action_data = None
+    clear_cal()
+    st.session_state.production_db = load_realtime_ledger()
+    st.session_state.schedule_db   = load_schedule()
+    st.session_state.current_line  = "현황판"
     st.rerun()
 
 st.sidebar.divider()
@@ -456,19 +495,17 @@ for group in PRODUCTION_GROUPS:
                 active = (st.session_state.selected_group == group and st.session_state.current_line == p)
                 if st.button(f"{p} 현황", key=f"nav_{group}_{p}", use_container_width=True,
                              type="primary" if active else "secondary"):
-                    st.session_state.selected_group  = group
-                    st.session_state.current_line    = p
-                    st.session_state.production_db   = load_realtime_ledger()
-                    st.session_state.cal_action      = None
-                    st.session_state.cal_action_data = None
+                    clear_cal()
+                    st.session_state.selected_group = group
+                    st.session_state.current_line   = p
+                    st.session_state.production_db  = load_realtime_ledger()
                     st.rerun()
         if group == PRODUCTION_GROUPS[-1] and "불량 공정" in allowed_nav:
             if st.sidebar.button("🚫 불량 공정", key="nav_defect", use_container_width=True,
                 type="primary" if st.session_state.current_line == "불량 공정" else "secondary"):
-                st.session_state.current_line    = "불량 공정"
-                st.session_state.production_db   = load_realtime_ledger()
-                st.session_state.cal_action      = None
-                st.session_state.cal_action_data = None
+                clear_cal()
+                st.session_state.current_line  = "불량 공정"
+                st.session_state.production_db = load_realtime_ledger()
                 st.rerun()
 
 st.sidebar.divider()
@@ -477,19 +514,17 @@ for p in ["생산 현황 리포트", "수리 현황 리포트"]:
     if p in allowed_nav:
         if st.sidebar.button(p, key=f"fnav_{p}", use_container_width=True,
             type="primary" if st.session_state.current_line == p else "secondary"):
-            st.session_state.current_line    = p
-            st.session_state.production_db   = load_realtime_ledger()
-            st.session_state.cal_action      = None
-            st.session_state.cal_action_data = None
+            clear_cal()
+            st.session_state.current_line  = p
+            st.session_state.production_db = load_realtime_ledger()
             st.rerun()
 
 if "마스터 관리" in allowed_nav:
     st.sidebar.divider()
     if st.sidebar.button("🔐 마스터 데이터 관리", use_container_width=True,
         type="primary" if st.session_state.current_line == "마스터 관리" else "secondary"):
-        st.session_state.current_line    = "마스터 관리"
-        st.session_state.cal_action      = None
-        st.session_state.cal_action_data = None
+        clear_cal()
+        st.session_state.current_line = "마스터 관리"
         st.rerun()
 
 if st.sidebar.button("🚪 로그아웃", use_container_width=True):
@@ -516,7 +551,7 @@ def trigger_entry_dialog():
             '시간': get_now_kst_str(), '라인': st.session_state.current_line,
             '상태': '진행 중', '작업자': st.session_state.user_id
         })
-        st.session_state.production_db = load_realtime_ledger()
+        st.session_state.production_db  = load_realtime_ledger()
         st.session_state.confirm_target = None
         st.rerun()
     if c_no.button("❌ 취소", use_container_width=True):
@@ -526,7 +561,7 @@ def trigger_entry_dialog():
 if st.session_state.get("confirm_target"):
     trigger_entry_dialog()
 
-# 캘린더 다이얼로그 처리
+# 캘린더 다이얼로그
 if st.session_state.cal_action == "view_day":
     dialog_view_day(st.session_state.cal_action_data)
 elif st.session_state.cal_action == "add":
@@ -544,21 +579,23 @@ def render_calendar():
     cal_month = st.session_state.cal_month
     can_edit  = st.session_state.user_role in CALENDAR_EDIT_ROLES
 
-    # 헤더
+    # 헤더 네비게이션
     h1, h2, h3, h4, h5 = st.columns([1, 1, 3, 1, 1])
     if h1.button("◀ 이전달", use_container_width=True):
-        st.session_state.cal_action = None; st.session_state.cal_action_data = None
+        clear_cal()
         if cal_month == 1: st.session_state.cal_year -= 1; st.session_state.cal_month = 12
         else: st.session_state.cal_month -= 1
         st.rerun()
     if h2.button("오늘", use_container_width=True):
-        st.session_state.cal_action = None; st.session_state.cal_action_data = None
+        clear_cal()
         st.session_state.cal_year  = datetime.now(KST).year
         st.session_state.cal_month = datetime.now(KST).month
         st.rerun()
-    h3.markdown(f"<h3 style='text-align:center; margin:0; padding:6px;'>{cal_year}년 {cal_month}월</h3>", unsafe_allow_html=True)
+    h3.markdown(
+        f"<h3 style='text-align:center; margin:0; padding:6px;'>{cal_year}년 {cal_month}월</h3>",
+        unsafe_allow_html=True)
     if h4.button("다음달 ▶", use_container_width=True):
-        st.session_state.cal_action = None; st.session_state.cal_action_data = None
+        clear_cal()
         if cal_month == 12: st.session_state.cal_year += 1; st.session_state.cal_month = 1
         else: st.session_state.cal_month += 1
         st.rerun()
@@ -582,7 +619,8 @@ def render_calendar():
     for i, d in enumerate(days_kr):
         color = "#fa5252" if d == "일" else "#4dabf7" if d == "토" else "#ccc"
         hdr_cols[i].markdown(
-            f"<div style='text-align:center; font-weight:bold; color:{color}; padding:8px; background:#2a2a2a; border-radius:6px;'>{d}</div>",
+            f"<div style='text-align:center; font-weight:bold; color:{color}; "
+            f"padding:8px; background:#2a2a2a; border-radius:6px;'>{d}</div>",
             unsafe_allow_html=True)
 
     today     = date.today()
@@ -590,18 +628,17 @@ def render_calendar():
 
     # 주별 보기
     if st.session_state.cal_view == "주별":
-        # 현재 주 자동 탐색
         if cal_year == today.year and cal_month == today.month:
             for wi, week in enumerate(cal_weeks):
                 if today.day in week:
-                    if st.session_state.cal_week_idx != wi and st.session_state.get('cal_auto_week', True):
-                        st.session_state.cal_week_idx   = wi
-                        st.session_state.cal_auto_week  = False
+                    if st.session_state.get('cal_auto_week', True):
+                        st.session_state.cal_week_idx  = wi
+                        st.session_state.cal_auto_week = False
                     break
 
         w1, w2, w3 = st.columns([1, 4, 1])
         if w1.button("◀ 이전주", use_container_width=True):
-            st.session_state.cal_action = None; st.session_state.cal_action_data = None
+            clear_cal()
             if st.session_state.cal_week_idx > 0:
                 st.session_state.cal_week_idx -= 1
             else:
@@ -611,10 +648,11 @@ def render_calendar():
                 st.session_state.cal_week_idx = len(prev_weeks) - 1
             st.rerun()
         w2.markdown(
-            f"<p style='text-align:center; margin:8px 0;'>{cal_year}년 {cal_month}월 {st.session_state.cal_week_idx+1}주차</p>",
+            f"<p style='text-align:center; margin:8px 0;'>"
+            f"{cal_year}년 {cal_month}월 {st.session_state.cal_week_idx+1}주차</p>",
             unsafe_allow_html=True)
         if w3.button("다음주 ▶", use_container_width=True):
-            st.session_state.cal_action = None; st.session_state.cal_action_data = None
+            clear_cal()
             if st.session_state.cal_week_idx < len(cal_weeks) - 1:
                 st.session_state.cal_week_idx += 1
             else:
@@ -633,17 +671,16 @@ def render_calendar():
         for i, day in enumerate(week):
             with week_cols[i]:
                 if day == 0:
-                    st.markdown("<div style='min-height:120px;'></div>", unsafe_allow_html=True)
+                    st.markdown("<div style='min-height:100px;'></div>", unsafe_allow_html=True)
                     continue
 
-                day_str  = f"{cal_year}-{cal_month:02d}-{day:02d}"
-                day_data = sch_df[sch_df['날짜'] == day_str] if not sch_df.empty else pd.DataFrame()
-                is_today = (today == date(cal_year, cal_month, day))
-                bg       = "#1a472a" if is_today else "#1e1e1e"
-                border   = "2px solid #40c057" if is_today else "1px solid #444"
+                day_str   = f"{cal_year}-{cal_month:02d}-{day:02d}"
+                day_data  = sch_df[sch_df['날짜'] == day_str] if not sch_df.empty else pd.DataFrame()
+                is_today  = (today == date(cal_year, cal_month, day))
+                bg        = "#1a472a" if is_today else "#1e1e1e"
+                border    = "2px solid #40c057" if is_today else "1px solid #444"
                 today_cls = " today" if is_today else ""
 
-                # 셀 HTML
                 cell_html = (
                     f"<div class='cal-cell{today_cls}' style='background:{bg}; border:{border};'>"
                     f"<div class='cal-day-num'>{day}{'  🟢' if is_today else ''}</div>"
@@ -664,11 +701,10 @@ def render_calendar():
                         )
                         event_count += 1
                 if event_count == 0 and can_edit:
-                    cell_html += "<div style='color:#555; font-size:0.6rem; text-align:center; margin-top:12px;'>+ 클릭하여 추가</div>"
+                    cell_html += "<div style='color:#555; font-size:0.6rem; text-align:center; margin-top:16px;'>+ 클릭하여 추가</div>"
                 cell_html += "</div>"
                 st.markdown(cell_html, unsafe_allow_html=True)
 
-                # 날짜 클릭 버튼
                 btn_label = f"📅 {day}일" if event_count == 0 else f"📅 {day}일 ({event_count}건)"
                 if st.button(btn_label, key=f"day_btn_{day_str}", use_container_width=True):
                     st.session_state.cal_action      = "view_day"
@@ -682,19 +718,17 @@ def render_calendar():
 curr_g = st.session_state.selected_group
 curr_l = st.session_state.current_line
 
-# ─────────────────────────────────────────────
-# 현황판
-# ─────────────────────────────────────────────
+# ── 현황판 ──────────────────────────────────────────────────────
 if curr_l == "현황판":
     st.markdown("<h2 class='centered-title'>🏭 생산 통합 현황판</h2>", unsafe_allow_html=True)
     st.caption(f"🕐 마지막 업데이트: {get_now_kst_str()}")
 
     db_all = st.session_state.production_db
 
-    # 실시간 차트
+    # 차트 (데이터 있을 때만)
     if not db_all.empty:
         st.markdown("<div class='section-title'>📈 실시간 차트</div>", unsafe_allow_html=True)
-        ch1, ch2 = st.columns([1.8, 1.2])
+        ch1, ch2, ch3 = st.columns([2.5, 1.5, 1.2])
         with ch1:
             fig = px.bar(
                 db_all.groupby(['반','라인']).size().reset_index(name='수량'),
@@ -702,29 +736,44 @@ if curr_l == "현황판":
                 title="<b>반별 공정 진행 현황</b>", template="plotly_white"
             )
             fig.update_yaxes(dtick=1)
+            fig.update_layout(margin=dict(t=40,b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02))
             st.plotly_chart(fig, use_container_width=True, key="dashboard_bar")
         with ch2:
             fig2 = px.pie(
                 db_all.groupby('상태').size().reset_index(name='수량'),
                 values='수량', names='상태', hole=0.5, title="<b>전체 상태 비중</b>"
             )
+            fig2.update_layout(margin=dict(t=40,b=20))
             st.plotly_chart(fig2, use_container_width=True, key="dashboard_pie")
+        with ch3:
+            fig3 = px.bar(
+                db_all.groupby('반').size().reset_index(name='수량'),
+                x='반', y='수량', color='반',
+                title="<b>반별 총 투입</b>", template="plotly_white"
+            )
+            fig3.update_yaxes(dtick=1)
+            fig3.update_layout(margin=dict(t=40,b=20), showlegend=False)
+            st.plotly_chart(fig3, use_container_width=True, key="dashboard_bar2")
 
     st.divider()
 
-    # 요약 카드
+    # 요약 카드 (6열로 넓게)
     st.markdown("<div class='section-title'>📊 전체 반 생산 요약</div>", unsafe_allow_html=True)
     col1, col2, col3, col4 = st.columns(4)
-    col1.markdown(f"<div class='stat-box'><div class='stat-label'>📦 총 투입</div><div class='stat-value'>{len(db_all)}</div></div>", unsafe_allow_html=True)
-    col2.markdown(f"<div class='stat-box'><div class='stat-label'>✅ 최종 완료</div><div class='stat-value'>{len(db_all[(db_all['라인']=='포장 라인')&(db_all['상태']=='완료')])}</div></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='stat-box'><div class='stat-label'>🏗️ 작업 중</div><div class='stat-value'>{len(db_all[db_all['상태']=='진행 중'])}</div></div>", unsafe_allow_html=True)
-    col4.markdown(f"<div class='stat-box'><div class='stat-label'>🚨 불량 이슈</div><div class='stat-value'>{len(db_all[db_all['상태'].str.contains('불량',na=False)])}</div></div>", unsafe_allow_html=True)
+    total      = len(db_all)
+    completed  = len(db_all[(db_all['라인']=='포장 라인')&(db_all['상태']=='완료')])
+    in_prog    = len(db_all[db_all['상태']=='진행 중'])
+    defects    = len(db_all[db_all['상태'].str.contains('불량',na=False)])
+    col1.markdown(f"<div class='stat-box'><div class='stat-label'>📦 총 투입</div><div class='stat-value'>{total}</div></div>", unsafe_allow_html=True)
+    col2.markdown(f"<div class='stat-box'><div class='stat-label'>✅ 최종 완료</div><div class='stat-value'>{completed}</div></div>", unsafe_allow_html=True)
+    col3.markdown(f"<div class='stat-box'><div class='stat-label'>🏗️ 작업 중</div><div class='stat-value'>{in_prog}</div></div>", unsafe_allow_html=True)
+    col4.markdown(f"<div class='stat-box'><div class='stat-label'>🚨 불량 이슈</div><div class='stat-value'>{defects}</div></div>", unsafe_allow_html=True)
 
     st.divider()
 
     # 반별 현황 카드
     st.markdown("<div class='section-title'>🏭 반별 생산 현황</div>", unsafe_allow_html=True)
-    cards_html = "<div style=\"display:flex; gap:12px; width:100%; box-sizing:border-box;\">"
+    cards_html = "<div style='display:flex; gap:16px; width:100%; box-sizing:border-box;'>"
     for g in PRODUCTION_GROUPS:
         gdf  = db_all[db_all['반'] == g]
         완료 = len(gdf[(gdf['라인']=='포장 라인')&(gdf['상태']=='완료')])
@@ -732,15 +781,21 @@ if curr_l == "현황판":
         불량 = len(gdf[gdf['상태'].str.contains('불량',na=False)])
         투입 = len(gdf)
         cards_html += (
-            f"<div style=\"flex:1; background:#1e1e1e; border:1px solid #333; border-radius:14px; padding:16px; box-sizing:border-box; min-width:0;\">"
-            f"<div style=\"font-size:clamp(0.9rem,1.5vw,1.1rem); font-weight:bold; margin-bottom:12px; color:#fff;\">📍 {g}</div>"
-            f"<div style=\"background:#2a2a2a; border-radius:10px; padding:12px; text-align:center; margin-bottom:10px;\">"
-            f"<div style=\"font-size:clamp(0.6rem,1vw,0.8rem); color:#aaa; font-weight:bold; margin-bottom:4px;\">총 투입</div>"
-            f"<div style=\"font-size:clamp(1.2rem,2.5vw,2rem); color:#4dabf7; font-weight:bold;\">{투입} EA</div></div>"
-            f"<div style=\"display:flex; gap:6px;\">"
-            f"<div style=\"flex:1; background:#2a2a2a; border-radius:10px; padding:10px 4px; text-align:center; min-width:0;\"><div style=\"font-size:0.72rem; color:#aaa; font-weight:bold;\">✅ 완료</div><div style=\"font-size:clamp(1rem,2vw,1.6rem); color:#40c057; font-weight:bold;\">{완료}</div></div>"
-            f"<div style=\"flex:1; background:#2a2a2a; border-radius:10px; padding:10px 4px; text-align:center; min-width:0;\"><div style=\"font-size:0.72rem; color:#aaa; font-weight:bold;\">🏗️ 작업중</div><div style=\"font-size:clamp(1rem,2vw,1.6rem); color:#4dabf7; font-weight:bold;\">{재공}</div></div>"
-            f"<div style=\"flex:1; background:#2a2a2a; border-radius:10px; padding:10px 4px; text-align:center; min-width:0;\"><div style=\"font-size:0.72rem; color:#aaa; font-weight:bold;\">🚨 불량</div><div style=\"font-size:clamp(1rem,2vw,1.6rem); color:#fa5252; font-weight:bold;\">{불량}</div></div>"
+            f"<div style='flex:1; background:#1e1e1e; border:1px solid #333; border-radius:14px; padding:20px; box-sizing:border-box; min-width:0;'>"
+            f"<div style='font-size:clamp(1rem,1.5vw,1.2rem); font-weight:bold; margin-bottom:14px; color:#fff;'>📍 {g}</div>"
+            f"<div style='background:#2a2a2a; border-radius:10px; padding:14px; text-align:center; margin-bottom:12px;'>"
+            f"<div style='font-size:clamp(0.65rem,1vw,0.85rem); color:#aaa; font-weight:bold; margin-bottom:6px;'>총 투입</div>"
+            f"<div style='font-size:clamp(1.5rem,3vw,2.5rem); color:#4dabf7; font-weight:bold;'>{투입} EA</div></div>"
+            f"<div style='display:flex; gap:8px;'>"
+            f"<div style='flex:1; background:#2a2a2a; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
+            f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#aaa; font-weight:bold;'>✅ 완료</div>"
+            f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#40c057; font-weight:bold;'>{완료}</div></div>"
+            f"<div style='flex:1; background:#2a2a2a; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
+            f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#aaa; font-weight:bold;'>🏗️ 작업중</div>"
+            f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#4dabf7; font-weight:bold;'>{재공}</div></div>"
+            f"<div style='flex:1; background:#2a2a2a; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
+            f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#aaa; font-weight:bold;'>🚨 불량</div>"
+            f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#fa5252; font-weight:bold;'>{불량}</div></div>"
             f"</div></div>"
         )
     cards_html += "</div>"
@@ -759,9 +814,7 @@ if curr_l == "현황판":
         st.caption("👁️ 조회만 가능합니다.")
     render_calendar()
 
-# ─────────────────────────────────────────────
-# 조립 라인
-# ─────────────────────────────────────────────
+# ── 조립 라인 ────────────────────────────────────────────────────
 elif curr_l == "조립 라인":
     st.markdown(f"<h2 class='centered-title'>📦 {curr_g} 신규 조립 현황</h2>", unsafe_allow_html=True)
 
@@ -816,9 +869,7 @@ elif curr_l == "조립 라인":
     else:
         st.info("등록된 생산 내역이 없습니다.")
 
-# ─────────────────────────────────────────────
-# 검사 / 포장 라인
-# ─────────────────────────────────────────────
+# ── 검사 / 포장 라인 ─────────────────────────────────────────────
 elif curr_l in ["검사 라인", "포장 라인"]:
     st.markdown(f"<h2 class='centered-title'>🔍 {curr_g} {curr_l} 현황</h2>", unsafe_allow_html=True)
     prev = "조립 라인" if curr_l == "검사 라인" else "검사 라인"
@@ -863,9 +914,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     else:
         st.info("해당 공정 내역이 없습니다.")
 
-# ─────────────────────────────────────────────
-# 생산 현황 리포트
-# ─────────────────────────────────────────────
+# ── 생산 현황 리포트 ─────────────────────────────────────────────
 elif curr_l == "생산 현황 리포트":
     st.markdown("<h2 class='centered-title'>📊 생산 운영 통합 모니터링</h2>", unsafe_allow_html=True)
     v_group = st.radio("조회 범위", ["전체"] + PRODUCTION_GROUPS, horizontal=True)
@@ -894,9 +943,7 @@ elif curr_l == "생산 현황 리포트":
     else:
         st.info("조회 가능한 데이터가 없습니다.")
 
-# ─────────────────────────────────────────────
-# 불량 공정
-# ─────────────────────────────────────────────
+# ── 불량 공정 ────────────────────────────────────────────────────
 elif curr_l == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 분석 및 수리 조치</h2>", unsafe_allow_html=True)
     db   = st.session_state.production_db
@@ -929,9 +976,7 @@ elif curr_l == "불량 공정":
                     else:
                         st.warning("불량 원인과 수리 조치 내용을 모두 입력해주세요.")
 
-# ─────────────────────────────────────────────
-# 수리 현황 리포트
-# ─────────────────────────────────────────────
+# ── 수리 현황 리포트 ─────────────────────────────────────────────
 elif curr_l == "수리 현황 리포트":
     st.markdown("<h2 class='centered-title'>📈 품질 분석 및 수리 이력 리포트</h2>", unsafe_allow_html=True)
     hist_df = st.session_state.production_db
@@ -949,9 +994,7 @@ elif curr_l == "수리 현황 리포트":
     else:
         st.info("기록된 이슈 내역이 없습니다.")
 
-# ─────────────────────────────────────────────
-# 마스터 관리
-# ─────────────────────────────────────────────
+# ── 마스터 관리 ──────────────────────────────────────────────────
 elif curr_l == "마스터 관리":
     st.markdown("<h2 class='centered-title'>🔐 시스템 마스터 데이터 관리</h2>", unsafe_allow_html=True)
 
@@ -967,7 +1010,6 @@ elif curr_l == "마스터 관리":
                 else:
                     st.error("비밀번호가 올바르지 않습니다.")
     else:
-        # 생산 일정 관리
         st.markdown("<div class='section-title'>📅 생산 일정 관리</div>", unsafe_allow_html=True)
         sch_tab1, sch_tab2 = st.tabs(["➕ 직접 입력", "📋 등록된 일정 관리"])
 
@@ -1016,7 +1058,6 @@ elif curr_l == "마스터 관리":
 
         st.divider()
 
-        # 반별 모델/품목
         st.markdown("<div class='section-title'>📋 반별 독립 모델/품목 설정</div>", unsafe_allow_html=True)
         tabs = st.tabs([f"{g} 설정" for g in PRODUCTION_GROUPS])
         for i, g_name in enumerate(PRODUCTION_GROUPS):
@@ -1095,8 +1136,10 @@ elif curr_l == "마스터 관리":
                     db_export = db_export.drop(columns=['시간_dt'])
                 except: pass
             st.caption(f"📋 조회 결과: **{len(db_export)}건**")
-            st.download_button("📥 CSV 다운로드", db_export.to_csv(index=False).encode('utf-8-sig'),
-                f"PMS_{export_group}_{start_date}~{end_date}.csv", use_container_width=True)
+            st.download_button("📥 CSV 다운로드",
+                db_export.to_csv(index=False).encode('utf-8-sig'),
+                f"PMS_{export_group}_{start_date}~{end_date}.csv",
+                use_container_width=True)
             excel_buf = io.BytesIO()
             with pd.ExcelWriter(excel_buf, engine='openpyxl') as writer:
                 db_export.to_excel(writer, index=False, sheet_name='생산데이터')
@@ -1112,5 +1155,5 @@ elif curr_l == "마스터 관리":
                 st.success("전체 데이터가 초기화되었습니다."); st.rerun()
 
 # =================================================================
-# [ PMS v22.1 종료 ]
+# [ PMS v22.2 종료 ]
 # =================================================================
