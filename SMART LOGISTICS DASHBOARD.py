@@ -438,9 +438,11 @@ allowed_nav = ROLES.get(st.session_state.user_role, [])
 
 if st.sidebar.button("🏠 메인 현황판", use_container_width=True,
     type="primary" if st.session_state.current_line == "현황판" else "secondary"):
-    st.session_state.production_db = load_realtime_ledger()
-    st.session_state.schedule_db   = load_schedule()
-    st.session_state.current_line  = "현황판"
+    st.session_state.production_db   = load_realtime_ledger()
+    st.session_state.schedule_db     = load_schedule()
+    st.session_state.current_line    = "현황판"
+    st.session_state.cal_action      = None
+    st.session_state.cal_action_data = None
     st.rerun()
 
 st.sidebar.divider()
@@ -454,15 +456,19 @@ for group in PRODUCTION_GROUPS:
                 active = (st.session_state.selected_group == group and st.session_state.current_line == p)
                 if st.button(f"{p} 현황", key=f"nav_{group}_{p}", use_container_width=True,
                              type="primary" if active else "secondary"):
-                    st.session_state.selected_group = group
-                    st.session_state.current_line   = p
-                    st.session_state.production_db  = load_realtime_ledger()
+                    st.session_state.selected_group  = group
+                    st.session_state.current_line    = p
+                    st.session_state.production_db   = load_realtime_ledger()
+                    st.session_state.cal_action      = None
+                    st.session_state.cal_action_data = None
                     st.rerun()
         if group == PRODUCTION_GROUPS[-1] and "불량 공정" in allowed_nav:
             if st.sidebar.button("🚫 불량 공정", key="nav_defect", use_container_width=True,
                 type="primary" if st.session_state.current_line == "불량 공정" else "secondary"):
-                st.session_state.current_line  = "불량 공정"
-                st.session_state.production_db = load_realtime_ledger()
+                st.session_state.current_line    = "불량 공정"
+                st.session_state.production_db   = load_realtime_ledger()
+                st.session_state.cal_action      = None
+                st.session_state.cal_action_data = None
                 st.rerun()
 
 st.sidebar.divider()
@@ -471,15 +477,19 @@ for p in ["생산 현황 리포트", "수리 현황 리포트"]:
     if p in allowed_nav:
         if st.sidebar.button(p, key=f"fnav_{p}", use_container_width=True,
             type="primary" if st.session_state.current_line == p else "secondary"):
-            st.session_state.current_line  = p
-            st.session_state.production_db = load_realtime_ledger()
+            st.session_state.current_line    = p
+            st.session_state.production_db   = load_realtime_ledger()
+            st.session_state.cal_action      = None
+            st.session_state.cal_action_data = None
             st.rerun()
 
 if "마스터 관리" in allowed_nav:
     st.sidebar.divider()
     if st.sidebar.button("🔐 마스터 데이터 관리", use_container_width=True,
         type="primary" if st.session_state.current_line == "마스터 관리" else "secondary"):
-        st.session_state.current_line = "마스터 관리"
+        st.session_state.current_line    = "마스터 관리"
+        st.session_state.cal_action      = None
+        st.session_state.cal_action_data = None
         st.rerun()
 
 if st.sidebar.button("🚪 로그아웃", use_container_width=True):
