@@ -269,6 +269,14 @@ st.markdown("""
     .button-spacer { margin-top: 28px; }
 
     /* 캘린더 셀 */
+    .cal-day-wrap {
+        cursor: pointer;
+        transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+    .cal-day-wrap:hover {
+        box-shadow: 0 4px 16px rgba(126,184,232,0.35);
+        border-color: #7eb8e8 !important;
+    }
     .cal-cell {
         background: #fffdf8;
         border: 1px solid #e0d8c8;
@@ -915,16 +923,36 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                 today_mark  = " 🟢" if is_today else ""
                 add_hint    = "  ＋" if can_edit and event_count == 0 else ""
                 day_btn_lbl = f"{day}{today_mark}{add_hint}"
-                if st.button(day_btn_lbl, key=f"{key_prefix}_{day_str}",
-                             use_container_width=True, help="클릭하여 일정 보기/추가"):
-                    st.session_state.cal_action      = "view_day"
-                    st.session_state.cal_action_data = day_str
-                    st.rerun()
-
-                if event_htmls:
+                # 날짜 버튼 전용 div로 감싸서 CSS 격리
+                day_color   = "#c8605a" if is_today else "#3d3830"
+                day_bg      = "#d8ede2" if is_today else "#fffdf8"
+                day_border  = "2px solid #7ec8a0" if is_today else "1px solid #e0d8c8"
+                st.markdown(
+                    f"<div class='cal-day-wrap' style='background:{day_bg}; border:{day_border}; "
+                    f"border-radius:8px; padding:4px 2px 2px 2px; margin-bottom:2px;'>"
+                    f"<div style='text-align:center; font-size:1.1rem; font-weight:bold; "
+                    f"color:{day_color}; line-height:1.2;'>{day}{today_mark}</div>"
+                    + (f"<div style='text-align:center; color:#7eb8e8; font-size:0.7rem; font-weight:bold;'>＋</div>" if can_edit and event_count == 0 else "")
+                    + ("".join(event_htmls) if event_htmls else "")
+                    + "</div>",
+                    unsafe_allow_html=True
+                )
+                # 보이지 않는 투명 클릭 버튼 (날짜 div 위에 겹치지 않고 아래에)
+                with st.container():
                     st.markdown(
-                        "<div style='margin-top:2px;'>" + "".join(event_htmls) + "</div>",
-                        unsafe_allow_html=True)
+                        f"<style>.cal-click-btn-{key_prefix}-{day_str} > div > button {{"
+                        f"background:transparent !important; border:none !important; "
+                        f"color:transparent !important; font-size:0.01rem !important; "
+                        f"height:0px !important; padding:0 !important; margin:0 !important; "
+                        f"min-height:0 !important; cursor:pointer !important; width:100% !important;"
+                        f"}}</style>",
+                        unsafe_allow_html=True
+                    )
+                    if st.button("·", key=f"{key_prefix}_{day_str}",
+                                 use_container_width=True, help=f"{day}일 클릭 — 일정 보기/추가"):
+                        st.session_state.cal_action      = "view_day"
+                        st.session_state.cal_action_data = day_str
+                        st.rerun()
 
 # ── 범례 공통
 def _render_legend():
