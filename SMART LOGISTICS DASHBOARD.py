@@ -24,7 +24,7 @@ KST = timezone(timedelta(hours=9))
 st_autorefresh(interval=30000, key="pms_auto_refresh")
 
 PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
-CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower"]
+CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower", "schedule_manager"]
 
 ROLES = {
     "master":        ["조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
@@ -32,7 +32,8 @@ ROLES = {
     "assembly_team": ["조립 라인"],
     "qc_team":       ["검사 라인", "불량 공정"],
     "packing_team":  ["포장 라인"],
-    "admin":         ["조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"]
+    "admin":         ["조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
+    "schedule_manager": ["마스터 관리"]
 }
 
 ROLE_LABELS = {
@@ -42,6 +43,7 @@ ROLE_LABELS = {
     "assembly_team": "🔧 조립 담당자",
     "qc_team":       "🔍 검사 담당자",
     "packing_team":  "📦 포장 담당자",
+    "schedule_manager": "📅 일정 관리자",
 }
 
 SCHEDULE_COLORS = {
@@ -521,16 +523,28 @@ def dialog_view_day(selected_date: str):
                 if note.strip() and note != 'nan':
                     st.markdown(f"⚠️ **특이사항:** {note}")
                 if can_edit and row_id:
-                    e1, e2 = st.columns(2)
+                    e1, e2, e3 = st.columns(3)
                     if e1.button("✏️ 수정", key=f"mod_{row_id}"):
                         st.session_state.cal_action      = "edit"
                         st.session_state.cal_action_data = int(row_id)
                         st.rerun()
-                    if e2.button("🗑️ 삭제", key=f"del_{row_id}"):
-                        delete_schedule(int(row_id))
-                        st.session_state.schedule_db = load_schedule()
-                        st.session_state.cal_action  = None
-                        st.rerun()
+                    confirm_key = f"del_confirm_{row_id}"
+                    if not st.session_state.get(confirm_key, False):
+                        if e2.button("🗑️ 삭제", key=f"del_{row_id}"):
+                            st.session_state[confirm_key] = True
+                            st.rerun()
+                    else:
+                        st.warning("⚠️ 이 일정을 삭제하시겠습니까?")
+                        y1, y2 = st.columns(2)
+                        if y1.button("✅ 예, 삭제", key=f"del_yes_{row_id}", type="primary"):
+                            delete_schedule(int(row_id))
+                            st.session_state.schedule_db = load_schedule()
+                            st.session_state[confirm_key] = False
+                            st.session_state.cal_action  = None
+                            st.rerun()
+                        if y2.button("취소", key=f"del_no_{row_id}"):
+                            st.session_state[confirm_key] = False
+                            st.rerun()
     else:
         st.info("등록된 일정이 없습니다.")
 
@@ -836,37 +850,47 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                 border    = "2px solid #7ec8a0" if is_today else "1px solid #e0d8c8"
                 today_cls = " today" if is_today else ""
 
-                cell_html = (
-                    f"<div class='cal-cell{today_cls}' style='background:{bg}; border:{border};'>"
-                    f"<div class='cal-day-num' style='color:#3d3830;'>{day}{'  🟢' if is_today else ''}</div>"
-                )
                 event_count = 0
+                event_htmls = []
                 if not day_data.empty:
                     for _, r in day_data.iterrows():
-                        cat     = str(r.get('카테고리','기타')) if r.get('카테고리') else '기타'
-                        color   = SCHEDULE_COLORS.get(cat, "#888")
-                        ban_tag = str(r.get('반',''))
-                        label   = (str(r.get('모델명','')) or str(r.get('특이사항','')))[:12]
-                        qty     = r.get('조립수', 0)
-                        cell_html += (
-                            f"<div class='cal-event' style='background:{color}22; border-left:3px solid {color};'>"
-                            f"<span style='color:{color}; font-weight:bold;'>[{cat}]</span> "
-                            f"<span style='color:#8a7f72; font-size:0.58rem;'>{ban_tag} </span>"
-                            f"<span style='color:#3d3830;'>{label}</span>"
-                            f"{f' <span style=\"color:#8a7f72;\">({qty}대)</span>' if qty else ''}"
-                            f"</div>"
+                        cat    = str(r.get("카테고리","기타")) if r.get("카테고리") else "기타"
+                        color  = SCHEDULE_COLORS.get(cat, "#888")
+                        ban_tag= str(r.get("반",""))
+                        label  = (str(r.get("모델명","")) or str(r.get("특이사항","")))[:12]
+                        qty    = r.get("조립수", 0)
+                        pn_v   = str(r.get("pn",""))
+                        ship_v = str(r.get("출하계획",""))
+                        note_v = str(r.get("특이사항",""))
+                        tip = (f"[{cat}] {ban_tag}&#10;모델: {label}"
+                               + (f"&#10;P/N: {pn_v}" if pn_v else "")
+                               + (f"&#10;조립수: {qty}대" if qty else "")
+                               + (f"&#10;출하: {ship_v}" if ship_v else "")
+                               + (f"&#10;특이사항: {note_v}" if note_v and note_v != "nan" else ""))
+                        event_htmls.append(
+                            f"<div class='cal-event' title='{tip}' "
+                            f"style='background:{color}22; border-left:3px solid {color}; cursor:pointer;'>"
+                            f"<span style='color:{color}; font-weight:bold; font-size:0.68rem;'>[{cat}]</span> "
+                            f"<span style='color:#8a7f72; font-size:0.56rem;'>{ban_tag}</span> "
+                            f"<span style='color:#3d3830; font-size:0.72rem;'>{label}</span>"
+                            + (f" <span style='color:#8a7f72;font-size:0.62rem;'>({qty}대)</span>" if qty else "")
+                            + "</div>"
                         )
                         event_count += 1
-                if event_count == 0 and can_edit:
-                    cell_html += "<div style='color:#a09088; font-size:0.6rem; text-align:center; margin-top:16px;'>+ 클릭하여 추가</div>"
-                cell_html += "</div>"
-                st.markdown(cell_html, unsafe_allow_html=True)
 
-                btn_label = f"📅 {day}일" if event_count == 0 else f"📅 {day}일 ({event_count}건)"
-                if st.button(btn_label, key=f"{key_prefix}_{day_str}", use_container_width=True):
+                today_mark  = " 🟢" if is_today else ""
+                add_hint    = "  ＋" if can_edit and event_count == 0 else ""
+                day_btn_lbl = f"{day}{today_mark}{add_hint}"
+                if st.button(day_btn_lbl, key=f"{key_prefix}_{day_str}",
+                             use_container_width=True, help="클릭하여 일정 보기/추가"):
                     st.session_state.cal_action      = "view_day"
                     st.session_state.cal_action_data = day_str
                     st.rerun()
+
+                if event_htmls:
+                    st.markdown(
+                        "<div style='margin-top:2px;'>" + "".join(event_htmls) + "</div>",
+                        unsafe_allow_html=True)
 
 # ── 범례 공통
 def _render_legend():
@@ -1620,7 +1644,6 @@ elif curr_l == "마스터 관리":
             with dl2:
                 st.markdown("""<p style='color:#5a96c8; font-size:0.88rem; margin:8px 0;'>
                 ✅ <b>반별 시트 양식</b> (추천): 제조1반·2반·3반 시트 분리 — 시트명이 곧 반, 별도 선택 불필요<br>
-                ✅ <b>기존 MNT 생산현황 양식</b>도 그대로 업로드 가능 (생산계획 시트 자동 인식)
                 </p>""", unsafe_allow_html=True)
 
             # 지원 형식 안내
@@ -1633,9 +1656,6 @@ elif curr_l == "마스터 관리":
 &nbsp;&nbsp;• 여러 반을 한 파일에 각 시트별로 입력 후 한 번에 업로드 가능<br><br>
 <b>② PMS 단일 시트 양식</b><br>
 &nbsp;&nbsp;• 시트명: <b>생산계획_업로드</b> / 컬럼에 반 포함<br><br>
-<b>③ 기존 MNT 생산현황 양식</b><br>
-&nbsp;&nbsp;• 시트명: <b>생산계획</b> / 3행 날짜 기반 블록 구조
-</p>
 """, unsafe_allow_html=True)
 
             uploaded_file = st.file_uploader("📎 엑셀 파일 선택 (.xlsx)", type=["xlsx"], key="sch_upload")
@@ -1655,10 +1675,8 @@ elif curr_l == "마스터 관리":
                         detected_mode = "PMS 반별 시트 양식"
                     elif "생산계획_업로드" in sheet_names:
                         detected_mode = "PMS 단일 시트 양식"
-                    elif "생산계획" in sheet_names:
-                        detected_mode = "MNT 생산현황 양식"
                     else:
-                        detected_mode = "직접 선택"
+                        detected_mode = "지원하지 않는 양식"
 
                     st.info(f"🔍 감지된 양식: **{detected_mode}**")
 
@@ -1744,58 +1762,9 @@ elif curr_l == "마스터 관리":
                                 '작성자':   st.session_state.user_id,
                             })
 
-                    # ══════════════════════════════════════════
-                    # ③ MNT 생산현황 양식 파싱
-                    # ══════════════════════════════════════════
+                    # 지원하지 않는 양식
                     else:
-                        sel_sheet = st.selectbox("📄 시트 선택", sheet_names,
-                            index=sheet_names.index("생산계획") if "생산계획" in sheet_names else 0,
-                            key="sch_sheet_sel")
-                        ws = wb[sel_sheet]
-                        date_cols = {}
-                        for col_idx, cell in enumerate(ws[3], 1):
-                            if isinstance(cell.value, _dt):
-                                date_cols[col_idx] = cell.value.strftime('%Y-%m-%d')
-                        sections = [
-                            {"카테고리": "조립계획", "블록들": [
-                                {"pn":5,  "모델":6,  "수량":7,  "출하":8},
-                                {"pn":10, "모델":11, "수량":12, "출하":13},
-                                {"pn":15, "모델":16, "수량":17, "출하":18},
-                                {"pn":20, "모델":21, "수량":22, "출하":23},
-                            ]},
-                            {"카테고리": "포장계획", "블록들": [
-                                {"pn":26, "모델":27, "수량":28, "출하":28},
-                                {"pn":31, "모델":32, "수량":33, "출하":33},
-                                {"pn":36, "모델":37, "수량":38, "출하":38},
-                                {"pn":41, "모델":42, "수량":43, "출하":43},
-                            ]},
-                        ]
-                        for sec in sections:
-                            cat = sec["카테고리"]
-                            for blk in sec["블록들"]:
-                                for col_idx, date_str in date_cols.items():
-                                    pn    = ws.cell(blk["pn"],   col_idx).value
-                                    model = ws.cell(blk["모델"], col_idx).value
-                                    qty   = ws.cell(blk["수량"], col_idx).value
-                                    ship  = ws.cell(blk["출하"], col_idx).value
-                                    if not pn and not model: continue
-                                    if not qty: continue
-                                    qty_int = 0
-                                    if isinstance(qty, (int, float)) and qty > 0:
-                                        qty_int = int(qty)
-                                    elif isinstance(qty, str) and any(c.isdigit() for c in qty):
-                                        nums = _re.findall(r'\d+', qty)
-                                        qty_int = int(nums[0]) if nums else 0
-                                    if qty_int <= 0: continue
-                                    parsed.append({
-                                        '날짜':     date_str, '반': "",
-                                        '카테고리': cat,
-                                        'pn':       str(pn or "").strip(),
-                                        '모델명':   str(model or "").strip(),
-                                        '조립수':   qty_int,
-                                        '출하계획': str(ship or "").strip() if cat == "조립계획" else "",
-                                        '특이사항': "", '작성자': st.session_state.user_id,
-                                    })
+                        st.error("⛔ 지원하지 않는 파일 형식입니다. 위 [업로드 양식 다운로드] 버튼으로 PMS 반별 시트 양식을 사용해주세요.")
 
                     if parsed:
                         # 미리보기
@@ -1816,7 +1785,7 @@ elif curr_l == "마스터 관리":
                                 "📍 해당 엑셀의 반 선택 ✱필수",
                                 PRODUCTION_GROUPS,
                                 key="bulk_ban_sel",
-                                help="MNT 생산현황 양식은 반 정보가 없으므로 직접 선택하세요."
+                                
                             )
 
                         # 날짜 범위 필터
@@ -1910,10 +1879,31 @@ elif curr_l == "마스터 관리":
         with sch_tab2:
             sch_list = st.session_state.schedule_db
             if not sch_list.empty:
+                # ── 전체 삭제 버튼 ──
+                all_del_key = "sch_all_del_confirm"
+                if not st.session_state.get(all_del_key, False):
+                    if st.button("🗑️ 전체 일정 삭제", type="secondary", key="sch_all_del"):
+                        st.session_state[all_del_key] = True
+                        st.rerun()
+                else:
+                    st.error("⛔ 등록된 일정 **전체**를 삭제합니다. 되돌릴 수 없습니다.")
+                    ac1, ac2, ac3 = st.columns([2,1,1])
+                    ac1.markdown("<p style='color:#c8605a; font-weight:bold; margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
+                    if ac2.button("✅ 예, 전체 삭제", type="primary", use_container_width=True, key="sch_all_del_yes"):
+                        for _, row in sch_list.iterrows():
+                            delete_schedule(int(row['id']))
+                        st.session_state.schedule_db = load_schedule()
+                        st.session_state[all_del_key] = False
+                        st.success("전체 일정이 삭제되었습니다.")
+                        st.rerun()
+                    if ac3.button("취소", use_container_width=True, key="sch_all_del_no"):
+                        st.session_state[all_del_key] = False
+                        st.rerun()
+                st.divider()
                 for _, row in sch_list.sort_values('날짜').iterrows():
                     cat   = row.get('카테고리','기타')
                     color = SCHEDULE_COLORS.get(cat, "#888")
-                    r1,r2,r3,r4,r5,r6,r7,r8 = st.columns([1.0,0.8,1.2,1.5,2,0.8,2,0.6])
+                    r1,r2,r3,r4,r5,r6,r7,r8 = st.columns([1.0,0.8,1.2,1.5,2,0.8,2,0.8])
                     r1.markdown(f"<span style='background:{color}22; border-left:3px solid {color}; padding:3px 6px; border-radius:4px; font-size:0.8rem;'>{cat}</span>", unsafe_allow_html=True)
                     r2.write(row.get('반',''))
                     r3.write(row.get('날짜',''))
@@ -1921,9 +1911,23 @@ elif curr_l == "마스터 관리":
                     r5.write(row.get('모델명',''))
                     r6.write(f"{row.get('조립수',0)}대")
                     r7.write(row.get('특이사항',''))
-                    if r8.button("🗑️", key=f"del_sch_{row['id']}"):
-                        delete_schedule(int(row['id']))
-                        st.session_state.schedule_db = load_schedule(); st.rerun()
+                    row_id = row['id']
+                    del_ck = f"sch_del_ck_{row_id}"
+                    if not st.session_state.get(del_ck, False):
+                        if r8.button("🗑️", key=f"del_sch_{row_id}", help="삭제"):
+                            st.session_state[del_ck] = True
+                            st.rerun()
+                    else:
+                        with r8:
+                            st.warning("삭제?")
+                            if st.button("✅", key=f"del_sch_yes_{row_id}"):
+                                delete_schedule(int(row_id))
+                                st.session_state.schedule_db = load_schedule()
+                                st.session_state[del_ck] = False
+                                st.rerun()
+                            if st.button("✗", key=f"del_sch_no_{row_id}"):
+                                st.session_state[del_ck] = False
+                                st.rerun()
             else:
                 st.info("등록된 일정이 없습니다.")
 
@@ -1987,7 +1991,7 @@ elif curr_l == "마스터 관리":
                 st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>👤 사용자 계정 생성/업데이트</p>", unsafe_allow_html=True)
                 nu  = st.text_input("ID")
                 np_ = st.text_input("PW", type="password")
-                nr  = st.selectbox("Role", ["admin","master","control_tower","assembly_team","qc_team","packing_team"])
+                nr  = st.selectbox("Role", ["admin","master","control_tower","assembly_team","qc_team","packing_team","schedule_manager"])
                 if st.form_submit_button("사용자 저장"):
                     if nu and np_:
                         st.session_state.user_db[nu] = {"pw_hash": hash_pw(np_), "role": nr}
