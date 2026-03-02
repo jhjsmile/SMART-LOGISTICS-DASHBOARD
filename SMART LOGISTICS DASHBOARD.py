@@ -60,6 +60,7 @@ SCHEDULE_COLORS = {
 }
 # 일정 등록 폼에서 선택 가능한 계획 카테고리 (특이사항/기타 제외)
 PLAN_CATEGORIES = ["조립계획", "포장계획", "출하계획"]
+calendar.setfirstweekday(6)  # 일요일 시작
 
 st.markdown("""
     <style>
@@ -938,10 +939,10 @@ elif st.session_state.cal_action == "edit":
 
 # 공통 셀 렌더링 헬퍼
 def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edit, key_prefix):
-    days_kr  = ["월","화","수","목","금","토","일"]
+    days_kr  = ["일","월","화","수","목","금","토"]
     hdr_cols = st.columns(7)
     for i, d in enumerate(days_kr):
-        color = "#e8908a" if d == "일" else "#7eb8e8" if d == "토" else "#7a6f65"
+        color = "#e8908a" if i == 0 else "#7eb8e8" if i == 6 else "#7a6f65"
         hdr_cols[i].markdown(
             f"<div style='text-align:center; font-weight:bold; color:{color}; "
             f"padding:8px; background:#ede8de; border-radius:6px;'>{d}</div>",
