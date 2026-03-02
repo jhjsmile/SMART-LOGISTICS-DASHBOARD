@@ -955,20 +955,20 @@ if curr_l == "현황판":
         투입 = len(gdf)
         cards_html += (
             f"<div style='flex:1; background:#fffdf8; border:1px solid #e0d8c8; border-radius:14px; padding:20px; box-sizing:border-box; min-width:0;'>"
-            f"<div style='font-size:clamp(1rem,1.5vw,1.2rem); font-weight:bold; margin-bottom:14px; color:#fff;'>📍 {g}</div>"
+            f"<div style='font-size:clamp(1rem,1.5vw,1.2rem); font-weight:bold; margin-bottom:14px; color:#3d3530;'>📍 {g}</div>"
             f"<div style='background:#f5f0e8; border-radius:10px; padding:14px; text-align:center; margin-bottom:12px;'>"
             f"<div style='font-size:clamp(0.65rem,1vw,0.85rem); color:#8a7f72; font-weight:bold; margin-bottom:6px;'>총 투입</div>"
-            f"<div style='font-size:clamp(1.5rem,3vw,2.5rem); color:#4dabf7; font-weight:bold;'>{투입} EA</div></div>"
+            f"<div style='font-size:clamp(1.5rem,3vw,2.5rem); color:#5a96c8; font-weight:bold;'>{투입} EA</div></div>"
             f"<div style='display:flex; gap:8px;'>"
             f"<div style='flex:1; background:#f5f0e8; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
             f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#8a7f72; font-weight:bold;'>✅ 완료</div>"
-            f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#40c057; font-weight:bold;'>{완료}</div></div>"
+            f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#4da875; font-weight:bold;'>{완료}</div></div>"
             f"<div style='flex:1; background:#f5f0e8; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
             f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#8a7f72; font-weight:bold;'>🏗️ 작업중</div>"
-            f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#4dabf7; font-weight:bold;'>{재공}</div></div>"
+            f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#5a96c8; font-weight:bold;'>{재공}</div></div>"
             f"<div style='flex:1; background:#f5f0e8; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
             f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#8a7f72; font-weight:bold;'>🚨 불량</div>"
-            f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#fa5252; font-weight:bold;'>{불량}</div></div>"
+            f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#c8605a; font-weight:bold;'>{불량}</div></div>"
             f"</div></div>"
         )
     cards_html += "</div>"
@@ -1037,9 +1037,9 @@ elif curr_l == "조립 라인":
                         st.session_state.production_db = load_realtime_ledger(); st.rerun()
                 else:
                     if "불량" in str(row['상태']):
-                        st.markdown(f"<div style='background:#e8908a;color:#fff;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;'>🚫 {row['상태']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #e8908a;'>🚫 {row['상태']}</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"<div style='background:#7ec8a0;color:#fff;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;'>✅ {row['상태']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:#d4f0e2;color:#1f6640;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #7ec8a0;'>✅ {row['상태']}</div>", unsafe_allow_html=True)
     else:
         st.info("등록된 생산 내역이 없습니다.")
 
@@ -1082,9 +1082,9 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         st.session_state.production_db = load_realtime_ledger(); st.rerun()
                 else:
                     if "불량" in str(row['상태']):
-                        st.markdown(f"<div style='background:#e8908a;color:#fff;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;'>🚫 {row['상태']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #e8908a;'>🚫 {row['상태']}</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"<div style='background:#7ec8a0;color:#fff;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;'>✅ {row['상태']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:#d4f0e2;color:#1f6640;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #7ec8a0;'>✅ {row['상태']}</div>", unsafe_allow_html=True)
     else:
         st.info("해당 공정 내역이 없습니다.")
 
