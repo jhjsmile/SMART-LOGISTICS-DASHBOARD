@@ -1475,118 +1475,142 @@ elif curr_l == "마스터 관리":
                     from openpyxl.worksheet.datavalidation import DataValidation as _DV
 
                     def _make_template():
-                        _wb = _xl.Workbook()
-                        _ws = _wb.active
-                        _ws.title = "생산계획_업로드"
+                        _GROUP_COLORS = {
+                            "제조1반": ("2471A3", "D4ECF7"),
+                            "제조2반": ("1E8449", "D5F5E3"),
+                            "제조3반": ("6C3483", "E8DAEF"),
+                        }
+                        _TAB_COLORS = {"제조1반":"2471A3","제조2반":"1E8449","제조3반":"6C3483"}
+                        _EXAMPLES = {
+                            "제조1반": ["2026-03-05","조립계획","TMP1115TI405","AM-1115 BLACK","32","3/15 32대","정상",""],
+                            "제조2반": ["2026-03-05","조립계획","TMP6133002","S6133 GRIFFIN [13.3\"]","30","3/15 30대","정상",""],
+                            "제조3반": ["2026-03-05","포장계획","TMS9150008","T20i (i3-12세대) DUAL","20","3/20 20대","정상",""],
+                        }
 
-                        def _hf(bold=True, sz=10, color="FFFFFF"):
-                            return _Font(name="맑은 고딕", bold=bold, size=sz, color=color)
-                        def _bf(sz=10, color="2A2420"):
-                            return _Font(name="맑은 고딕", size=sz, color=color)
+                        def _hf(color="FFFFFF", sz=10):
+                            return _Font(name="맑은 고딕", bold=True, size=sz, color=color)
+                        def _bf():
+                            return _Font(name="맑은 고딕", size=10, color="2A2420")
                         def _fl(c): return _Fill("solid", fgColor=c)
-                        def _bd():
-                            s = _Side(style="thin", color="C8B89A")
+                        def _bd(c="C8B89A"):
+                            s = _Side(style="thin", color=c)
                             return _Border(left=s, right=s, top=s, bottom=s)
                         def _ca(): return _Align(horizontal="center", vertical="center", wrap_text=True)
                         def _la(): return _Align(horizontal="left",   vertical="center", wrap_text=True)
 
-                        # 1행 타이틀
-                        _ws.merge_cells("A1:H1")
-                        _ws["A1"].value = "📅  PMS 생산 일정 대량 업로드 양식"
-                        _ws["A1"].font  = _Font(name="맑은 고딕", bold=True, size=13, color="FFFFFF")
-                        _ws["A1"].fill  = _fl("5A96C8")
-                        _ws["A1"].alignment = _ca()
-                        _ws.row_dimensions[1].height = 32
+                        _wb = _xl.Workbook()
+                        _wb.remove(_wb.active)
 
-                        # 2행 안내
-                        _ws.merge_cells("A2:H2")
-                        _ws["A2"].value = "⚠  반드시 형식을 지켜 입력 | 날짜: YYYY-MM-DD | 카테고리/반: 드롭다운 선택 | 조립수: 숫자만 | 5행부터 입력"
-                        _ws["A2"].font  = _Font(name="맑은 고딕", size=9, color="2A2420")
-                        _ws["A2"].fill  = _fl("FFF3CD")
-                        _ws["A2"].alignment = _la()
-                        _ws.row_dimensions[2].height = 20
+                        for _g in ["제조1반","제조2반","제조3반"]:
+                            _hdr_col, _inp_bg = _GROUP_COLORS[_g]
+                            _ws = _wb.create_sheet(_g)
+                            _ws.sheet_properties.tabColor = _TAB_COLORS[_g]
 
-                        # 3행 헤더
-                        headers = ["반 *", "날짜 *", "카테고리 *", "P/N", "모델명 *", "조립수", "출하계획", "특이사항"]
-                        for ci, h in enumerate(headers, 1):
-                            c = _ws.cell(3, ci)
-                            c.value = h; c.font = _hf(); c.fill = _fl("7EB8E8")
-                            c.alignment = _ca(); c.border = _bd()
-                        _ws.row_dimensions[3].height = 28
+                            # 1행 타이틀
+                            _ws.merge_cells("A1:H1")
+                            _ws["A1"].value = f"📋  {_g}  생산 일정 업로드 양식  |  시트명 = 반 이름 (자동 인식)"
+                            _ws["A1"].font  = _Font(name="맑은 고딕", bold=True, size=12, color="FFFFFF")
+                            _ws["A1"].fill  = _fl(_hdr_col)
+                            _ws["A1"].alignment = _ca()
+                            _ws.row_dimensions[1].height = 30
 
-                        # 4행 예시
-                        examples = ["제조2반","2026-03-05","조립계획","TMP6133002","S6133 GRIFFIN [13.3\"]","30","3/15 30대","정상 진행"]
-                        for ci, v in enumerate(examples, 1):
-                            c = _ws.cell(4, ci)
-                            c.value = v
-                            c.font  = _Font(name="맑은 고딕", size=9, color="8A7F72", italic=True)
-                            c.fill  = _fl("EEEBE4"); c.alignment = _ca(); c.border = _bd()
-                        _ws.row_dimensions[4].height = 22
+                            # 2행 안내
+                            _ws.merge_cells("A2:H2")
+                            _ws["A2"].value = "⚠  날짜: YYYY-MM-DD  |  카테고리: 드롭다운 선택  |  조립수: 숫자만  |  5행부터 입력 (4행 예시는 자동 스킵)"
+                            _ws["A2"].font  = _Font(name="맑은 고딕", size=9, color="2A2420")
+                            _ws["A2"].fill  = _fl("FFF3CD")
+                            _ws["A2"].alignment = _la()
+                            _ws.row_dimensions[2].height = 18
 
-                        # 5~204행 입력 영역
-                        for r in range(5, 205):
-                            for c in range(1, 9):
-                                cell = _ws.cell(r, c)
-                                cell.fill = _fl("FFFDF7"); cell.border = _bd()
-                                cell.alignment = _ca() if c in [1,2,3,6] else _la()
-                                cell.font = _bf()
+                            # 3행 헤더 (반 컬럼 없음 - 시트명이 곧 반)
+                            _headers = ["날짜 *", "카테고리 *", "P/N", "모델명 *", "조립수", "출하계획", "특이사항", "비고"]
+                            for _ci, _h in enumerate(_headers, 1):
+                                _c = _ws.cell(3, _ci)
+                                _c.value = _h
+                                _c.font  = _hf(color="FFFFFF")
+                                _c.fill  = _fl(_hdr_col)
+                                _c.alignment = _ca()
+                                _c.border = _bd(_hdr_col)
+                            _ws.row_dimensions[3].height = 26
 
-                        # 드롭다운 유효성
-                        dv1 = _DV(type="list", formula1='"제조1반,제조2반,제조3반,전체(공통)"',
-                                  showDropDown=False, showErrorMessage=True,
-                                  errorTitle="입력 오류", error="목록에서 선택하세요.")
-                        dv1.sqref = "A5:A204"; _ws.add_data_validation(dv1)
+                            # 4행 예시
+                            for _ci, _v in enumerate(_EXAMPLES[_g], 1):
+                                _c = _ws.cell(4, _ci)
+                                _c.value = _v
+                                _c.font  = _Font(name="맑은 고딕", size=9, color="8A7F72", italic=True)
+                                _c.fill  = _fl("EEEBE4")
+                                _c.alignment = _ca()
+                                _c.border = _bd()
+                            _ws.row_dimensions[4].height = 20
 
-                        dv2 = _DV(type="list", formula1='"조립계획,포장계획,출하계획,특이사항,기타"',
-                                  showDropDown=False, showErrorMessage=True,
-                                  errorTitle="입력 오류", error="목록에서 선택하세요.")
-                        dv2.sqref = "C5:C204"; _ws.add_data_validation(dv2)
+                            # 5~204행 입력 영역
+                            for _r in range(5, 205):
+                                for _c in range(1, 9):
+                                    _cell = _ws.cell(_r, _c)
+                                    _cell.fill      = _fl(_inp_bg if _c <= 7 else "FFFDF7")
+                                    _cell.border    = _bd()
+                                    _cell.alignment = _ca() if _c in [1,2,5] else _la()
+                                    _cell.font      = _bf()
 
-                        dv3 = _DV(type="whole", operator="greaterThanOrEqual", formula1="0",
-                                  showErrorMessage=True, errorTitle="입력 오류", error="0 이상의 숫자만 입력하세요.")
-                        dv3.sqref = "F5:F204"; _ws.add_data_validation(dv3)
+                            # 카테고리 드롭다운
+                            _dv = _DV(type="list", formula1='"조립계획,포장계획,출하계획,특이사항,기타"',
+                                      showDropDown=False, showErrorMessage=True,
+                                      errorTitle="입력 오류", error="목록에서 선택하세요.")
+                            _dv.sqref = "B5:B204"
+                            _ws.add_data_validation(_dv)
 
-                        # 컬럼 너비
-                        for col, w in zip("ABCDEFGH", [14,14,14,18,34,10,18,22]):
-                            _ws.column_dimensions[col].width = w
-                        _ws.freeze_panes = "A5"
+                            # 조립수 숫자 유효성
+                            _dv2 = _DV(type="whole", operator="greaterThanOrEqual", formula1="0",
+                                       showErrorMessage=True, errorTitle="입력 오류", error="0 이상의 숫자만 입력하세요.")
+                            _dv2.sqref = "E5:E204"
+                            _ws.add_data_validation(_dv2)
+
+                            # 컬럼 너비
+                            for _col, _w in zip("ABCDEFGH", [14,13,18,34,10,18,22,18]):
+                                _ws.column_dimensions[_col].width = _w
+                            _ws.freeze_panes = "A5"
 
                         # 가이드 시트
                         _wg = _wb.create_sheet("📋 작성 가이드")
-                        guide = [
-                            ["컬럼","필수","형식","예시","비고"],
-                            ["반","필수","드롭다운","제조2반","제조1~3반, 전체(공통)"],
-                            ["날짜","필수","YYYY-MM-DD","2026-03-05","형식 정확히 입력"],
-                            ["카테고리","필수","드롭다운","조립계획","조립/포장/출하/특이사항/기타"],
-                            ["P/N","선택","텍스트","TMP6133002","품목코드"],
-                            ["모델명","필수","텍스트","S6133 GRIFFIN","모델명 또는 특이사항 필수"],
-                            ["조립수","선택","숫자","30","없으면 0 또는 빈칸 → 업로드 스킵"],
-                            ["출하계획","선택","텍스트","3/15 30대",""],
-                            ["특이사항","선택","텍스트","재작업 포함",""],
-                            [],["⚠ 주의사항"],
-                            ["1. 4행 예시 행은 자동 스킵 (삭제해도 무관)"],
-                            ["2. 여러 반을 한 파일에 섞어 입력 가능 (반 컬럼으로 자동 분리)"],
-                            ["3. 조립수 0 또는 빈칸이면 해당 행 업로드 건너뜀"],
+                        _wg.sheet_properties.tabColor = "8A7F72"
+                        _guide = [
+                            ["항목","설명"],
+                            ["시트명","제조1반 / 제조2반 / 제조3반 → 시트명이 곧 반 (자동 인식)"],
+                            ["날짜","YYYY-MM-DD 형식 (예: 2026-03-05)"],
+                            ["카테고리","드롭다운: 조립계획 / 포장계획 / 출하계획 / 특이사항 / 기타"],
+                            ["P/N","품목코드 (예: TMP6133002) — 선택"],
+                            ["모델명","필수 — 조립 라인 모델 목록에 자동 등록됨"],
+                            ["조립수","숫자만. 0 또는 빈칸이면 해당 행 스킵"],
+                            ["출하계획","출하 예정 텍스트 (예: 3/15 30대) — 선택"],
+                            ["특이사항","메모 자유 입력 — 선택"],
+                            [],
+                            ["⚠ 주의사항"],
+                            ["1. 각 시트에 해당 반 데이터만 입력 (반 혼용 불가)"],
+                            ["2. 4행 예시 행은 업로드 시 자동 스킵"],
+                            ["3. 조립수 0 또는 빈칸 → 해당 행 스킵"],
+                            ["4. 모델명 등록 시 해당 반 조립 라인에 자동 반영"],
+                            ["5. 여러 반을 한 번에 → 각 시트 채워서 업로드"],
                         ]
-                        for ri, row in enumerate(guide, 1):
-                            for ci, v in enumerate(row, 1):
-                                cell = _wg.cell(ri, ci)
-                                cell.value = v; cell.font = _bf(); cell.alignment = _la()
-                        for ci in range(1, 6):
-                            c = _wg.cell(1, ci)
-                            c.font = _hf(); c.fill = _fl("7EB8E8")
-                            c.alignment = _ca(); c.border = _bd()
-                        for col, w in zip("ABCDE", [16,10,20,32,24]):
-                            _wg.column_dimensions[col].width = w
+                        for _ri, _row in enumerate(_guide, 1):
+                            for _ci, _v in enumerate(_row, 1):
+                                _c = _wg.cell(_ri, _ci, _v)
+                                _c.font = _bf(); _c.alignment = _la()
+                        for _ci in range(1, 3):
+                            _c = _wg.cell(1, _ci)
+                            _c.font = _hf(); _c.fill = _fl("7EB8E8")
+                            _c.alignment = _ca(); _c.border = _bd()
+                        _wg.cell(11, 1).font = _Font(name="맑은 고딕", bold=True, size=10, color="C8605A")
+                        _wg.column_dimensions["A"].width = 14
+                        _wg.column_dimensions["B"].width = 62
 
-                        buf = _tmpio.BytesIO()
-                        _wb.save(buf)
-                        return buf.getvalue()
+                        _buf = _tmpio.BytesIO()
+                        _wb.save(_buf)
+                        return _buf.getvalue()
 
                     st.download_button(
-                        "📥 업로드 양식 다운로드",
+                        "📥 업로드 양식 다운로드 (반별 시트)",
                         _make_template(),
-                        "PMS_생산일정_업로드양식.xlsx",
+                        "PMS_반별_업로드양식.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True
                     )
@@ -1594,7 +1618,7 @@ elif curr_l == "마스터 관리":
                     st.warning(f"양식 생성 오류: {_e}")
             with dl2:
                 st.markdown("""<p style='color:#5a96c8; font-size:0.88rem; margin:8px 0;'>
-                ✅ <b>PMS 전용 양식</b>: 반·날짜·카테고리·모델명 등 직접 입력, 드롭다운 선택 지원<br>
+                ✅ <b>반별 시트 양식</b> (추천): 제조1반·2반·3반 시트 분리 — 시트명이 곧 반, 별도 선택 불필요<br>
                 ✅ <b>기존 MNT 생산현황 양식</b>도 그대로 업로드 가능 (생산계획 시트 자동 인식)
                 </p>""", unsafe_allow_html=True)
 
@@ -1602,13 +1626,14 @@ elif curr_l == "마스터 관리":
             with st.expander("📌 지원 엑셀 형식 안내"):
                 st.markdown("""
 <p style='color:#2a2420;'>
-<b>① PMS 전용 업로드 양식</b> (위 버튼으로 다운로드)<br>
-&nbsp;&nbsp;• 시트명: <b>생산계획_업로드</b><br>
-&nbsp;&nbsp;• 컬럼 순서: 반 / 날짜 / 카테고리 / P/N / 모델명 / 조립수 / 출하계획 / 특이사항<br>
-&nbsp;&nbsp;• 날짜 형식: YYYY-MM-DD / 드롭다운으로 반·카테고리 선택 가능<br><br>
-<b>② 기존 MNT 생산현황 양식</b><br>
-&nbsp;&nbsp;• 시트명: <b>생산계획</b><br>
-&nbsp;&nbsp;• 3행 날짜 / 5~24행 조립계획 / 26~43행 포장계획 블록 자동 파싱
+<b>① PMS 반별 시트 양식</b> (위 버튼으로 다운로드) ⭐추천<br>
+&nbsp;&nbsp;• 시트명: <b>제조1반 / 제조2반 / 제조3반</b> — 시트명이 곧 반 정보<br>
+&nbsp;&nbsp;• 컬럼: 날짜 / 카테고리 / P/N / 모델명 / 조립수 / 출하계획 / 특이사항<br>
+&nbsp;&nbsp;• 여러 반을 한 파일에 각 시트별로 입력 후 한 번에 업로드 가능<br><br>
+<b>② PMS 단일 시트 양식</b><br>
+&nbsp;&nbsp;• 시트명: <b>생산계획_업로드</b> / 컬럼에 반 포함<br><br>
+<b>③ 기존 MNT 생산현황 양식</b><br>
+&nbsp;&nbsp;• 시트명: <b>생산계획</b> / 3행 날짜 기반 블록 구조
 </p>
 """, unsafe_allow_html=True)
 
@@ -1616,7 +1641,7 @@ elif curr_l == "마스터 관리":
 
             if uploaded_file:
                 try:
-                    import openpyxl, io as _io
+                    import openpyxl, io as _io, re as _re
                     from datetime import datetime as _dt
 
                     raw = uploaded_file.read()
@@ -1624,8 +1649,11 @@ elif curr_l == "마스터 관리":
                     sheet_names = wb.sheetnames
 
                     # ── 양식 자동 감지 ──
-                    if "생산계획_업로드" in sheet_names:
-                        detected_mode = "PMS 전용 양식"
+                    group_sheets = [s for s in sheet_names if s in PRODUCTION_GROUPS]
+                    if group_sheets:
+                        detected_mode = "PMS 반별 시트 양식"
+                    elif "생산계획_업로드" in sheet_names:
+                        detected_mode = "PMS 단일 시트 양식"
                     elif "생산계획" in sheet_names:
                         detected_mode = "MNT 생산현황 양식"
                     else:
@@ -1633,25 +1661,63 @@ elif curr_l == "마스터 관리":
 
                     st.info(f"🔍 감지된 양식: **{detected_mode}**")
 
-                    sel_sheet = st.selectbox("📄 시트 선택", sheet_names,
-                        index=sheet_names.index("생산계획_업로드") if "생산계획_업로드" in sheet_names
-                              else (sheet_names.index("생산계획") if "생산계획" in sheet_names else 0),
-                        key="sch_sheet_sel")
-                    ws = wb[sel_sheet]
-
                     parsed = []
 
-                    # ── PMS 전용 양식 파싱 ──
-                    if sel_sheet == "생산계획_업로드":
-                        import re as _re
+                    # ══════════════════════════════════════════
+                    # ① PMS 반별 시트 양식 파싱
+                    # ══════════════════════════════════════════
+                    if detected_mode == "PMS 반별 시트 양식":
+                        st.markdown(
+                            f"<p style='color:#2a2420;'>감지된 반 시트: "
+                            + " ".join([f"<b style='color:#5a96c8;'>[{s}]</b>" for s in group_sheets])
+                            + " — 전체 파싱합니다.</p>",
+                            unsafe_allow_html=True)
+
+                        for g_sheet in group_sheets:
+                            ws = wb[g_sheet]
+                            for row in ws.iter_rows(min_row=5, values_only=True):
+                                date_val, cat, pn, model, qty, ship, note = (list(row) + [None]*7)[:7]
+                                # 예시행 스킵 (4행과 동일한 패턴)
+                                if not date_val and not model: continue
+                                if not model: continue
+                                # 날짜 처리
+                                if isinstance(date_val, _dt):
+                                    date_str = date_val.strftime('%Y-%m-%d')
+                                elif isinstance(date_val, str) and len(str(date_val).strip()) == 10:
+                                    date_str = str(date_val).strip()
+                                else:
+                                    continue
+                                # 수량 처리
+                                qty_int = 0
+                                if isinstance(qty, (int, float)) and qty > 0:
+                                    qty_int = int(qty)
+                                elif isinstance(qty, str):
+                                    nums = _re.findall(r'\d+', qty)
+                                    qty_int = int(nums[0]) if nums else 0
+                                if qty_int <= 0: continue
+                                parsed.append({
+                                    '날짜':     date_str,
+                                    '반':       g_sheet,
+                                    '카테고리': str(cat  or "조립계획").strip(),
+                                    'pn':       str(pn   or "").strip(),
+                                    '모델명':   str(model or "").strip(),
+                                    '조립수':   qty_int,
+                                    '출하계획': str(ship or "").strip(),
+                                    '특이사항': str(note or "").strip(),
+                                    '작성자':   st.session_state.user_id,
+                                })
+
+                    # ══════════════════════════════════════════
+                    # ② PMS 단일 시트 양식 파싱
+                    # ══════════════════════════════════════════
+                    elif detected_mode == "PMS 단일 시트 양식":
+                        ws = wb["생산계획_업로드"]
                         for row in ws.iter_rows(min_row=5, values_only=True):
                             ban, date_val, cat, pn, model, qty, ship, note = (list(row) + [None]*8)[:8]
-                            # 예시행 스킵
-                            if ban == "제조2반" and str(model or "").startswith("S6133 GRIFFIN") and str(date_val) == "2026-03-05":
+                            if str(ban) == "제조2반" and str(model or "").startswith("S6133 GRIFFIN") and str(date_val) == "2026-03-05":
                                 continue
                             if not ban and not model and not date_val: continue
                             if not model and not note: continue
-                            # 날짜 처리
                             if isinstance(date_val, _dt):
                                 date_str = date_val.strftime('%Y-%m-%d')
                             elif isinstance(date_val, str) and len(date_val) == 10:
@@ -1667,7 +1733,7 @@ elif curr_l == "마스터 관리":
                             if qty_int <= 0: continue
                             parsed.append({
                                 '날짜':     date_str,
-                                '반':       str(ban or "전체(공통)").strip(),
+                                '반':       str(ban or "").strip(),
                                 '카테고리': str(cat or "기타").strip(),
                                 'pn':       str(pn  or "").strip(),
                                 '모델명':   str(model or "").strip(),
@@ -1677,13 +1743,18 @@ elif curr_l == "마스터 관리":
                                 '작성자':   st.session_state.user_id,
                             })
 
-                    # ── MNT 생산현황 양식 파싱 ──
+                    # ══════════════════════════════════════════
+                    # ③ MNT 생산현황 양식 파싱
+                    # ══════════════════════════════════════════
                     else:
+                        sel_sheet = st.selectbox("📄 시트 선택", sheet_names,
+                            index=sheet_names.index("생산계획") if "생산계획" in sheet_names else 0,
+                            key="sch_sheet_sel")
+                        ws = wb[sel_sheet]
                         date_cols = {}
                         for col_idx, cell in enumerate(ws[3], 1):
                             if isinstance(cell.value, _dt):
                                 date_cols[col_idx] = cell.value.strftime('%Y-%m-%d')
-
                         sections = [
                             {"카테고리": "조립계획", "블록들": [
                                 {"pn":5,  "모델":6,  "수량":7,  "출하":8},
@@ -1712,20 +1783,17 @@ elif curr_l == "마스터 관리":
                                     if isinstance(qty, (int, float)) and qty > 0:
                                         qty_int = int(qty)
                                     elif isinstance(qty, str) and any(c.isdigit() for c in qty):
-                                        import re as _re2
-                                        nums = _re2.findall(r'\d+', qty)
+                                        nums = _re.findall(r'\d+', qty)
                                         qty_int = int(nums[0]) if nums else 0
                                     if qty_int <= 0: continue
                                     parsed.append({
-                                        '날짜':     date_str,
-                                        '반':       "",
+                                        '날짜':     date_str, '반': "",
                                         '카테고리': cat,
                                         'pn':       str(pn or "").strip(),
                                         '모델명':   str(model or "").strip(),
                                         '조립수':   qty_int,
                                         '출하계획': str(ship or "").strip() if cat == "조립계획" else "",
-                                        '특이사항': "",
-                                        '작성자':   st.session_state.user_id,
+                                        '특이사항': "", '작성자': st.session_state.user_id,
                                     })
 
                     if parsed:
