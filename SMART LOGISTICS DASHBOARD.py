@@ -1264,18 +1264,129 @@ elif curr_l == "마스터 관리":
             dl1, dl2 = st.columns([1, 2])
             with dl1:
                 try:
-                    import os as _os
-                    template_path = "/home/claude/PMS_생산일정_업로드양식.xlsx"
-                    if _os.path.exists(template_path):
-                        with open(template_path, "rb") as tf:
-                            st.download_button(
-                                "📥 업로드 양식 다운로드",
-                                tf.read(),
-                                "PMS_생산일정_업로드양식.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                use_container_width=True
-                            )
-                except: pass
+                    import openpyxl as _xl
+                    import io as _tmpio
+                    from openpyxl.styles import Font as _Font, PatternFill as _Fill, Alignment as _Align, Border as _Border, Side as _Side
+                    from openpyxl.worksheet.datavalidation import DataValidation as _DV
+
+                    def _make_template():
+                        _wb = _xl.Workbook()
+                        _ws = _wb.active
+                        _ws.title = "생산계획_업로드"
+
+                        def _hf(bold=True, sz=10, color="FFFFFF"):
+                            return _Font(name="맑은 고딕", bold=bold, size=sz, color=color)
+                        def _bf(sz=10, color="2A2420"):
+                            return _Font(name="맑은 고딕", size=sz, color=color)
+                        def _fl(c): return _Fill("solid", fgColor=c)
+                        def _bd():
+                            s = _Side(style="thin", color="C8B89A")
+                            return _Border(left=s, right=s, top=s, bottom=s)
+                        def _ca(): return _Align(horizontal="center", vertical="center", wrap_text=True)
+                        def _la(): return _Align(horizontal="left",   vertical="center", wrap_text=True)
+
+                        # 1행 타이틀
+                        _ws.merge_cells("A1:H1")
+                        _ws["A1"].value = "📅  PMS 생산 일정 대량 업로드 양식"
+                        _ws["A1"].font  = _Font(name="맑은 고딕", bold=True, size=13, color="FFFFFF")
+                        _ws["A1"].fill  = _fl("5A96C8")
+                        _ws["A1"].alignment = _ca()
+                        _ws.row_dimensions[1].height = 32
+
+                        # 2행 안내
+                        _ws.merge_cells("A2:H2")
+                        _ws["A2"].value = "⚠  반드시 형식을 지켜 입력 | 날짜: YYYY-MM-DD | 카테고리/반: 드롭다운 선택 | 조립수: 숫자만 | 5행부터 입력"
+                        _ws["A2"].font  = _Font(name="맑은 고딕", size=9, color="2A2420")
+                        _ws["A2"].fill  = _fl("FFF3CD")
+                        _ws["A2"].alignment = _la()
+                        _ws.row_dimensions[2].height = 20
+
+                        # 3행 헤더
+                        headers = ["반 *", "날짜 *", "카테고리 *", "P/N", "모델명 *", "조립수", "출하계획", "특이사항"]
+                        for ci, h in enumerate(headers, 1):
+                            c = _ws.cell(3, ci)
+                            c.value = h; c.font = _hf(); c.fill = _fl("7EB8E8")
+                            c.alignment = _ca(); c.border = _bd()
+                        _ws.row_dimensions[3].height = 28
+
+                        # 4행 예시
+                        examples = ["제조2반","2026-03-05","조립계획","TMP6133002","S6133 GRIFFIN [13.3\"]","30","3/15 30대","정상 진행"]
+                        for ci, v in enumerate(examples, 1):
+                            c = _ws.cell(4, ci)
+                            c.value = v
+                            c.font  = _Font(name="맑은 고딕", size=9, color="8A7F72", italic=True)
+                            c.fill  = _fl("EEEBE4"); c.alignment = _ca(); c.border = _bd()
+                        _ws.row_dimensions[4].height = 22
+
+                        # 5~204행 입력 영역
+                        for r in range(5, 205):
+                            for c in range(1, 9):
+                                cell = _ws.cell(r, c)
+                                cell.fill = _fl("FFFDF7"); cell.border = _bd()
+                                cell.alignment = _ca() if c in [1,2,3,6] else _la()
+                                cell.font = _bf()
+
+                        # 드롭다운 유효성
+                        dv1 = _DV(type="list", formula1='"제조1반,제조2반,제조3반,전체(공통)"',
+                                  showDropDown=False, showErrorMessage=True,
+                                  errorTitle="입력 오류", error="목록에서 선택하세요.")
+                        dv1.sqref = "A5:A204"; _ws.add_data_validation(dv1)
+
+                        dv2 = _DV(type="list", formula1='"조립계획,포장계획,출하계획,특이사항,기타"',
+                                  showDropDown=False, showErrorMessage=True,
+                                  errorTitle="입력 오류", error="목록에서 선택하세요.")
+                        dv2.sqref = "C5:C204"; _ws.add_data_validation(dv2)
+
+                        dv3 = _DV(type="whole", operator="greaterThanOrEqual", formula1="0",
+                                  showErrorMessage=True, errorTitle="입력 오류", error="0 이상의 숫자만 입력하세요.")
+                        dv3.sqref = "F5:F204"; _ws.add_data_validation(dv3)
+
+                        # 컬럼 너비
+                        for col, w in zip("ABCDEFGH", [14,14,14,18,34,10,18,22]):
+                            _ws.column_dimensions[col].width = w
+                        _ws.freeze_panes = "A5"
+
+                        # 가이드 시트
+                        _wg = _wb.create_sheet("📋 작성 가이드")
+                        guide = [
+                            ["컬럼","필수","형식","예시","비고"],
+                            ["반","필수","드롭다운","제조2반","제조1~3반, 전체(공통)"],
+                            ["날짜","필수","YYYY-MM-DD","2026-03-05","형식 정확히 입력"],
+                            ["카테고리","필수","드롭다운","조립계획","조립/포장/출하/특이사항/기타"],
+                            ["P/N","선택","텍스트","TMP6133002","품목코드"],
+                            ["모델명","필수","텍스트","S6133 GRIFFIN","모델명 또는 특이사항 필수"],
+                            ["조립수","선택","숫자","30","없으면 0 또는 빈칸 → 업로드 스킵"],
+                            ["출하계획","선택","텍스트","3/15 30대",""],
+                            ["특이사항","선택","텍스트","재작업 포함",""],
+                            [],["⚠ 주의사항"],
+                            ["1. 4행 예시 행은 자동 스킵 (삭제해도 무관)"],
+                            ["2. 여러 반을 한 파일에 섞어 입력 가능 (반 컬럼으로 자동 분리)"],
+                            ["3. 조립수 0 또는 빈칸이면 해당 행 업로드 건너뜀"],
+                        ]
+                        for ri, row in enumerate(guide, 1):
+                            for ci, v in enumerate(row, 1):
+                                cell = _wg.cell(ri, ci)
+                                cell.value = v; cell.font = _bf(); cell.alignment = _la()
+                        for ci in range(1, 6):
+                            c = _wg.cell(1, ci)
+                            c.font = _hf(); c.fill = _fl("7EB8E8")
+                            c.alignment = _ca(); c.border = _bd()
+                        for col, w in zip("ABCDE", [16,10,20,32,24]):
+                            _wg.column_dimensions[col].width = w
+
+                        buf = _tmpio.BytesIO()
+                        _wb.save(buf)
+                        return buf.getvalue()
+
+                    st.download_button(
+                        "📥 업로드 양식 다운로드",
+                        _make_template(),
+                        "PMS_생산일정_업로드양식.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                except Exception as _e:
+                    st.warning(f"양식 생성 오류: {_e}")
             with dl2:
                 st.markdown("""<p style='color:#5a96c8; font-size:0.88rem; margin:8px 0;'>
                 ✅ <b>PMS 전용 양식</b>: 반·날짜·카테고리·모델명 등 직접 입력, 드롭다운 선택 지원<br>
