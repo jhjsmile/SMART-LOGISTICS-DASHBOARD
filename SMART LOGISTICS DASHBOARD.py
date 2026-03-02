@@ -449,18 +449,15 @@ def insert_schedule(row: dict) -> bool:
         반    = str(row.get('반', ''))
         모델  = str(row.get('모델명', '')).strip()
         pn    = str(row.get('pn', '')).strip()
-        # 전체(공통) 또는 빈 반이면 모든 반에 등록
-        target_groups = PRODUCTION_GROUPS if 반 in ['전체(공통)', ''] else ([반] if 반 in PRODUCTION_GROUPS else [])
-        for g in target_groups:
-            if 모델:
-                upsert_model_master(g, 모델, pn if pn else 모델)
-                # session_state 즉시 반영
-                if 모델 not in st.session_state.group_master_models.get(g, []):
-                    st.session_state.group_master_models.setdefault(g, []).append(모델)
-                if 모델 not in st.session_state.group_master_items.get(g, {}):
-                    st.session_state.group_master_items.setdefault(g, {})[모델] = []
-                if pn and pn not in st.session_state.group_master_items[g][모델]:
-                    st.session_state.group_master_items[g][모델].append(pn)
+        # 해당 반에만 등록 (반 미지정이면 스킵)
+        if 반 in PRODUCTION_GROUPS and 모델:
+            upsert_model_master(반, 모델, pn if pn else 모델)
+            if 모델 not in st.session_state.group_master_models.get(반, []):
+                st.session_state.group_master_models.setdefault(반, []).append(모델)
+            if 모델 not in st.session_state.group_master_items.get(반, {}):
+                st.session_state.group_master_items.setdefault(반, {})[모델] = []
+            if pn and pn not in st.session_state.group_master_items[반][모델]:
+                st.session_state.group_master_items[반][모델].append(pn)
         return True
     except Exception as e:
         st.error(f"일정 등록 실패: {e}"); return False
@@ -558,7 +555,7 @@ def dialog_add_schedule(selected_date: str):
 
     st.markdown(f"**날짜: {selected_date}**")
     with st.form("add_sch_form"):
-        ban   = st.selectbox("반", ["전체(공통)"] + PRODUCTION_GROUPS)
+        ban   = st.selectbox("반 *", PRODUCTION_GROUPS)
         cat   = st.selectbox("카테고리", list(SCHEDULE_COLORS.keys()))
         pn    = st.text_input("P/N (품목코드)")
         model = st.text_input("모델명")
@@ -1106,7 +1103,7 @@ elif curr_l == "조립 라인":
     sch_all     = st.session_state.schedule_db
     today_sch   = sch_all[
         (sch_all['날짜'] == today_str) &
-        (sch_all['반'].isin([curr_g, "전체(공통)", ""]))
+        (sch_all['반'] == curr_g)
     ] if not sch_all.empty else pd.DataFrame()
 
     # 변경 감지: 마지막 확인 이후 등록된 일정
@@ -1156,7 +1153,7 @@ elif curr_l == "조립 라인":
 
             ship_html = f"<span style='color:#5a4400;'>📦 출하계획: {ship}</span>&nbsp;&nbsp;" if ship else ""
             note_html = f"<span style='color:#c8605a;'>⚠ {note}</span>" if note else ""
-            ban_html  = f"<span style='background:#f0ebe0; border-radius:6px; padding:2px 8px; font-size:0.78rem; color:#8a7f72;'>{ban}</span> " if ban else ""
+            ban_html  = ""
 
             st.markdown(f"""
 <div style='background:{color}12; border-left:5px solid {color};
@@ -1181,7 +1178,7 @@ elif curr_l == "조립 라인":
         with st.expander(f"📅 {curr_g} 이번 달 전체 일정 보기"):
             month_sch = sch_all[
                 (sch_all['날짜'].str.startswith(today_str[:7])) &
-                (sch_all['반'].isin([curr_g, "전체(공통)", ""]))
+                (sch_all['반'] == curr_g)
             ] if not sch_all.empty else pd.DataFrame()
             if not month_sch.empty:
                 show_cols = ['날짜','카테고리','모델명','pn','조립수','출하계획','특이사항']
@@ -1218,6 +1215,52 @@ elif curr_l == "조립 라인":
     db_v = st.session_state.production_db
     f_df = db_v[(db_v['반'] == curr_g) & (db_v['라인'] == "조립 라인")]
 
+    # ── 모델/품목별 수량 카운트 ──────────────────────────────────
+    if not f_df.empty:
+        st.markdown(f"<div class='section-title'>📊 {curr_g} 조립 라인 수량 현황</div>", unsafe_allow_html=True)
+        # 모델+품목 그룹핑
+        grp = f_df.groupby(['모델','품목코드'])
+        count_rows = []
+        for (model, pn), gdf in grp:
+            total    = len(gdf)
+            done     = len(gdf[gdf['상태'] == '완료'])
+            wip      = len(gdf[gdf['상태'].isin(['진행 중','수리 완료(재투입)'])])
+            defect   = len(gdf[gdf['상태'].str.contains('불량', na=False)])
+            count_rows.append((model, pn, total, done, wip, defect))
+
+        # 카드 렌더링 (모델별)
+        for (model, pn, total, done, wip, defect) in count_rows:
+            pct     = int(done / total * 100) if total > 0 else 0
+            bar_w   = pct
+            bar_col = "#7ec8a0" if pct >= 100 else "#7eb8e8"
+            st.markdown(f"""
+<div style='background:#fffdf8; border:1px solid #e0d8c8; border-radius:12px;
+     padding:14px 18px; margin-bottom:10px;'>
+  <div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;'>
+    <div>
+      <span style='font-size:1rem; font-weight:bold; color:#2a2420;'>{model}</span>
+      {f"<span style='font-size:0.8rem; color:#8a7f72; margin-left:8px;'>({pn})</span>" if pn else ""}
+    </div>
+    <div style='display:flex; gap:10px; flex-wrap:wrap;'>
+      <span style='background:#f0ebe0; border-radius:8px; padding:4px 12px; font-size:0.82rem; color:#3d3530;'>
+        📋 전체 <b>{total}</b>
+      </span>
+      <span style='background:#d4f0e2; border-radius:8px; padding:4px 12px; font-size:0.82rem; color:#1f6640;'>
+        ✅ 완료 <b>{done}</b>
+      </span>
+      <span style='background:#ddeeff; border-radius:8px; padding:4px 12px; font-size:0.82rem; color:#2a5080;'>
+        🏗️ 작업중 <b>{wip}</b>
+      </span>
+      {f"<span style='background:#fde8e7; border-radius:8px; padding:4px 12px; font-size:0.82rem; color:#7a2e2a;'>🚨 불량 <b>{defect}</b></span>" if defect > 0 else ""}
+    </div>
+  </div>
+  <div style='background:#e8e2d8; border-radius:99px; height:8px; overflow:hidden;'>
+    <div style='background:{bar_col}; width:{bar_w}%; height:100%; border-radius:99px; transition:width 0.4s;'></div>
+  </div>
+  <div style='text-align:right; font-size:0.75rem; color:#8a7f72; margin-top:4px;'>완료율 {pct}%</div>
+</div>""", unsafe_allow_html=True)
+
+    # ── 생산 이력 테이블 ──────────────────────────────────────────
     if not f_df.empty:
         h = st.columns([2.2, 1.5, 1.5, 1.8, 4])
         for col, txt in zip(h, ["기록 시간","모델","품목","시리얼","현장 제어"]):
@@ -1705,7 +1748,7 @@ elif curr_l == "마스터 관리":
 
                         # 반 선택
                         upload_ban = st.selectbox(
-                            "📍 해당 엑셀의 반 선택",
+                            "📍 해당 엑셀의 반 선택 (필수)",
                             PRODUCTION_GROUPS,
                             key="bulk_ban_sel",
                             help="이 엑셀 파일이 어느 반의 생산계획인지 선택하세요"
@@ -1748,7 +1791,7 @@ elif curr_l == "마스터 관리":
         with sch_tab1:
             with st.form("schedule_form"):
                 sb1, sb2 = st.columns(2)
-                sch_ban  = sb1.selectbox("반", ["전체(공통)"] + PRODUCTION_GROUPS)
+                sch_ban  = sb1.selectbox("반 *", PRODUCTION_GROUPS)
                 sc1, sc2, sc3 = st.columns(3)
                 sch_date  = sc1.date_input("날짜")
                 sch_cat   = sc2.selectbox("카테고리", list(SCHEDULE_COLORS.keys()))
