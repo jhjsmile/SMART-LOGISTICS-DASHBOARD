@@ -228,6 +228,36 @@ st.markdown("""
         margin-bottom: 3px; font-size: 0.63rem; line-height: 1.3;
     }
 
+    /* ── Expander (펼치기) ── */
+    .stExpander {
+        border: 1px solid #e0d8c8 !important;
+        border-radius: 10px !important;
+        background-color: #fffdf7 !important;
+        margin-bottom: 8px !important;
+    }
+    .stExpander summary,
+    .stExpander [data-testid="stExpanderToggleIcon"],
+    .stExpander details summary {
+        background-color: #f5f0e8 !important;
+        border-radius: 10px !important;
+        color: #3d3530 !important;
+        padding: 10px 16px !important;
+    }
+    .stExpander summary:hover {
+        background-color: #ede8de !important;
+    }
+    .stExpander summary p,
+    .stExpander summary span,
+    .stExpander details summary p {
+        color: #3d3530 !important;
+        font-weight: 600 !important;
+    }
+    /* expander 내부 배경 */
+    .stExpander details {
+        background-color: #fffdf7 !important;
+        border-radius: 0 0 10px 10px !important;
+    }
+
     /* 좁은 화면 */
     @media (max-width: 900px) {
         .block-container {
