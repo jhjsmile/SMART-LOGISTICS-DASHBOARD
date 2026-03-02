@@ -105,13 +105,37 @@ st.markdown("""
         box-shadow: 0 0 0 2px rgba(126,184,232,0.25) !important;
     }
 
-    /* 버튼 */
+    /* 버튼 공통 */
     .stButton button {
         display: flex; justify-content: center; align-items: center;
         margin-top: 1px; padding: 6px 10px; width: 100%;
         border-radius: 8px; font-weight: 600;
         white-space: nowrap !important; overflow: hidden;
         text-overflow: ellipsis; transition: all 0.2s ease;
+    }
+    /* Secondary 버튼 (기본) → 아이보리 배경 + 브라운 테두리 */
+    .stButton button[kind="secondary"],
+    .stButton button[data-testid="baseButton-secondary"] {
+        background-color: #fffdf7 !important;
+        border: 1px solid #c8b89a !important;
+        color: #3d3530 !important;
+    }
+    .stButton button[kind="secondary"]:hover,
+    .stButton button[data-testid="baseButton-secondary"]:hover {
+        background-color: #f5f0e8 !important;
+        border-color: #7eb8e8 !important;
+        color: #2a2420 !important;
+    }
+    /* Primary 버튼 → 파스텔 블루 */
+    .stButton button[kind="primary"],
+    .stButton button[data-testid="baseButton-primary"] {
+        background-color: #7eb8e8 !important;
+        border: 1px solid #6aaad8 !important;
+        color: #fff !important;
+    }
+    .stButton button[kind="primary"]:hover,
+    .stButton button[data-testid="baseButton-primary"]:hover {
+        background-color: #6aaad8 !important;
     }
 
     /* 컨테이너 border */
@@ -694,10 +718,10 @@ def render_calendar():
     days_kr  = ["월","화","수","목","금","토","일"]
     hdr_cols = st.columns(7)
     for i, d in enumerate(days_kr):
-        color = "#e8908a" if d == "일" else "#7eb8e8" if d == "토" else "#b0a898"
+        color = "#e8908a" if d == "일" else "#7eb8e8" if d == "토" else "#7a6f65"
         hdr_cols[i].markdown(
             f"<div style='text-align:center; font-weight:bold; color:{color}; "
-            f"padding:8px; background:#e8e2d8; border-radius:6px;'>{d}</div>",
+            f"padding:8px; background:#ede8de; border-radius:6px;'>{d}</div>",
             unsafe_allow_html=True)
 
     today     = date.today()
