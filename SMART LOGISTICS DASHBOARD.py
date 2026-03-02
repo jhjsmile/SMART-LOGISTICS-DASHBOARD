@@ -497,8 +497,10 @@ def dialog_edit_schedule(sch_id: int):
 
 if 'schedule_db'     not in st.session_state: st.session_state.schedule_db     = load_schedule()
 if 'production_db'   not in st.session_state: st.session_state.production_db   = load_realtime_ledger()
-if 'cal_year'        not in st.session_state: st.session_state.cal_year        = datetime.now(KST).year
-if 'cal_month'       not in st.session_state: st.session_state.cal_month       = datetime.now(KST).month
+if 'cal_year'         not in st.session_state: st.session_state.cal_year         = datetime.now(KST).year
+if 'cal_month'        not in st.session_state: st.session_state.cal_month        = datetime.now(KST).month
+if 'cal_month_year'   not in st.session_state: st.session_state.cal_month_year   = datetime.now(KST).year
+if 'cal_month_month'  not in st.session_state: st.session_state.cal_month_month  = datetime.now(KST).month
 if 'cal_view'        not in st.session_state: st.session_state.cal_view        = "주별"
 if 'cal_week_idx'    not in st.session_state: st.session_state.cal_week_idx    = 0
 if 'cal_action'      not in st.session_state: st.session_state.cal_action      = None
@@ -674,47 +676,8 @@ elif st.session_state.cal_action == "edit":
 # 9. 캘린더 렌더링
 # =================================================================
 
-def render_calendar():
-    sch_df    = st.session_state.schedule_db
-    cal_year  = st.session_state.cal_year
-    cal_month = st.session_state.cal_month
-    can_edit  = st.session_state.user_role in CALENDAR_EDIT_ROLES
-
-    # 헤더 네비게이션
-    h1, h2, h3, h4, h5 = st.columns([1, 1, 3, 1, 1])
-    if h1.button("◀ 이전달", use_container_width=True):
-        clear_cal()
-        if cal_month == 1: st.session_state.cal_year -= 1; st.session_state.cal_month = 12
-        else: st.session_state.cal_month -= 1
-        st.rerun()
-    if h2.button("오늘", use_container_width=True):
-        clear_cal()
-        st.session_state.cal_year  = datetime.now(KST).year
-        st.session_state.cal_month = datetime.now(KST).month
-        st.rerun()
-    h3.markdown(
-        f"<h3 style='text-align:center; margin:0; padding:6px;'>{cal_year}년 {cal_month}월</h3>",
-        unsafe_allow_html=True)
-    if h4.button("다음달 ▶", use_container_width=True):
-        clear_cal()
-        if cal_month == 12: st.session_state.cal_year += 1; st.session_state.cal_month = 1
-        else: st.session_state.cal_month += 1
-        st.rerun()
-    view_mode = h5.selectbox("보기", ["주별", "월별"],
-        index=0 if st.session_state.cal_view == "주별" else 1,
-        key="cal_view_select", label_visibility="collapsed")
-    if view_mode != st.session_state.cal_view:
-        st.session_state.cal_view = view_mode
-        st.rerun()
-
-    # 범례
-    legend_html = "<div style='display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;'>"
-    for cat, color in SCHEDULE_COLORS.items():
-        legend_html += f"<span style='background:{color}; color:#fff; padding:3px 10px; border-radius:12px; font-size:0.75rem; font-weight:bold;'>{cat}</span>"
-    legend_html += "</div>"
-    st.markdown(legend_html, unsafe_allow_html=True)
-
-    # 요일 헤더
+# 공통 셀 렌더링 헬퍼
+def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edit, key_prefix):
     days_kr  = ["월","화","수","목","금","토","일"]
     hdr_cols = st.columns(7)
     for i, d in enumerate(days_kr):
@@ -724,49 +687,6 @@ def render_calendar():
             f"padding:8px; background:#ede8de; border-radius:6px;'>{d}</div>",
             unsafe_allow_html=True)
 
-    today     = date.today()
-    cal_weeks = calendar.monthcalendar(cal_year, cal_month)
-
-    # 주별 보기
-    if st.session_state.cal_view == "주별":
-        if cal_year == today.year and cal_month == today.month:
-            for wi, week in enumerate(cal_weeks):
-                if today.day in week:
-                    if st.session_state.get('cal_auto_week', True):
-                        st.session_state.cal_week_idx  = wi
-                        st.session_state.cal_auto_week = False
-                    break
-
-        w1, w2, w3 = st.columns([1, 4, 1])
-        if w1.button("◀ 이전주", use_container_width=True):
-            clear_cal()
-            if st.session_state.cal_week_idx > 0:
-                st.session_state.cal_week_idx -= 1
-            else:
-                if cal_month == 1: st.session_state.cal_year -= 1; st.session_state.cal_month = 12
-                else: st.session_state.cal_month -= 1
-                prev_weeks = calendar.monthcalendar(st.session_state.cal_year, st.session_state.cal_month)
-                st.session_state.cal_week_idx = len(prev_weeks) - 1
-            st.rerun()
-        w2.markdown(
-            f"<p style='text-align:center; margin:8px 0;'>"
-            f"{cal_year}년 {cal_month}월 {st.session_state.cal_week_idx+1}주차</p>",
-            unsafe_allow_html=True)
-        if w3.button("다음주 ▶", use_container_width=True):
-            clear_cal()
-            if st.session_state.cal_week_idx < len(cal_weeks) - 1:
-                st.session_state.cal_week_idx += 1
-            else:
-                if cal_month == 12: st.session_state.cal_year += 1; st.session_state.cal_month = 1
-                else: st.session_state.cal_month += 1
-                st.session_state.cal_week_idx = 0
-            st.rerun()
-
-        weeks_to_show = [cal_weeks[min(st.session_state.cal_week_idx, len(cal_weeks)-1)]]
-    else:
-        weeks_to_show = cal_weeks
-
-    # 셀 렌더링
     for week in weeks_to_show:
         week_cols = st.columns(7)
         for i, day in enumerate(week):
@@ -807,10 +727,132 @@ def render_calendar():
                 st.markdown(cell_html, unsafe_allow_html=True)
 
                 btn_label = f"📅 {day}일" if event_count == 0 else f"📅 {day}일 ({event_count}건)"
-                if st.button(btn_label, key=f"day_btn_{day_str}", use_container_width=True):
+                if st.button(btn_label, key=f"{key_prefix}_{day_str}", use_container_width=True):
                     st.session_state.cal_action      = "view_day"
                     st.session_state.cal_action_data = day_str
                     st.rerun()
+
+# ── 범례 공통
+def _render_legend():
+    legend_html = "<div style='display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;'>"
+    for cat, color in SCHEDULE_COLORS.items():
+        legend_html += f"<span style='background:{color}; color:#fff; padding:3px 10px; border-radius:12px; font-size:0.75rem; font-weight:bold;'>{cat}</span>"
+    legend_html += "</div>"
+    st.markdown(legend_html, unsafe_allow_html=True)
+
+# ── 주별 캘린더
+def render_calendar_weekly():
+    sch_df    = st.session_state.schedule_db
+    cal_year  = st.session_state.cal_year
+    cal_month = st.session_state.cal_month
+    can_edit  = st.session_state.user_role in CALENDAR_EDIT_ROLES
+    today     = date.today()
+    cal_weeks = calendar.monthcalendar(cal_year, cal_month)
+
+    # 현재 주 자동 탐색
+    if cal_year == today.year and cal_month == today.month:
+        for wi, week in enumerate(cal_weeks):
+            if today.day in week:
+                if st.session_state.get('cal_auto_week', True):
+                    st.session_state.cal_week_idx  = wi
+                    st.session_state.cal_auto_week = False
+                break
+
+    week_idx = min(st.session_state.cal_week_idx, len(cal_weeks)-1)
+    exp_label = f"📅 주별 캘린더  —  {cal_year}년 {cal_month}월 {week_idx+1}주차"
+
+    with st.expander(exp_label, expanded=True):
+        # 월 네비게이션
+        h1, h2, h3, h4 = st.columns([1, 1, 4, 1])
+        if h1.button("◀ 이전달", key="w_prev_month", use_container_width=True):
+            clear_cal()
+            if cal_month == 1: st.session_state.cal_year -= 1; st.session_state.cal_month = 12
+            else: st.session_state.cal_month -= 1
+            st.session_state.cal_week_idx = 0
+            st.rerun()
+        if h2.button("오늘", key="w_today", use_container_width=True):
+            clear_cal()
+            st.session_state.cal_year      = today.year
+            st.session_state.cal_month     = today.month
+            st.session_state.cal_auto_week = True
+            st.rerun()
+        h3.markdown(
+            f"<p style='text-align:center; font-weight:bold; margin:8px 0; font-size:1rem;'>"
+            f"{cal_year}년 {cal_month}월 {week_idx+1}주차</p>",
+            unsafe_allow_html=True)
+        if h4.button("다음달 ▶", key="w_next_month", use_container_width=True):
+            clear_cal()
+            if cal_month == 12: st.session_state.cal_year += 1; st.session_state.cal_month = 1
+            else: st.session_state.cal_month += 1
+            st.session_state.cal_week_idx = 0
+            st.rerun()
+
+        # 주 네비게이션
+        w1, w2, w3 = st.columns([1, 4, 1])
+        if w1.button("◀ 이전주", key="w_prev_week", use_container_width=True):
+            clear_cal()
+            if st.session_state.cal_week_idx > 0:
+                st.session_state.cal_week_idx -= 1
+            else:
+                if cal_month == 1: st.session_state.cal_year -= 1; st.session_state.cal_month = 12
+                else: st.session_state.cal_month -= 1
+                prev_weeks = calendar.monthcalendar(st.session_state.cal_year, st.session_state.cal_month)
+                st.session_state.cal_week_idx = len(prev_weeks) - 1
+            st.rerun()
+        w2.markdown(
+            f"<p style='text-align:center; color:#8a7f72; margin:8px 0;'>"
+            f"{cal_year}년 {cal_month}월 {week_idx+1}주차</p>",
+            unsafe_allow_html=True)
+        if w3.button("다음주 ▶", key="w_next_week", use_container_width=True):
+            clear_cal()
+            if st.session_state.cal_week_idx < len(cal_weeks) - 1:
+                st.session_state.cal_week_idx += 1
+            else:
+                if cal_month == 12: st.session_state.cal_year += 1; st.session_state.cal_month = 1
+                else: st.session_state.cal_month += 1
+                st.session_state.cal_week_idx = 0
+            st.rerun()
+
+        _render_legend()
+        _render_cal_cells(sch_df, cal_year, cal_month,
+                          [cal_weeks[week_idx]], today, can_edit, "wk")
+
+# ── 월별 캘린더
+def render_calendar_monthly():
+    sch_df    = st.session_state.schedule_db
+    cal_year  = st.session_state.cal_month_year  if 'cal_month_year'  in st.session_state else st.session_state.cal_year
+    cal_month = st.session_state.cal_month_month if 'cal_month_month' in st.session_state else st.session_state.cal_month
+    can_edit  = st.session_state.user_role in CALENDAR_EDIT_ROLES
+    today     = date.today()
+    cal_weeks = calendar.monthcalendar(cal_year, cal_month)
+
+    exp_label = f"🗓️ 월별 캘린더  —  {cal_year}년 {cal_month}월 전체"
+
+    with st.expander(exp_label, expanded=False):
+        h1, h2, h3, h4 = st.columns([1, 1, 4, 1])
+        if h1.button("◀ 이전달", key="m_prev_month", use_container_width=True):
+            clear_cal()
+            if cal_month == 1: st.session_state.cal_month_year = cal_year - 1; st.session_state.cal_month_month = 12
+            else: st.session_state.cal_month_year = cal_year; st.session_state.cal_month_month = cal_month - 1
+            st.rerun()
+        if h2.button("오늘", key="m_today", use_container_width=True):
+            clear_cal()
+            st.session_state.cal_month_year  = today.year
+            st.session_state.cal_month_month = today.month
+            st.rerun()
+        h3.markdown(
+            f"<p style='text-align:center; font-weight:bold; margin:8px 0; font-size:1rem;'>"
+            f"{cal_year}년 {cal_month}월 전체</p>",
+            unsafe_allow_html=True)
+        if h4.button("다음달 ▶", key="m_next_month", use_container_width=True):
+            clear_cal()
+            if cal_month == 12: st.session_state.cal_month_year = cal_year + 1; st.session_state.cal_month_month = 1
+            else: st.session_state.cal_month_year = cal_year; st.session_state.cal_month_month = cal_month + 1
+            st.rerun()
+
+        _render_legend()
+        _render_cal_cells(sch_df, cal_year, cal_month,
+                          cal_weeks, today, can_edit, "mo")
 
 # =================================================================
 # 10. 페이지 렌더링
@@ -913,7 +955,8 @@ if curr_l == "현황판":
         st.caption("✏️ 날짜 버튼 클릭 → 일정 상세/추가/수정/삭제")
     else:
         st.caption("👁️ 조회만 가능합니다.")
-    render_calendar()
+    render_calendar_weekly()
+    render_calendar_monthly()
 
 # ── 조립 라인 ────────────────────────────────────────────────────
 elif curr_l == "조립 라인":
