@@ -177,6 +177,26 @@ st.markdown("""
     .stApp p, .stApp label, .stApp .stMarkdown p {
         color: #2a2420;
     }
+    /* subheader / h3 / h2 / write 텍스트 */
+    .stApp h1, .stApp h2, .stApp h3,
+    .stApp h4, .stApp h5, .stApp h6 {
+        color: #2a2420 !important;
+    }
+    /* st.write, st.caption 등 일반 텍스트 */
+    .stApp .stMarkdown,
+    .stApp .stMarkdown p,
+    .stApp .stMarkdown span,
+    .stApp .stMarkdown strong,
+    .stApp [data-testid="stMarkdownContainer"] p,
+    .stApp [data-testid="stMarkdownContainer"] span {
+        color: #2a2420 !important;
+    }
+    /* metric, caption */
+    .stApp [data-testid="stMetricLabel"],
+    .stApp [data-testid="stMetricValue"],
+    .stApp [data-testid="stCaptionContainer"] {
+        color: #5a5048 !important;
+    }
 
     /* 통계 박스 */
     .stat-box {
@@ -1273,7 +1293,7 @@ elif curr_l == "마스터 관리":
                 c1, c2 = st.columns(2)
                 with c1:
                     with st.container(border=True):
-                        st.subheader("신규 모델 대량 등록")
+                        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin-bottom:6px;'>신규 모델 대량 등록</h4>", unsafe_allow_html=True)
                         st.caption("여러 모델은 줄바꿈으로 구분")
                         nm_bulk = st.text_area(f"{g_name} 모델명", key=f"nm_{g_name}", height=150, placeholder="EPS7150\nEPS7133\nT20i")
                         if st.button(f"{g_name} 모델 저장", key=f"nb_{g_name}"):
@@ -1291,7 +1311,7 @@ elif curr_l == "마스터 관리":
                             else: st.warning("모델명을 입력해주세요.")
                 with c2:
                     with st.container(border=True):
-                        st.subheader("세부 품목 대량 등록")
+                        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin-bottom:6px;'>세부 품목 대량 등록</h4>", unsafe_allow_html=True)
                         g_mods = st.session_state.group_master_models.get(g_name, [])
                         if g_mods:
                             sm = st.selectbox(f"{g_name} 모델 선택", g_mods, key=f"sm_{g_name}")
@@ -1313,12 +1333,12 @@ elif curr_l == "마스터 관리":
                             st.warning("모델을 먼저 등록하세요.")
 
         st.divider()
-        st.subheader("계정 및 데이터 관리")
+        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin:16px 0 10px 0;'>계정 및 데이터 관리</h4>", unsafe_allow_html=True)
         ac1, ac2 = st.columns(2)
 
         with ac1:
             with st.form("user_mgmt"):
-                st.write("**사용자 계정 생성/업데이트**")
+                st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>👤 사용자 계정 생성/업데이트</p>", unsafe_allow_html=True)
                 nu  = st.text_input("ID")
                 np_ = st.text_input("PW", type="password")
                 nr  = st.selectbox("Role", ["admin","master","control_tower","assembly_team","qc_team","packing_team"])
@@ -1329,7 +1349,7 @@ elif curr_l == "마스터 관리":
                     else: st.warning("ID와 PW를 모두 입력해주세요.")
 
         with ac2:
-            st.write("**시스템 데이터 관리**")
+            st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>🗄️ 시스템 데이터 관리</p>", unsafe_allow_html=True)
             db_export    = st.session_state.production_db.copy()
             export_group = st.selectbox("반 선택", ["전체"] + PRODUCTION_GROUPS, key="export_group")
             ex_c1, ex_c2 = st.columns(2)
