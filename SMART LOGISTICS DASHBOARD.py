@@ -391,9 +391,76 @@ def load_schedule() -> pd.DataFrame:
         st.warning(f"일정 로드 실패: {e}")
         return pd.DataFrame(columns=['id','날짜','반','카테고리','pn','모델명','조립수','출하계획','특이사항','작성자'])
 
+# ── 모델 마스터 DB 함수 ──────────────────────────────────────────
+def load_model_master() -> pd.DataFrame:
+    try:
+        res = get_supabase().table("model_master").select("*").execute()
+        if res.data:
+            return pd.DataFrame(res.data)
+        return pd.DataFrame(columns=['id','반','모델명','품목코드'])
+    except Exception as e:
+        return pd.DataFrame(columns=['id','반','모델명','품목코드'])
+
+def upsert_model_master(반: str, 모델명: str, 품목코드: str) -> bool:
+    """반+모델명+품목코드 조합이 없으면 insert, 있으면 스킵 (UNIQUE 제약)"""
+    try:
+        get_supabase().table("model_master").upsert(
+            {"반": 반, "모델명": 모델명, "품목코드": 품목코드},
+            on_conflict="반,모델명,품목코드"
+        ).execute()
+        return True
+    except:
+        return False
+
+def sync_master_to_session():
+    """DB model_master → session_state group_master_models/items 동기화"""
+    df = load_model_master()
+    if df.empty:
+        return
+    models_map = {g: [] for g in PRODUCTION_GROUPS}
+    items_map  = {g: {} for g in PRODUCTION_GROUPS}
+    for _, r in df.iterrows():
+        g  = str(r['반'])
+        m  = str(r['모델명'])
+        pn = str(r['품목코드'])
+        if g not in models_map:
+            continue
+        if m not in models_map[g]:
+            models_map[g].append(m)
+        if m not in items_map[g]:
+            items_map[g][m] = []
+        if pn and pn not in items_map[g][m]:
+            items_map[g][m].append(pn)
+    # 기존 session 값과 병합 (수동 등록분 유지)
+    for g in PRODUCTION_GROUPS:
+        for m in models_map[g]:
+            if m not in st.session_state.group_master_models[g]:
+                st.session_state.group_master_models[g].append(m)
+            if m not in st.session_state.group_master_items[g]:
+                st.session_state.group_master_items[g][m] = []
+            for pn in items_map[g].get(m, []):
+                if pn not in st.session_state.group_master_items[g][m]:
+                    st.session_state.group_master_items[g][m].append(pn)
+
 def insert_schedule(row: dict) -> bool:
     try:
         get_supabase().table("production_schedule").insert(row).execute()
+        # ── 일정 등록 시 모델/품목 자동 마스터 등록 ──
+        반    = str(row.get('반', ''))
+        모델  = str(row.get('모델명', '')).strip()
+        pn    = str(row.get('pn', '')).strip()
+        # 전체(공통) 또는 빈 반이면 모든 반에 등록
+        target_groups = PRODUCTION_GROUPS if 반 in ['전체(공통)', ''] else ([반] if 반 in PRODUCTION_GROUPS else [])
+        for g in target_groups:
+            if 모델:
+                upsert_model_master(g, 모델, pn if pn else 모델)
+                # session_state 즉시 반영
+                if 모델 not in st.session_state.group_master_models.get(g, []):
+                    st.session_state.group_master_models.setdefault(g, []).append(모델)
+                if 모델 not in st.session_state.group_master_items.get(g, {}):
+                    st.session_state.group_master_items.setdefault(g, {})[모델] = []
+                if pn and pn not in st.session_state.group_master_items[g][모델]:
+                    st.session_state.group_master_items[g][모델].append(pn)
         return True
     except Exception as e:
         st.error(f"일정 등록 실패: {e}"); return False
@@ -597,6 +664,11 @@ if 'group_master_items' not in st.session_state:
         },
         "제조3반": {"AION-X": ["AX-PRO"], "AION-Z": ["AZ-ULTRA"]}
     }
+
+# DB model_master → session 동기화 (앱 시작 시 1회)
+if 'master_synced' not in st.session_state:
+    sync_master_to_session()
+    st.session_state.master_synced = True
 
 if 'login_status'        not in st.session_state: st.session_state.login_status        = False
 if 'user_role'           not in st.session_state: st.session_state.user_role           = None
@@ -1028,6 +1100,97 @@ if curr_l == "현황판":
 # ── 조립 라인 ────────────────────────────────────────────────────
 elif curr_l == "조립 라인":
     st.markdown(f"<h2 class='centered-title'>📦 {curr_g} 신규 조립 현황</h2>", unsafe_allow_html=True)
+
+    # ── 오늘 일정 알림 & 팝업 ─────────────────────────────────
+    today_str   = datetime.now(KST).strftime('%Y-%m-%d')
+    sch_all     = st.session_state.schedule_db
+    today_sch   = sch_all[
+        (sch_all['날짜'] == today_str) &
+        (sch_all['반'].isin([curr_g, "전체(공통)", ""]))
+    ] if not sch_all.empty else pd.DataFrame()
+
+    # 변경 감지: 마지막 확인 이후 등록된 일정
+    last_seen_key = f"sch_last_seen_{curr_g}"
+    if last_seen_key not in st.session_state:
+        st.session_state[last_seen_key] = ""
+    sch_ids_now   = ",".join(sorted(str(i) for i in today_sch['id'].tolist())) if not today_sch.empty else ""
+    has_new_sch   = (sch_ids_now != st.session_state[last_seen_key]) and not today_sch.empty
+
+    # 변경 알림 팝업
+    if has_new_sch and not st.session_state.get(f"sch_popup_dismissed_{curr_g}", False):
+        with st.container():
+            st.markdown(f"""
+<div style='background:#fff8e6; border:2px solid #f0c878; border-radius:12px;
+     padding:16px 20px; margin-bottom:16px;'>
+  <div style='font-size:1.05rem; font-weight:bold; color:#7a5c00; margin-bottom:6px;'>
+    🔔 오늘 생산 일정이 등록/변경되었습니다!
+  </div>
+  <div style='font-size:0.88rem; color:#5a4400;'>
+    {today_str} 기준 <b>{curr_g}</b> 일정 <b>{len(today_sch)}건</b>이 있습니다. 아래에서 확인하세요.
+  </div>
+</div>""", unsafe_allow_html=True)
+            ack_c1, ack_c2 = st.columns([3, 1])
+            if ack_c2.button("✅ 확인했습니다", key=f"sch_ack_{curr_g}", use_container_width=True, type="primary"):
+                st.session_state[last_seen_key] = sch_ids_now
+                st.session_state[f"sch_popup_dismissed_{curr_g}"] = True
+                st.rerun()
+
+    # 오늘 일정 카드
+    st.markdown(f"<div class='section-title'>📋 오늘({today_str}) {curr_g} 작업 일정</div>", unsafe_allow_html=True)
+
+    if today_sch.empty:
+        st.markdown("""<div style='background:#fffdf7; border:1px solid #e0d8c8; border-radius:10px;
+            padding:16px; text-align:center; color:#8a7f72; margin-bottom:16px;'>
+            오늘 등록된 작업 일정이 없습니다.</div>""", unsafe_allow_html=True)
+    else:
+        # 일정 카드 렌더링
+        for _, sr in today_sch.iterrows():
+            cat    = str(sr.get('카테고리', '기타'))
+            color  = SCHEDULE_COLORS.get(cat, "#888")
+            model  = str(sr.get('모델명', ''))
+            pn     = str(sr.get('pn', ''))
+            qty    = sr.get('조립수', 0)
+            ship   = str(sr.get('출하계획', ''))
+            note   = str(sr.get('특이사항', ''))
+            ban    = str(sr.get('반', ''))
+
+            ship_html = f"<span style='color:#5a4400;'>📦 출하계획: {ship}</span>&nbsp;&nbsp;" if ship else ""
+            note_html = f"<span style='color:#c8605a;'>⚠ {note}</span>" if note else ""
+            ban_html  = f"<span style='background:#f0ebe0; border-radius:6px; padding:2px 8px; font-size:0.78rem; color:#8a7f72;'>{ban}</span> " if ban else ""
+
+            st.markdown(f"""
+<div style='background:{color}12; border-left:5px solid {color};
+     border-radius:10px; padding:14px 18px; margin-bottom:10px;
+     border:1px solid {color}44;'>
+  <div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;'>
+    <div>
+      {ban_html}
+      <span style='background:{color}; color:#fff; border-radius:6px;
+            padding:3px 10px; font-size:0.78rem; font-weight:bold;'>{cat}</span>
+      <span style='font-size:1.05rem; font-weight:bold; color:#2a2420; margin-left:10px;'>{model}</span>
+      {f"<span style='font-size:0.82rem; color:#8a7f72; margin-left:8px;'>({pn})</span>" if pn else ""}
+    </div>
+    <div style='font-size:1.4rem; font-weight:bold; color:{color};'>
+      🔢 {qty:,} 대
+    </div>
+  </div>
+  {f"<div style='margin-top:8px; font-size:0.85rem;'>{ship_html}{note_html}</div>" if ship or note else ""}
+</div>""", unsafe_allow_html=True)
+
+        # 일정 전체 보기 토글
+        with st.expander(f"📅 {curr_g} 이번 달 전체 일정 보기"):
+            month_sch = sch_all[
+                (sch_all['날짜'].str.startswith(today_str[:7])) &
+                (sch_all['반'].isin([curr_g, "전체(공통)", ""]))
+            ] if not sch_all.empty else pd.DataFrame()
+            if not month_sch.empty:
+                show_cols = ['날짜','카테고리','모델명','pn','조립수','출하계획','특이사항']
+                show_cols = [c for c in show_cols if c in month_sch.columns]
+                st.dataframe(month_sch[show_cols].sort_values('날짜'), use_container_width=True, hide_index=True)
+            else:
+                st.info("이번 달 등록된 일정이 없습니다.")
+
+    st.divider()
 
     with st.container(border=True):
         st.markdown(f"#### ➕ {curr_g} 신규 생산 등록")
@@ -1648,6 +1811,7 @@ elif curr_l == "마스터 관리":
                                     if nm not in st.session_state.group_master_models.get(g_name, []):
                                         st.session_state.group_master_models[g_name].append(nm)
                                         st.session_state.group_master_items[g_name][nm] = []
+                                        upsert_model_master(g_name, nm, nm)
                                         added.append(nm)
                                     else: skipped.append(nm)
                                 if added:   st.success(f"등록 완료: {', '.join(added)}")
@@ -1668,7 +1832,9 @@ elif curr_l == "마스터 관리":
                                     added, skipped = [], []
                                     for ni in [x.strip() for x in ni_bulk.strip().splitlines() if x.strip()]:
                                         if ni not in current:
-                                            st.session_state.group_master_items[g_name][sm].append(ni); added.append(ni)
+                                            st.session_state.group_master_items[g_name][sm].append(ni)
+                                            upsert_model_master(g_name, sm, ni)
+                                            added.append(ni)
                                         else: skipped.append(ni)
                                     if added:   st.success(f"등록 완료: {', '.join(added)}")
                                     if skipped: st.warning(f"이미 존재: {', '.join(skipped)}")
