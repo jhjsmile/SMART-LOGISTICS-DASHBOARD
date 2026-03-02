@@ -140,6 +140,40 @@ st.markdown("""
     .stButton > button[kind="primary"]:hover {
         background-color: #6aaad8 !important;
     }
+    /* ── 최신 Streamlit 버튼 선택자 강제 적용 ── */
+    button[data-testid="baseButton-secondary"],
+    button[data-testid="baseButton-secondaryFormSubmit"] {
+        background-color: #fffdf7 !important;
+        border: 1px solid #c8b89a !important;
+        color: #3d3530 !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+    }
+    button[data-testid="baseButton-secondary"]:hover,
+    button[data-testid="baseButton-secondaryFormSubmit"]:hover {
+        background-color: #f0ebe0 !important;
+        border-color: #7eb8e8 !important;
+        color: #2a2420 !important;
+    }
+    button[data-testid="baseButton-primary"],
+    button[data-testid="baseButton-primaryFormSubmit"] {
+        background-color: #7eb8e8 !important;
+        border: 1px solid #6aaad8 !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+    }
+    button[data-testid="baseButton-primary"]:hover,
+    button[data-testid="baseButton-primaryFormSubmit"]:hover {
+        background-color: #6aaad8 !important;
+        color: #ffffff !important;
+    }
+    /* 모든 버튼 텍스트 색 강제 (최후 방어) */
+    .stButton button p,
+    .stButton button span,
+    .stButton button div {
+        color: inherit !important;
+    }
     /* 다운로드 버튼 → 파스텔 아이보리 + 진한 글자 */
     [data-testid="stDownloadButton"] > button {
         background-color: #fffdf7 !important;
