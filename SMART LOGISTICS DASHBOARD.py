@@ -1722,10 +1722,28 @@ elif curr_l == "마스터 관리":
                 use_container_width=True)
 
         st.divider()
-        if st.button("⚠️ 전체 데이터 초기화", type="secondary"):
-            if delete_all_rows():
-                st.session_state.production_db = load_realtime_ledger()
-                st.success("전체 데이터가 초기화되었습니다."); st.rerun()
+
+        # 초기화 버튼 - 2단계 확인
+        if 'confirm_reset' not in st.session_state:
+            st.session_state.confirm_reset = False
+
+        if not st.session_state.confirm_reset:
+            if st.button("⚠️ 전체 데이터 초기화", type="secondary", use_container_width=False):
+                st.session_state.confirm_reset = True
+                st.rerun()
+        else:
+            st.error("⛔ 정말로 전체 생산 데이터를 삭제하시겠습니까? **되돌릴 수 없습니다.**")
+            cc1, cc2, cc3 = st.columns([2, 1, 1])
+            cc1.markdown("<p style='color:#c8605a; font-weight:bold; margin-top:8px;'>삭제 후 복구 불가 — 신중히 결정하세요.</p>", unsafe_allow_html=True)
+            if cc2.button("🗑️ 예, 삭제합니다", type="primary", use_container_width=True):
+                if delete_all_rows():
+                    st.session_state.production_db = load_realtime_ledger()
+                    st.session_state.confirm_reset = False
+                    st.success("전체 데이터가 초기화되었습니다.")
+                    st.rerun()
+            if cc3.button("취소", use_container_width=True):
+                st.session_state.confirm_reset = False
+                st.rerun()
 
 # =================================================================
 # [ PMS v22.3 종료 ]
