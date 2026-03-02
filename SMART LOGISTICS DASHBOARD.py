@@ -306,6 +306,43 @@ st.markdown("""
         margin-bottom: 3px; font-size: 0.63rem; line-height: 1.3;
     }
 
+    /* ── 캘린더 날짜 버튼 (숫자처럼 보이게) ── */
+    [data-testid="stHorizontalBlock"] .stButton > button,
+    .cal-date-btn button {
+        background-color: transparent !important;
+        border: none !important;
+        border-radius: 6px !important;
+        color: #3d3530 !important;
+        font-weight: bold !important;
+        font-size: 0.95rem !important;
+        padding: 4px 2px !important;
+        min-height: 32px !important;
+        box-shadow: none !important;
+    }
+    [data-testid="stHorizontalBlock"] .stButton > button:hover {
+        background-color: #e8f0f8 !important;
+        color: #2471a3 !important;
+        border: 1px solid #7eb8e8 !important;
+    }
+
+    /* ── 캘린더 투명 클릭 버튼 (날짜 숫자 아래 숨김) ── */
+    button[title="·"],
+    button[aria-label*="일 클릭"],
+    .cal-invisible-btn > div > button,
+    .cal-invisible-btn button {
+        background: transparent !important;
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: transparent !important;
+        min-height: 6px !important;
+        height: 6px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        opacity: 0 !important;
+        cursor: pointer !important;
+    }
+
     /* ── Expander (펼치기) ── */
     .stExpander {
         border: 1px solid #e0d8c8 !important;
@@ -939,15 +976,20 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                 )
                 # 보이지 않는 투명 클릭 버튼 (날짜 div 위에 겹치지 않고 아래에)
                 with st.container():
-                    st.markdown(
-                        f"<style>.cal-click-btn-{key_prefix}-{day_str} > div > button {{"
-                        f"background:transparent !important; border:none !important; "
-                        f"color:transparent !important; font-size:0.01rem !important; "
-                        f"height:0px !important; padding:0 !important; margin:0 !important; "
-                        f"min-height:0 !important; cursor:pointer !important; width:100% !important;"
-                        f"}}</style>",
-                        unsafe_allow_html=True
+                    btn_css = (
+                        f"<style>"
+                        f"button[kind='secondary'][data-testid='baseButton-secondary'] {{}}"
+                        f"div:has(> div > button[aria-label='{day}일 클릭 — 일정 보기/추가']) button,"
+                        f"div:has(> button[aria-label='{day}일 클릭 — 일정 보기/추가']) button {{"
+                        f"background:transparent !important; background-color:transparent !important;"
+                        f"border:none !important; box-shadow:none !important;"
+                        f"color:transparent !important; font-size:0.01rem !important;"
+                        f"height:4px !important; min-height:4px !important;"
+                        f"padding:0 !important; margin:0 !important;"
+                        f"cursor:pointer !important; width:100% !important; opacity:0 !important;"
+                        f"}}</style>"
                     )
+                    st.markdown(btn_css, unsafe_allow_html=True)
                     if st.button("·", key=f"{key_prefix}_{day_str}",
                                  use_container_width=True, help=f"{day}일 클릭 — 일정 보기/추가"):
                         st.session_state.cal_action      = "view_day"
