@@ -138,6 +138,19 @@ st.markdown("""
     .stButton > button[kind="primary"]:hover {
         background-color: #6aaad8 !important;
     }
+    /* 다운로드 버튼 → 파스텔 아이보리 + 진한 글자 */
+    [data-testid="stDownloadButton"] > button {
+        background-color: #fffdf7 !important;
+        border: 1px solid #c8b89a !important;
+        color: #3d3530 !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+        width: 100% !important;
+    }
+    [data-testid="stDownloadButton"] > button:hover {
+        background-color: #f0ebe0 !important;
+        border-color: #7eb8e8 !important;
+    }
 
     /* 컨테이너 border */
     [data-testid="stVerticalBlockBorderWrapper"] {
