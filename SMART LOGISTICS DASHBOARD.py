@@ -503,6 +503,14 @@ def delete_item_from_master(반: str, 모델명: str, 품목코드: str) -> bool
     except:
         return False
 
+def delete_all_master_by_group(반: str) -> bool:
+    """특정 반의 모델/품목 전체 삭제"""
+    try:
+        get_supabase().table("model_master").delete().eq("반", 반).execute()
+        return True
+    except:
+        return False
+
 def sync_master_to_session():
     """DB model_master → session_state group_master_models/items 동기화"""
     df = load_model_master()
@@ -2083,6 +2091,31 @@ elif curr_l == "마스터 관리":
                 # ── 삭제 ─────────────────────────────
                 st.divider()
                 st.markdown("<h4 style='color:#c8605a; font-weight:bold; margin-bottom:6px;'>🗑️ 모델 / 품목 삭제</h4>", unsafe_allow_html=True)
+
+                # ── 전체 삭제 버튼
+                all_master_ck = f"del_all_master_ck_{g_name}"
+                if not st.session_state.get(all_master_ck, False):
+                    if st.button(f"⛔ {g_name} 모델/품목 전체 삭제", key=f"del_all_m_{g_name}",
+                                 use_container_width=True, type="secondary"):
+                        st.session_state[all_master_ck] = True
+                        st.rerun()
+                else:
+                    st.error(f"⛔ [{g_name}]의 모든 모델과 품목코드를 삭제합니다. 되돌릴 수 없습니다.")
+                    am1, am2, am3 = st.columns([2, 1, 1])
+                    am1.markdown("<p style='color:#c8605a; font-weight:bold; margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
+                    if am2.button("✅ 예, 전체 삭제", key=f"del_all_m_yes_{g_name}",
+                                  type="primary", use_container_width=True):
+                        st.session_state.group_master_models[g_name] = []
+                        st.session_state.group_master_items[g_name]  = {}
+                        delete_all_master_by_group(g_name)
+                        st.session_state[all_master_ck] = False
+                        st.success(f"{g_name} 모델/품목 전체 삭제 완료")
+                        st.rerun()
+                    if am3.button("취소", key=f"del_all_m_no_{g_name}", use_container_width=True):
+                        st.session_state[all_master_ck] = False
+                        st.rerun()
+
+                st.divider()
                 del_c1, del_c2 = st.columns(2)
 
                 with del_c1:
