@@ -445,11 +445,10 @@ def sync_master_to_session():
 def insert_schedule(row: dict) -> bool:
     try:
         get_supabase().table("production_schedule").insert(row).execute()
-        # ── 일정 등록 시 모델/품목 자동 마스터 등록 ──
-        반    = str(row.get('반', ''))
-        모델  = str(row.get('모델명', '')).strip()
-        pn    = str(row.get('pn', '')).strip()
-        # 해당 반에만 등록 (반 미지정이면 스킵)
+        # ── 일정 등록 시 해당 반 모델/품목 마스터 자동 등록 ──
+        반   = str(row.get('반', '')).strip()
+        모델 = str(row.get('모델명', '')).strip()
+        pn   = str(row.get('pn', '')).strip()
         if 반 in PRODUCTION_GROUPS and 모델:
             upsert_model_master(반, 모델, pn if pn else 모델)
             if 모델 not in st.session_state.group_master_models.get(반, []):
@@ -1736,52 +1735,76 @@ elif curr_l == "마스터 관리":
                         st.markdown(f"<p style='color:#2a2420;'>✅ <b>{len(parsed)}건</b> 파싱 완료 — 미리보기:</p>", unsafe_allow_html=True)
                         st.dataframe(preview_df, use_container_width=True, hide_index=True, height=300)
 
+                        st.divider()
+
+                        # ── 반 선택 (PMS 양식은 이미 반 포함, MNT는 여기서 지정) ──
+                        has_ban = all(r.get('반','') in PRODUCTION_GROUPS for r in parsed)
+                        if has_ban:
+                            st.info(f"📍 반 정보가 파일에 포함되어 있습니다.")
+                            upload_ban = None  # 파일 내 반 사용
+                        else:
+                            upload_ban = st.selectbox(
+                                "📍 해당 엑셀의 반 선택 ✱필수",
+                                PRODUCTION_GROUPS,
+                                key="bulk_ban_sel",
+                                help="MNT 생산현황 양식은 반 정보가 없으므로 직접 선택하세요."
+                            )
+
                         # 날짜 범위 필터
                         all_dates = sorted(set(r['날짜'] for r in parsed))
                         fc1, fc2 = st.columns(2)
                         date_from = fc1.selectbox("등록 시작일", all_dates, key="bulk_from")
                         date_to   = fc2.selectbox("등록 종료일", all_dates,
                             index=len(all_dates)-1, key="bulk_to")
-
                         filtered = [r for r in parsed if date_from <= r['날짜'] <= date_to]
-                        st.markdown(f"<p style='color:#5a96c8; font-weight:bold;'>→ 선택 범위 {date_from} ~ {date_to} : {len(filtered)}건</p>", unsafe_allow_html=True)
 
-                        # 반 선택
-                        upload_ban = st.selectbox(
-                            "📍 해당 엑셀의 반 선택 (필수)",
-                            PRODUCTION_GROUPS,
-                            key="bulk_ban_sel",
-                            help="이 엑셀 파일이 어느 반의 생산계획인지 선택하세요"
-                        )
+                        # 실제 등록될 반 표시
+                        actual_ban = upload_ban if upload_ban else "파일 내 반 정보 사용"
+                        st.markdown(
+                            f"<p style='color:#5a96c8; font-weight:bold;'>"
+                            f"→ 선택 범위 {date_from} ~ {date_to} : <b>{len(filtered)}건</b>"
+                            f" | 등록 반: <b>{actual_ban}</b></p>",
+                            unsafe_allow_html=True)
 
                         # 중복 처리 옵션
                         dup_mode = st.radio("기존 일정 처리",
                             ["건너뜀 (중복 날짜+모델 제외)", "모두 등록 (중복 허용)"],
                             horizontal=True, key="bulk_dup_mode")
 
-                        col_reg, col_void = st.columns([2,1])
+                        col_reg, _ = st.columns([2,1])
                         if col_reg.button(f"📥 {len(filtered)}건 일정 등록", type="primary", use_container_width=True, key="bulk_register"):
-                            existing = st.session_state.schedule_db
-                            success_cnt = skip_cnt = 0
-                            for row in filtered:
-                                # 중복 체크
-                                if "건너뜀" in dup_mode and not existing.empty:
-                                    dup = existing[
-                                        (existing['날짜'] == row['날짜']) &
-                                        (existing['모델명'] == row['모델명']) &
-                                        (existing['카테고리'] == row['카테고리'])
-                                    ]
-                                    if not dup.empty:
+                            # 반 미선택 방어
+                            if not has_ban and not upload_ban:
+                                st.error("반을 선택해주세요.")
+                            else:
+                                existing = st.session_state.schedule_db
+                                success_cnt = skip_cnt = 0
+                                for row in filtered:
+                                    # 반 강제 지정 (MNT 양식)
+                                    if upload_ban:
+                                        row['반'] = upload_ban
+                                    # 반 최종 확인
+                                    if row.get('반','') not in PRODUCTION_GROUPS:
                                         skip_cnt += 1
                                         continue
-                                row['반'] = upload_ban
-                                if insert_schedule(row):
-                                    success_cnt += 1
-                                else:
-                                    skip_cnt += 1
-                            st.session_state.schedule_db = load_schedule()
-                            st.success(f"✅ 등록 완료: {success_cnt}건  |  건너뜀: {skip_cnt}건")
-                            st.rerun()
+                                    # 중복 체크
+                                    if "건너뜀" in dup_mode and not existing.empty:
+                                        dup = existing[
+                                            (existing['날짜']   == row['날짜']) &
+                                            (existing['모델명'] == row['모델명']) &
+                                            (existing['카테고리'] == row['카테고리']) &
+                                            (existing['반']     == row['반'])
+                                        ]
+                                        if not dup.empty:
+                                            skip_cnt += 1
+                                            continue
+                                    if insert_schedule(row):
+                                        success_cnt += 1
+                                    else:
+                                        skip_cnt += 1
+                                st.session_state.schedule_db = load_schedule()
+                                st.success(f"✅ 등록 완료: {success_cnt}건  |  건너뜀: {skip_cnt}건")
+                                st.rerun()
                     else:
                         st.warning("파싱된 일정이 없습니다. 파일 형식을 확인해주세요.")
 
