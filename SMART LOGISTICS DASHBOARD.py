@@ -843,10 +843,11 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                 event_count = 0
                 if not day_data.empty:
                     for _, r in day_data.iterrows():
-                        cat   = str(r.get('카테고리','기타')) if r.get('카테고리') else '기타'
-                        color = SCHEDULE_COLORS.get(cat, "#888")
-                        label = (str(r.get('모델명','')) or str(r.get('특이사항','')))[:12]
-                        qty   = r.get('조립수', 0)
+                        cat     = str(r.get('카테고리','기타')) if r.get('카테고리') else '기타'
+                        color   = SCHEDULE_COLORS.get(cat, "#888")
+                        ban_tag = str(r.get('반',''))
+                        label   = (str(r.get('모델명','')) or str(r.get('특이사항','')))[:12]
+                        qty     = r.get('조립수', 0)
                         cell_html += (
                             f"<div class='cal-event' style='background:{color}22; border-left:3px solid {color};'>"
                             f"<span style='color:{color}; font-weight:bold;'>[{cat}]</span> "
