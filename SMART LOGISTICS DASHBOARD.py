@@ -21,7 +21,12 @@ st.set_page_config(
 )
 
 KST = timezone(timedelta(hours=9))
-st_autorefresh(interval=30000, key="pms_auto_refresh")
+_refresh_count = st_autorefresh(interval=30000, key="pms_auto_refresh")
+# autorefresh 트리거 시 열려있는 캘린더 다이얼로그 자동 닫기
+if _refresh_count and _refresh_count != st.session_state.get("_last_refresh_count", 0):
+    st.session_state["_last_refresh_count"] = _refresh_count
+    st.session_state["cal_action"]           = None
+    st.session_state["cal_action_data"]      = None
 
 PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
 CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower", "schedule_manager"]
@@ -53,6 +58,8 @@ SCHEDULE_COLORS = {
     "특이사항": "#e8908a",
     "기타":     "#b49fd4",
 }
+# 일정 등록 폼에서 선택 가능한 계획 카테고리 (특이사항/기타 제외)
+PLAN_CATEGORIES = ["조립계획", "포장계획", "출하계획"]
 
 st.markdown("""
     <style>
@@ -666,20 +673,24 @@ def dialog_add_schedule(selected_date: str):
     st.markdown(f"**날짜: {selected_date}**")
     with st.form("add_sch_form"):
         ban   = st.selectbox("반 *", PRODUCTION_GROUPS)
-        cat   = st.selectbox("카테고리", list(SCHEDULE_COLORS.keys()))
-        pn    = st.text_input("P/N (품목코드)")
-        model = st.text_input("모델명")
-        qty   = st.number_input("조립수", min_value=0, step=1)
-        ship  = st.text_input("출하계획")
+        cat   = st.selectbox("계획 유형 *", PLAN_CATEGORIES)
+        fa1, fa2 = st.columns(2)
+        model = fa1.text_input("모델명 *")
+        pn    = fa2.text_input("P/N (품목코드)")
+        fb1, fb2 = st.columns(2)
+        qty   = fb1.number_input("조립수", min_value=0, step=1)
+        ship  = fb2.text_input("출하계획")
         note  = st.text_input("특이사항")
+        etc   = st.text_input("기타")
         if st.form_submit_button("✅ 등록", use_container_width=True, type="primary"):
             if model.strip() or note.strip():
+                note_combined = " / ".join(filter(None, [note.strip(), etc.strip()]))
                 if insert_schedule({
                     '날짜': selected_date, '반': ban,
                     '카테고리': cat,
                     'pn': pn.strip(), '모델명': model.strip(),
                     '조립수': int(qty), '출하계획': ship.strip(),
-                    '특이사항': note.strip(), '작성자': st.session_state.user_id
+                    '특이사항': note_combined, '작성자': st.session_state.user_id
                 }):
                     st.session_state.schedule_db = load_schedule()
                     st.session_state.cal_action  = None
@@ -705,22 +716,26 @@ def dialog_edit_schedule(sch_id: int):
         if st.button("닫기"): st.rerun()
         return
 
-    cat_list = list(SCHEDULE_COLORS.keys())
-    cur_cat  = r.get('카테고리','기타')
-    cat_idx  = cat_list.index(cur_cat) if cur_cat in cat_list else 0
+    cur_cat = r.get('카테고리', '조립계획')
+    # 기존 데이터가 특이사항/기타 카테고리였으면 조립계획으로 fallback
+    cat_idx = PLAN_CATEGORIES.index(cur_cat) if cur_cat in PLAN_CATEGORIES else 0
 
     with st.form("edit_sch_form"):
-        cat   = st.selectbox("카테고리", cat_list, index=cat_idx)
-        pn    = st.text_input("P/N",      value=str(r.get('pn','')))
-        model = st.text_input("모델명",   value=str(r.get('모델명','')))
-        qty   = st.number_input("조립수", min_value=0, step=1, value=int(r.get('조립수', 0) or 0))
-        ship  = st.text_input("출하계획", value=str(r.get('출하계획','')))
+        cat   = st.selectbox("계획 유형 *", PLAN_CATEGORIES, index=cat_idx)
+        fe1, fe2 = st.columns(2)
+        model = fe1.text_input("모델명",   value=str(r.get('모델명','')))
+        pn    = fe2.text_input("P/N",      value=str(r.get('pn','')))
+        ff1, ff2 = st.columns(2)
+        qty   = ff1.number_input("조립수", min_value=0, step=1, value=int(r.get('조립수', 0) or 0))
+        ship  = ff2.text_input("출하계획", value=str(r.get('출하계획','')))
         note  = st.text_input("특이사항", value=str(r.get('특이사항','')))
+        etc   = st.text_input("기타")
         c1, c2 = st.columns(2)
         if c1.form_submit_button("💾 저장", use_container_width=True, type="primary"):
+            note_combined = " / ".join(filter(None, [note.strip(), etc.strip()]))
             update_schedule(sch_id, {
                 '카테고리': cat, 'pn': pn.strip(), '모델명': model.strip(),
-                '조립수': int(qty), '출하계획': ship.strip(), '특이사항': note.strip()
+                '조립수': int(qty), '출하계획': ship.strip(), '특이사항': note_combined
             })
             st.session_state.schedule_db = load_schedule()
             st.session_state.cal_action  = None
@@ -977,8 +992,6 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
 
                 today_mark = " 🟢" if is_today else ""
                 btn_label  = f"{day}{today_mark}"
-                if can_edit and event_count == 0:
-                    btn_label += "  ＋"
 
                 # ── 날짜 버튼 (div로 감싸서 CSS 클래스 적용)
                 day_cls = "cal-today-btn" if is_today else "cal-day-btn"
@@ -1683,7 +1696,7 @@ elif curr_l == "마스터 관리":
                                     _cell.font      = _bf()
 
                             # 카테고리 드롭다운
-                            _dv = _DV(type="list", formula1='"조립계획,포장계획,출하계획,특이사항,기타"',
+                            _dv = _DV(type="list", formula1='"조립계획,포장계획,출하계획"',
                                       showDropDown=False, showErrorMessage=True,
                                       errorTitle="입력 오류", error="목록에서 선택하세요.")
                             _dv.sqref = "B5:B204"
@@ -1960,10 +1973,10 @@ elif curr_l == "마스터 관리":
                 sch_ban  = sb1.selectbox("반 *", PRODUCTION_GROUPS)
                 sc1, sc2, sc3 = st.columns(3)
                 sch_date  = sc1.date_input("날짜")
-                sch_cat   = sc2.selectbox("카테고리", list(SCHEDULE_COLORS.keys()))
-                sch_pn    = sc3.text_input("P/N (품목코드)")
+                sch_cat   = sc2.selectbox("계획 유형 *", PLAN_CATEGORIES)
+                sch_model = sc3.text_input("모델명")
                 sc4, sc5, sc6 = st.columns(3)
-                sch_model = sc4.text_input("모델명")
+                sch_pn    = sc4.text_input("P/N (품목코드)")
                 sch_qty   = sc5.number_input("조립수", min_value=0, step=1)
                 sch_ship  = sc6.text_input("출하계획")
                 sch_note  = st.text_input("특이사항")
