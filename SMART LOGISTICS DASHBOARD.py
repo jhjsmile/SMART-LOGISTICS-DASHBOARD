@@ -386,10 +386,10 @@ def load_schedule() -> pd.DataFrame:
         res = sb.table("production_schedule").select("*").order("날짜", desc=False).execute()
         if res.data:
             return pd.DataFrame(res.data).fillna("")
-        return pd.DataFrame(columns=['id','날짜','카테고리','pn','모델명','조립수','출하계획','특이사항','작성자'])
+        return pd.DataFrame(columns=['id','날짜','반','카테고리','pn','모델명','조립수','출하계획','특이사항','작성자'])
     except Exception as e:
         st.warning(f"일정 로드 실패: {e}")
-        return pd.DataFrame(columns=['id','날짜','카테고리','pn','모델명','조립수','출하계획','특이사항','작성자'])
+        return pd.DataFrame(columns=['id','날짜','반','카테고리','pn','모델명','조립수','출하계획','특이사항','작성자'])
 
 def insert_schedule(row: dict) -> bool:
     try:
@@ -491,6 +491,7 @@ def dialog_add_schedule(selected_date: str):
 
     st.markdown(f"**날짜: {selected_date}**")
     with st.form("add_sch_form"):
+        ban   = st.selectbox("반", ["전체(공통)"] + PRODUCTION_GROUPS)
         cat   = st.selectbox("카테고리", list(SCHEDULE_COLORS.keys()))
         pn    = st.text_input("P/N (품목코드)")
         model = st.text_input("모델명")
@@ -500,7 +501,8 @@ def dialog_add_schedule(selected_date: str):
         if st.form_submit_button("✅ 등록", use_container_width=True, type="primary"):
             if model.strip() or note.strip():
                 if insert_schedule({
-                    '날짜': selected_date, '카테고리': cat,
+                    '날짜': selected_date, '반': ban,
+                    '카테고리': cat,
                     'pn': pn.strip(), '모델명': model.strip(),
                     '조립수': int(qty), '출하계획': ship.strip(),
                     '특이사항': note.strip(), '작성자': st.session_state.user_id
@@ -780,6 +782,7 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                         cell_html += (
                             f"<div class='cal-event' style='background:{color}22; border-left:3px solid {color};'>"
                             f"<span style='color:{color}; font-weight:bold;'>[{cat}]</span> "
+                            f"<span style='color:#8a7f72; font-size:0.58rem;'>{ban_tag} </span>"
                             f"<span style='color:#3d3830;'>{label}</span>"
                             f"{f' <span style=\"color:#8a7f72;\">({qty}대)</span>' if qty else ''}"
                             f"</div>"
@@ -1252,10 +1255,226 @@ elif curr_l == "마스터 관리":
                         st.error("비밀번호가 올바르지 않습니다.")
     else:
         st.markdown("<div class='section-title'>📅 생산 일정 관리</div>", unsafe_allow_html=True)
-        sch_tab1, sch_tab2 = st.tabs(["➕ 직접 입력", "📋 등록된 일정 관리"])
+        sch_tab1, sch_tab2, sch_tab3 = st.tabs(["➕ 직접 입력", "📂 엑셀 일괄 업로드", "📋 등록된 일정 관리"])
+
+        with sch_tab2:
+            st.markdown("<p style='color:#2a2420;'>생산계획 엑셀 파일을 업로드하면 일정에 자동 등록됩니다.</p>", unsafe_allow_html=True)
+
+            # 양식 다운로드
+            dl1, dl2 = st.columns([1, 2])
+            with dl1:
+                try:
+                    import os as _os
+                    template_path = "/home/claude/PMS_생산일정_업로드양식.xlsx"
+                    if _os.path.exists(template_path):
+                        with open(template_path, "rb") as tf:
+                            st.download_button(
+                                "📥 업로드 양식 다운로드",
+                                tf.read(),
+                                "PMS_생산일정_업로드양식.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+                except: pass
+            with dl2:
+                st.markdown("""<p style='color:#5a96c8; font-size:0.88rem; margin:8px 0;'>
+                ✅ <b>PMS 전용 양식</b>: 반·날짜·카테고리·모델명 등 직접 입력, 드롭다운 선택 지원<br>
+                ✅ <b>기존 MNT 생산현황 양식</b>도 그대로 업로드 가능 (생산계획 시트 자동 인식)
+                </p>""", unsafe_allow_html=True)
+
+            # 지원 형식 안내
+            with st.expander("📌 지원 엑셀 형식 안내"):
+                st.markdown("""
+<p style='color:#2a2420;'>
+<b>① PMS 전용 업로드 양식</b> (위 버튼으로 다운로드)<br>
+&nbsp;&nbsp;• 시트명: <b>생산계획_업로드</b><br>
+&nbsp;&nbsp;• 컬럼 순서: 반 / 날짜 / 카테고리 / P/N / 모델명 / 조립수 / 출하계획 / 특이사항<br>
+&nbsp;&nbsp;• 날짜 형식: YYYY-MM-DD / 드롭다운으로 반·카테고리 선택 가능<br><br>
+<b>② 기존 MNT 생산현황 양식</b><br>
+&nbsp;&nbsp;• 시트명: <b>생산계획</b><br>
+&nbsp;&nbsp;• 3행 날짜 / 5~24행 조립계획 / 26~43행 포장계획 블록 자동 파싱
+</p>
+""", unsafe_allow_html=True)
+
+            uploaded_file = st.file_uploader("📎 엑셀 파일 선택 (.xlsx)", type=["xlsx"], key="sch_upload")
+
+            if uploaded_file:
+                try:
+                    import openpyxl, io as _io
+                    from datetime import datetime as _dt
+
+                    raw = uploaded_file.read()
+                    wb  = openpyxl.load_workbook(_io.BytesIO(raw), data_only=True)
+                    sheet_names = wb.sheetnames
+
+                    # ── 양식 자동 감지 ──
+                    if "생산계획_업로드" in sheet_names:
+                        detected_mode = "PMS 전용 양식"
+                    elif "생산계획" in sheet_names:
+                        detected_mode = "MNT 생산현황 양식"
+                    else:
+                        detected_mode = "직접 선택"
+
+                    st.info(f"🔍 감지된 양식: **{detected_mode}**")
+
+                    sel_sheet = st.selectbox("📄 시트 선택", sheet_names,
+                        index=sheet_names.index("생산계획_업로드") if "생산계획_업로드" in sheet_names
+                              else (sheet_names.index("생산계획") if "생산계획" in sheet_names else 0),
+                        key="sch_sheet_sel")
+                    ws = wb[sel_sheet]
+
+                    parsed = []
+
+                    # ── PMS 전용 양식 파싱 ──
+                    if sel_sheet == "생산계획_업로드":
+                        import re as _re
+                        for row in ws.iter_rows(min_row=5, values_only=True):
+                            ban, date_val, cat, pn, model, qty, ship, note = (list(row) + [None]*8)[:8]
+                            # 예시행 스킵
+                            if ban == "제조2반" and str(model or "").startswith("S6133 GRIFFIN") and str(date_val) == "2026-03-05":
+                                continue
+                            if not ban and not model and not date_val: continue
+                            if not model and not note: continue
+                            # 날짜 처리
+                            if isinstance(date_val, _dt):
+                                date_str = date_val.strftime('%Y-%m-%d')
+                            elif isinstance(date_val, str) and len(date_val) == 10:
+                                date_str = date_val
+                            else:
+                                continue
+                            qty_int = 0
+                            if isinstance(qty, (int, float)) and qty > 0:
+                                qty_int = int(qty)
+                            elif isinstance(qty, str):
+                                nums = _re.findall(r'\d+', qty)
+                                qty_int = int(nums[0]) if nums else 0
+                            if qty_int <= 0: continue
+                            parsed.append({
+                                '날짜':     date_str,
+                                '반':       str(ban or "전체(공통)").strip(),
+                                '카테고리': str(cat or "기타").strip(),
+                                'pn':       str(pn  or "").strip(),
+                                '모델명':   str(model or "").strip(),
+                                '조립수':   qty_int,
+                                '출하계획': str(ship or "").strip(),
+                                '특이사항': str(note or "").strip(),
+                                '작성자':   st.session_state.user_id,
+                            })
+
+                    # ── MNT 생산현황 양식 파싱 ──
+                    else:
+                        date_cols = {}
+                        for col_idx, cell in enumerate(ws[3], 1):
+                            if isinstance(cell.value, _dt):
+                                date_cols[col_idx] = cell.value.strftime('%Y-%m-%d')
+
+                        sections = [
+                            {"카테고리": "조립계획", "블록들": [
+                                {"pn":5,  "모델":6,  "수량":7,  "출하":8},
+                                {"pn":10, "모델":11, "수량":12, "출하":13},
+                                {"pn":15, "모델":16, "수량":17, "출하":18},
+                                {"pn":20, "모델":21, "수량":22, "출하":23},
+                            ]},
+                            {"카테고리": "포장계획", "블록들": [
+                                {"pn":26, "모델":27, "수량":28, "출하":28},
+                                {"pn":31, "모델":32, "수량":33, "출하":33},
+                                {"pn":36, "모델":37, "수량":38, "출하":38},
+                                {"pn":41, "모델":42, "수량":43, "출하":43},
+                            ]},
+                        ]
+                        for sec in sections:
+                            cat = sec["카테고리"]
+                            for blk in sec["블록들"]:
+                                for col_idx, date_str in date_cols.items():
+                                    pn    = ws.cell(blk["pn"],   col_idx).value
+                                    model = ws.cell(blk["모델"], col_idx).value
+                                    qty   = ws.cell(blk["수량"], col_idx).value
+                                    ship  = ws.cell(blk["출하"], col_idx).value
+                                    if not pn and not model: continue
+                                    if not qty: continue
+                                    qty_int = 0
+                                    if isinstance(qty, (int, float)) and qty > 0:
+                                        qty_int = int(qty)
+                                    elif isinstance(qty, str) and any(c.isdigit() for c in qty):
+                                        import re as _re2
+                                        nums = _re2.findall(r'\d+', qty)
+                                        qty_int = int(nums[0]) if nums else 0
+                                    if qty_int <= 0: continue
+                                    parsed.append({
+                                        '날짜':     date_str,
+                                        '반':       "",
+                                        '카테고리': cat,
+                                        'pn':       str(pn or "").strip(),
+                                        '모델명':   str(model or "").strip(),
+                                        '조립수':   qty_int,
+                                        '출하계획': str(ship or "").strip() if cat == "조립계획" else "",
+                                        '특이사항': "",
+                                        '작성자':   st.session_state.user_id,
+                                    })
+
+                    if parsed:
+                        # 미리보기
+                        import pandas as _pd
+                        preview_df = _pd.DataFrame(parsed)[['날짜','카테고리','pn','모델명','조립수','출하계획']]
+                        st.markdown(f"<p style='color:#2a2420;'>✅ <b>{len(parsed)}건</b> 파싱 완료 — 미리보기:</p>", unsafe_allow_html=True)
+                        st.dataframe(preview_df, use_container_width=True, hide_index=True, height=300)
+
+                        # 날짜 범위 필터
+                        all_dates = sorted(set(r['날짜'] for r in parsed))
+                        fc1, fc2 = st.columns(2)
+                        date_from = fc1.selectbox("등록 시작일", all_dates, key="bulk_from")
+                        date_to   = fc2.selectbox("등록 종료일", all_dates,
+                            index=len(all_dates)-1, key="bulk_to")
+
+                        filtered = [r for r in parsed if date_from <= r['날짜'] <= date_to]
+                        st.markdown(f"<p style='color:#5a96c8; font-weight:bold;'>→ 선택 범위 {date_from} ~ {date_to} : {len(filtered)}건</p>", unsafe_allow_html=True)
+
+                        # 반 선택
+                        upload_ban = st.selectbox(
+                            "📍 해당 엑셀의 반 선택",
+                            PRODUCTION_GROUPS,
+                            key="bulk_ban_sel",
+                            help="이 엑셀 파일이 어느 반의 생산계획인지 선택하세요"
+                        )
+
+                        # 중복 처리 옵션
+                        dup_mode = st.radio("기존 일정 처리",
+                            ["건너뜀 (중복 날짜+모델 제외)", "모두 등록 (중복 허용)"],
+                            horizontal=True, key="bulk_dup_mode")
+
+                        col_reg, col_void = st.columns([2,1])
+                        if col_reg.button(f"📥 {len(filtered)}건 일정 등록", type="primary", use_container_width=True, key="bulk_register"):
+                            existing = st.session_state.schedule_db
+                            success_cnt = skip_cnt = 0
+                            for row in filtered:
+                                # 중복 체크
+                                if "건너뜀" in dup_mode and not existing.empty:
+                                    dup = existing[
+                                        (existing['날짜'] == row['날짜']) &
+                                        (existing['모델명'] == row['모델명']) &
+                                        (existing['카테고리'] == row['카테고리'])
+                                    ]
+                                    if not dup.empty:
+                                        skip_cnt += 1
+                                        continue
+                                row['반'] = upload_ban
+                                if insert_schedule(row):
+                                    success_cnt += 1
+                                else:
+                                    skip_cnt += 1
+                            st.session_state.schedule_db = load_schedule()
+                            st.success(f"✅ 등록 완료: {success_cnt}건  |  건너뜀: {skip_cnt}건")
+                            st.rerun()
+                    else:
+                        st.warning("파싱된 일정이 없습니다. 파일 형식을 확인해주세요.")
+
+                except Exception as e:
+                    st.error(f"파일 파싱 오류: {e}")
 
         with sch_tab1:
             with st.form("schedule_form"):
+                sb1, sb2 = st.columns(2)
+                sch_ban  = sb1.selectbox("반", ["전체(공통)"] + PRODUCTION_GROUPS)
                 sc1, sc2, sc3 = st.columns(3)
                 sch_date  = sc1.date_input("날짜")
                 sch_cat   = sc2.selectbox("카테고리", list(SCHEDULE_COLORS.keys()))
@@ -1268,7 +1487,8 @@ elif curr_l == "마스터 관리":
                 if st.form_submit_button("📅 일정 등록", use_container_width=True, type="primary"):
                     if sch_model.strip() or sch_note.strip():
                         if insert_schedule({
-                            '날짜': str(sch_date), '카테고리': sch_cat,
+                            '날짜': str(sch_date), '반': sch_ban,
+                            '카테고리': sch_cat,
                             'pn': sch_pn.strip(), '모델명': sch_model.strip(),
                             '조립수': int(sch_qty), '출하계획': sch_ship.strip(),
                             '특이사항': sch_note.strip(), '작성자': st.session_state.user_id
@@ -1284,14 +1504,15 @@ elif curr_l == "마스터 관리":
                 for _, row in sch_list.sort_values('날짜').iterrows():
                     cat   = row.get('카테고리','기타')
                     color = SCHEDULE_COLORS.get(cat, "#888")
-                    r1,r2,r3,r4,r5,r6,r7 = st.columns([1.2,1.2,1.5,2,0.8,2,0.6])
+                    r1,r2,r3,r4,r5,r6,r7,r8 = st.columns([1.0,0.8,1.2,1.5,2,0.8,2,0.6])
                     r1.markdown(f"<span style='background:{color}22; border-left:3px solid {color}; padding:3px 6px; border-radius:4px; font-size:0.8rem;'>{cat}</span>", unsafe_allow_html=True)
-                    r2.write(row.get('날짜',''))
-                    r3.write(row.get('pn',''))
-                    r4.write(row.get('모델명',''))
-                    r5.write(f"{row.get('조립수',0)}대")
-                    r6.write(row.get('특이사항',''))
-                    if r7.button("🗑️", key=f"del_sch_{row['id']}"):
+                    r2.write(row.get('반',''))
+                    r3.write(row.get('날짜',''))
+                    r4.write(row.get('pn',''))
+                    r5.write(row.get('모델명',''))
+                    r6.write(f"{row.get('조립수',0)}대")
+                    r7.write(row.get('특이사항',''))
+                    if r8.button("🗑️", key=f"del_sch_{row['id']}"):
                         delete_schedule(int(row['id']))
                         st.session_state.schedule_db = load_schedule(); st.rerun()
             else:
