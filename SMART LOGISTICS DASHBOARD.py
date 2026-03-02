@@ -72,10 +72,14 @@ st.markdown("""
         border-right: 1px solid #e0d8c8 !important;
     }
     [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] span,
-    [data-testid="stSidebar"] div,
-    [data-testid="stSidebar"] label {
+    [data-testid="stSidebar"] span:not(.stButton span),
+    [data-testid="stSidebar"] .stMarkdown,
+    [data-testid="stSidebar"] .stCaption {
         color: #3d3530 !important;
+    }
+    /* 사이드바 secondary 버튼 텍스트는 기본 색상 유지 */
+    [data-testid="stSidebar"] .stButton button {
+        color: inherit;
     }
 
     /* 메인 컨테이너 */
@@ -134,14 +138,19 @@ st.markdown("""
     /* 타이틀 / 섹션 헤더 */
     .centered-title {
         text-align: center; font-weight: bold;
-        margin: 20px 0; color: #3d3530;
+        margin: 20px 0; color: #2a2420 !important;
     }
     .section-title {
-        background-color: #f5f0e8; color: #3d3530;
+        background-color: #f5f0e8; color: #2a2420;
         padding: 14px 20px; border-radius: 10px;
         font-weight: bold; margin: 8px 0 20px 0;
         border-left: 10px solid #7eb8e8;
         box-shadow: 0 2px 6px rgba(180,160,120,0.15);
+    }
+
+    /* 본문 텍스트 기본 색상 */
+    .stApp p, .stApp label, .stApp .stMarkdown p {
+        color: #2a2420;
     }
 
     /* 통계 박스 */
