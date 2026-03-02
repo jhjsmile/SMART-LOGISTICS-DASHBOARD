@@ -105,36 +105,37 @@ st.markdown("""
         box-shadow: 0 0 0 2px rgba(126,184,232,0.25) !important;
     }
 
-    /* 버튼 공통 */
-    .stButton button {
-        display: flex; justify-content: center; align-items: center;
-        margin-top: 1px; padding: 6px 10px; width: 100%;
-        border-radius: 8px; font-weight: 600;
-        white-space: nowrap !important; overflow: hidden;
-        text-overflow: ellipsis; transition: all 0.2s ease;
+    /* ── 버튼 전체 공통 ── */
+    .stButton > button,
+    div[data-testid="stFormSubmitButton"] > button,
+    button[kind="primary"],
+    button[kind="secondary"] {
+        display: flex !important; justify-content: center !important; align-items: center !important;
+        margin-top: 1px !important; padding: 6px 10px !important; width: 100% !important;
+        border-radius: 8px !important; font-weight: 600 !important;
+        white-space: nowrap !important; overflow: hidden !important;
+        text-overflow: ellipsis !important; transition: all 0.2s ease !important;
     }
-    /* Secondary 버튼 (기본) → 아이보리 배경 + 브라운 테두리 */
-    .stButton button[kind="secondary"],
-    .stButton button[data-testid="baseButton-secondary"] {
+    /* Secondary (기본) → 아이보리 배경 */
+    .stButton > button:not([kind="primary"]),
+    div[data-testid="stFormSubmitButton"] > button:not([kind="primary"]) {
         background-color: #fffdf7 !important;
         border: 1px solid #c8b89a !important;
         color: #3d3530 !important;
     }
-    .stButton button[kind="secondary"]:hover,
-    .stButton button[data-testid="baseButton-secondary"]:hover {
-        background-color: #f5f0e8 !important;
+    .stButton > button:not([kind="primary"]):hover {
+        background-color: #f0ebe0 !important;
         border-color: #7eb8e8 !important;
         color: #2a2420 !important;
     }
-    /* Primary 버튼 → 파스텔 블루 */
-    .stButton button[kind="primary"],
-    .stButton button[data-testid="baseButton-primary"] {
+    /* Primary → 파스텔 블루 */
+    .stButton > button[kind="primary"],
+    div[data-testid="stFormSubmitButton"] > button[kind="primary"] {
         background-color: #7eb8e8 !important;
         border: 1px solid #6aaad8 !important;
         color: #fff !important;
     }
-    .stButton button[kind="primary"]:hover,
-    .stButton button[data-testid="baseButton-primary"]:hover {
+    .stButton > button[kind="primary"]:hover {
         background-color: #6aaad8 !important;
     }
 
@@ -1120,16 +1121,45 @@ elif curr_l == "생산 현황 리포트":
 # ── 불량 공정 ────────────────────────────────────────────────────
 elif curr_l == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 분석 및 수리 조치</h2>", unsafe_allow_html=True)
-    db   = st.session_state.production_db
-    wait = db[(db['반']==curr_g)&(db['상태']=="불량 처리 중")]
+    db = st.session_state.production_db
 
-    k1, k2 = st.columns(2)
-    k1.markdown(f"<div class='stat-box'><div class='stat-label'>🛠️ {curr_g} 분석 대기</div><div class='stat-value'>{len(wait)}</div></div>", unsafe_allow_html=True)
-    k2.markdown(f"<div class='stat-box'><div class='stat-label'>✅ {curr_g} 조치 완료</div><div class='stat-value'>{len(db[(db['반']==curr_g)&(db['상태']=='수리 완료(재투입)')])}</div></div>", unsafe_allow_html=True)
-
-    if wait.empty:
-        st.success("현재 처리 대기 중인 불량 이슈가 없습니다.")
+    # 반 선택
+    sel_group = st.radio("조회 반 선택", ["전체"] + PRODUCTION_GROUPS, horizontal=True,
+                         key="defect_group_radio")
+    if sel_group == "전체":
+        target_groups = PRODUCTION_GROUPS
     else:
+        target_groups = [sel_group]
+
+    # 요약 카드 (선택된 반별)
+    card_cols = st.columns(len(target_groups))
+    for ci, g in enumerate(target_groups):
+        w = len(db[(db['반']==g)&(db['상태']=="불량 처리 중")])
+        d = len(db[(db['반']==g)&(db['상태']=='수리 완료(재투입)')])
+        with card_cols[ci]:
+            st.markdown(
+                f"<div style='background:#fffdf8; border:1px solid #e0d8c8; border-radius:12px; padding:14px; margin-bottom:8px;'>"
+                f"<div style='font-weight:bold; color:#3d3530; margin-bottom:10px; font-size:1rem;'>📍 {g}</div>"
+                f"<div style='display:flex; gap:8px;'>"
+                f"<div style='flex:1; background:#fde8e7; border-radius:8px; padding:10px 4px; text-align:center;'>"
+                f"<div style='font-size:0.72rem; color:#7a2e2a; font-weight:bold;'>🛠️ 분석 대기</div>"
+                f"<div style='font-size:1.8rem; color:#c8605a; font-weight:bold;'>{w}</div></div>"
+                f"<div style='flex:1; background:#d4f0e2; border-radius:8px; padding:10px 4px; text-align:center;'>"
+                f"<div style='font-size:0.72rem; color:#1f6640; font-weight:bold;'>✅ 조치 완료</div>"
+                f"<div style='font-size:1.8rem; color:#4da875; font-weight:bold;'>{d}</div></div>"
+                f"</div></div>",
+                unsafe_allow_html=True
+            )
+
+    st.divider()
+
+    # 처리 대기 목록 (선택 반)
+    has_any = False
+    for g in target_groups:
+        wait = db[(db['반']==g)&(db['상태']=="불량 처리 중")]
+        if wait.empty: continue
+        has_any = True
+        st.markdown(f"#### 📍 {g} 불량 처리 대기")
         for idx, row in wait.iterrows():
             with st.container(border=True):
                 st.markdown(f"모델: `{row['모델']}` &nbsp;|&nbsp; 코드: `{row['품목코드']}` &nbsp;|&nbsp; S/N: `{row['시리얼']}`")
@@ -1149,6 +1179,8 @@ elif curr_l == "불량 공정":
                         st.session_state.production_db = load_realtime_ledger(); st.rerun()
                     else:
                         st.warning("불량 원인과 수리 조치 내용을 모두 입력해주세요.")
+    if not has_any:
+        st.success("현재 처리 대기 중인 불량 이슈가 없습니다.")
 
 # ── 수리 현황 리포트 ─────────────────────────────────────────────
 elif curr_l == "수리 현황 리포트":
