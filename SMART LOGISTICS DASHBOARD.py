@@ -306,41 +306,33 @@ st.markdown("""
         margin-bottom: 3px; font-size: 0.63rem; line-height: 1.3;
     }
 
-    /* ── 캘린더 날짜 버튼 (숫자처럼 보이게) ── */
-    [data-testid="stHorizontalBlock"] .stButton > button,
-    .cal-date-btn button {
+    /* ── 캘린더 날짜 버튼: 날짜 숫자처럼 보이는 깔끔한 버튼 ── */
+    .cal-day-btn > div > button,
+    .cal-day-btn button {
         background-color: transparent !important;
+        background: transparent !important;
         border: none !important;
-        border-radius: 6px !important;
+        box-shadow: none !important;
         color: #3d3530 !important;
         font-weight: bold !important;
-        font-size: 0.95rem !important;
-        padding: 4px 2px !important;
-        min-height: 32px !important;
-        box-shadow: none !important;
-    }
-    [data-testid="stHorizontalBlock"] .stButton > button:hover {
-        background-color: #e8f0f8 !important;
-        color: #2471a3 !important;
-        border: 1px solid #7eb8e8 !important;
-    }
-
-    /* ── 캘린더 투명 클릭 버튼 (날짜 숫자 아래 숨김) ── */
-    button[title="·"],
-    button[aria-label*="일 클릭"],
-    .cal-invisible-btn > div > button,
-    .cal-invisible-btn button {
-        background: transparent !important;
-        background-color: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        color: transparent !important;
-        min-height: 6px !important;
-        height: 6px !important;
-        padding: 0 !important;
+        font-size: 1.0rem !important;
+        min-height: 28px !important;
+        height: 28px !important;
+        padding: 0 4px !important;
         margin: 0 !important;
-        opacity: 0 !important;
+        width: 100% !important;
         cursor: pointer !important;
+        border-radius: 6px !important;
+        transition: background 0.15s !important;
+    }
+    .cal-day-btn > div > button:hover,
+    .cal-day-btn button:hover {
+        background-color: #e4f0f8 !important;
+        color: #2471a3 !important;
+    }
+    .cal-today-btn > div > button,
+    .cal-today-btn button {
+        color: #1e8449 !important;
     }
 
     /* ── Expander (펼치기) ── */
@@ -489,6 +481,24 @@ def upsert_model_master(반: str, 모델명: str, 품목코드: str) -> bool:
             {"반": 반, "모델명": 모델명, "품목코드": 품목코드},
             on_conflict="반,모델명,품목코드"
         ).execute()
+        return True
+    except:
+        return False
+
+def delete_model_from_master(반: str, 모델명: str) -> bool:
+    """반+모델명 전체 삭제 (해당 모델의 모든 품목 포함)"""
+    try:
+        get_supabase().table("model_master").delete()\
+            .eq("반", 반).eq("모델명", 모델명).execute()
+        return True
+    except:
+        return False
+
+def delete_item_from_master(반: str, 모델명: str, 품목코드: str) -> bool:
+    """특정 품목코드만 삭제"""
+    try:
+        get_supabase().table("model_master").delete()\
+            .eq("반", 반).eq("모델명", 모델명).eq("품목코드", 품목코드).execute()
         return True
     except:
         return False
@@ -957,44 +967,27 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                         )
                         event_count += 1
 
-                today_mark  = " 🟢" if is_today else ""
-                add_hint    = "  ＋" if can_edit and event_count == 0 else ""
-                day_btn_lbl = f"{day}{today_mark}{add_hint}"
-                # 날짜 버튼 전용 div로 감싸서 CSS 격리
-                day_color   = "#c8605a" if is_today else "#3d3830"
-                day_bg      = "#d8ede2" if is_today else "#fffdf8"
-                day_border  = "2px solid #7ec8a0" if is_today else "1px solid #e0d8c8"
-                st.markdown(
-                    f"<div class='cal-day-wrap' style='background:{day_bg}; border:{day_border}; "
-                    f"border-radius:8px; padding:4px 2px 2px 2px; margin-bottom:2px;'>"
-                    f"<div style='text-align:center; font-size:1.1rem; font-weight:bold; "
-                    f"color:{day_color}; line-height:1.2;'>{day}{today_mark}</div>"
-                    + (f"<div style='text-align:center; color:#7eb8e8; font-size:0.7rem; font-weight:bold;'>＋</div>" if can_edit and event_count == 0 else "")
-                    + ("".join(event_htmls) if event_htmls else "")
-                    + "</div>",
-                    unsafe_allow_html=True
-                )
-                # 보이지 않는 투명 클릭 버튼 (날짜 div 위에 겹치지 않고 아래에)
-                with st.container():
-                    btn_css = (
-                        f"<style>"
-                        f"button[kind='secondary'][data-testid='baseButton-secondary'] {{}}"
-                        f"div:has(> div > button[aria-label='{day}일 클릭 — 일정 보기/추가']) button,"
-                        f"div:has(> button[aria-label='{day}일 클릭 — 일정 보기/추가']) button {{"
-                        f"background:transparent !important; background-color:transparent !important;"
-                        f"border:none !important; box-shadow:none !important;"
-                        f"color:transparent !important; font-size:0.01rem !important;"
-                        f"height:4px !important; min-height:4px !important;"
-                        f"padding:0 !important; margin:0 !important;"
-                        f"cursor:pointer !important; width:100% !important; opacity:0 !important;"
-                        f"}}</style>"
+                today_mark = " 🟢" if is_today else ""
+                btn_label  = f"{day}{today_mark}"
+                if can_edit and event_count == 0:
+                    btn_label += "  ＋"
+
+                # ── 날짜 버튼 (div로 감싸서 CSS 클래스 적용)
+                day_cls = "cal-today-btn" if is_today else "cal-day-btn"
+                st.markdown(f"<div class='{day_cls}'>", unsafe_allow_html=True)
+                if st.button(btn_label, key=f"{key_prefix}_{day_str}", use_container_width=True):
+                    st.session_state.cal_action      = "view_day"
+                    st.session_state.cal_action_data = day_str
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                # ── 이벤트 블록 (버튼 바로 아래)
+                if event_htmls:
+                    st.markdown(
+                        "<div style='margin-top:0px;'>" + "".join(event_htmls) + "</div>",
+                        unsafe_allow_html=True
                     )
-                    st.markdown(btn_css, unsafe_allow_html=True)
-                    if st.button("·", key=f"{key_prefix}_{day_str}",
-                                 use_container_width=True, help=f"{day}일 클릭 — 일정 보기/추가"):
-                        st.session_state.cal_action      = "view_day"
-                        st.session_state.cal_action_data = day_str
-                        st.rerun()
+
 
 # ── 범례 공통
 def _render_legend():
@@ -2041,13 +2034,14 @@ elif curr_l == "마스터 관리":
         tabs = st.tabs([f"{g} 설정" for g in PRODUCTION_GROUPS])
         for i, g_name in enumerate(PRODUCTION_GROUPS):
             with tabs[i]:
+                # ── 등록 ─────────────────────────────
                 c1, c2 = st.columns(2)
                 with c1:
                     with st.container(border=True):
-                        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin-bottom:6px;'>신규 모델 대량 등록</h4>", unsafe_allow_html=True)
+                        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin-bottom:6px;'>신규 모델 등록</h4>", unsafe_allow_html=True)
                         st.caption("여러 모델은 줄바꿈으로 구분")
-                        nm_bulk = st.text_area(f"{g_name} 모델명", key=f"nm_{g_name}", height=150, placeholder="EPS7150\nEPS7133\nT20i")
-                        if st.button(f"{g_name} 모델 저장", key=f"nb_{g_name}"):
+                        nm_bulk = st.text_area(f"{g_name} 모델명", key=f"nm_{g_name}", height=120, placeholder="EPS7150\nEPS7133\nT20i")
+                        if st.button(f"{g_name} 모델 저장", key=f"nb_{g_name}", use_container_width=True):
                             if nm_bulk.strip():
                                 added, skipped = [], []
                                 for nm in [x.strip() for x in nm_bulk.strip().splitlines() if x.strip()]:
@@ -2063,13 +2057,13 @@ elif curr_l == "마스터 관리":
                             else: st.warning("모델명을 입력해주세요.")
                 with c2:
                     with st.container(border=True):
-                        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin-bottom:6px;'>세부 품목 대량 등록</h4>", unsafe_allow_html=True)
+                        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin-bottom:6px;'>세부 품목 등록</h4>", unsafe_allow_html=True)
                         g_mods = st.session_state.group_master_models.get(g_name, [])
                         if g_mods:
                             sm = st.selectbox(f"{g_name} 모델 선택", g_mods, key=f"sm_{g_name}")
                             st.caption("여러 품목은 줄바꿈으로 구분")
-                            ni_bulk = st.text_area(f"[{sm}] 품목코드", key=f"ni_{g_name}", height=150, placeholder="7150-A\n7150-B")
-                            if st.button(f"{g_name} 품목 저장", key=f"ib_{g_name}"):
+                            ni_bulk = st.text_area(f"[{sm}] 품목코드", key=f"ni_{g_name}", height=120, placeholder="7150-A\n7150-B")
+                            if st.button(f"{g_name} 품목 저장", key=f"ib_{g_name}", use_container_width=True):
                                 if ni_bulk.strip():
                                     current = st.session_state.group_master_items[g_name].get(sm, [])
                                     added, skipped = [], []
@@ -2085,6 +2079,74 @@ elif curr_l == "마스터 관리":
                                 else: st.warning("품목코드를 입력해주세요.")
                         else:
                             st.warning("모델을 먼저 등록하세요.")
+
+                # ── 삭제 ─────────────────────────────
+                st.divider()
+                st.markdown("<h4 style='color:#c8605a; font-weight:bold; margin-bottom:6px;'>🗑️ 모델 / 품목 삭제</h4>", unsafe_allow_html=True)
+                del_c1, del_c2 = st.columns(2)
+
+                with del_c1:
+                    with st.container(border=True):
+                        st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:4px;'>모델 삭제</p>", unsafe_allow_html=True)
+                        st.caption("삭제 시 해당 모델의 모든 품목코드도 함께 삭제됩니다")
+                        g_mods_del = st.session_state.group_master_models.get(g_name, [])
+                        if g_mods_del:
+                            del_model = st.selectbox("삭제할 모델", g_mods_del, key=f"del_m_{g_name}")
+                            del_m_ck  = f"del_model_ck_{g_name}_{del_model}"
+                            if not st.session_state.get(del_m_ck, False):
+                                if st.button(f"🗑️ [{del_model}] 삭제", key=f"del_mb_{g_name}", use_container_width=True):
+                                    st.session_state[del_m_ck] = True
+                                    st.rerun()
+                            else:
+                                st.warning(f"⚠️ [{del_model}] 모델과 품목 전체를 삭제하시겠습니까?")
+                                dm1, dm2 = st.columns(2)
+                                if dm1.button("✅ 삭제", key=f"del_m_yes_{g_name}", type="primary", use_container_width=True):
+                                    # session_state 제거
+                                    if del_model in st.session_state.group_master_models.get(g_name, []):
+                                        st.session_state.group_master_models[g_name].remove(del_model)
+                                    st.session_state.group_master_items[g_name].pop(del_model, None)
+                                    # DB 제거
+                                    delete_model_from_master(g_name, del_model)
+                                    st.session_state[del_m_ck] = False
+                                    st.success(f"[{del_model}] 삭제 완료")
+                                    st.rerun()
+                                if dm2.button("취소", key=f"del_m_no_{g_name}", use_container_width=True):
+                                    st.session_state[del_m_ck] = False
+                                    st.rerun()
+                        else:
+                            st.info("등록된 모델이 없습니다.")
+
+                with del_c2:
+                    with st.container(border=True):
+                        st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:4px;'>품목 삭제</p>", unsafe_allow_html=True)
+                        st.caption("선택한 모델에서 특정 품목코드만 삭제합니다")
+                        g_mods_di = st.session_state.group_master_models.get(g_name, [])
+                        if g_mods_di:
+                            di_model = st.selectbox("모델 선택", g_mods_di, key=f"di_m_{g_name}")
+                            items_di = st.session_state.group_master_items.get(g_name, {}).get(di_model, [])
+                            if items_di:
+                                del_item = st.selectbox("삭제할 품목코드", items_di, key=f"del_i_{g_name}")
+                                del_i_ck = f"del_item_ck_{g_name}_{di_model}_{del_item}"
+                                if not st.session_state.get(del_i_ck, False):
+                                    if st.button(f"🗑️ [{del_item}] 삭제", key=f"del_ib_{g_name}", use_container_width=True):
+                                        st.session_state[del_i_ck] = True
+                                        st.rerun()
+                                else:
+                                    st.warning(f"⚠️ [{di_model}] 의 [{del_item}] 품목을 삭제하시겠습니까?")
+                                    di1, di2 = st.columns(2)
+                                    if di1.button("✅ 삭제", key=f"del_i_yes_{g_name}", type="primary", use_container_width=True):
+                                        st.session_state.group_master_items[g_name][di_model].remove(del_item)
+                                        delete_item_from_master(g_name, di_model, del_item)
+                                        st.session_state[del_i_ck] = False
+                                        st.success(f"[{del_item}] 삭제 완료")
+                                        st.rerun()
+                                    if di2.button("취소", key=f"del_i_no_{g_name}", use_container_width=True):
+                                        st.session_state[del_i_ck] = False
+                                        st.rerun()
+                            else:
+                                st.info("등록된 품목이 없습니다.")
+                        else:
+                            st.info("등록된 모델이 없습니다.")
 
         st.divider()
         st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin:16px 0 10px 0;'>계정 및 데이터 관리</h4>", unsafe_allow_html=True)
