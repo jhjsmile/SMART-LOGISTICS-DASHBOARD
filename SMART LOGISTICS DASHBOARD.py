@@ -656,6 +656,14 @@ def dialog_view_day(selected_date: str):
                 qty_v   = r.get('조립수', 0)
                 ship_v  = str(r.get('출하계획', ''))
                 note_v  = str(r.get('특이사항', ''))
+                # HTML 특수문자 이스케이프
+                def _esc(s): return s.replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
+                model_v = _esc(model_v); pn_v = _esc(pn_v)
+                ship_v  = _esc(ship_v);  note_v = _esc(note_v)
+                try:
+                    qty_v = int(float(qty_v)) if qty_v not in (None, '', 'nan') else 0
+                except:
+                    qty_v = 0
                 qty_str  = f"{qty_v}대" if qty_v else "-"
                 ship_str = ship_v if ship_v and ship_v != 'nan' else "-"
                 note_str = f" ⚠️ {note_v}" if note_v and note_v not in ('', 'nan') else ""
@@ -1323,9 +1331,18 @@ elif curr_l == "조립 라인":
             model  = str(sr.get('모델명', ''))
             pn     = str(sr.get('pn', ''))
             qty    = sr.get('조립수', 0)
+            try:
+                qty = int(float(qty)) if qty not in (None, '', 'nan') else 0
+            except:
+                qty = 0
             ship   = str(sr.get('출하계획', ''))
             note   = str(sr.get('특이사항', ''))
             ban    = str(sr.get('반', ''))
+            # HTML 특수문자 이스케이프 (꺾쇠 등 포함 시 HTML 깨짐 방지)
+            def _esc(s):
+                return s.replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
+            model = _esc(model); pn = _esc(pn)
+            ship  = _esc(ship);  note = _esc(note)
 
             ship_html = f"<span style='color:#5a4400;'>📦 출하계획: {ship}</span>&nbsp;&nbsp;" if ship else ""
             note_html = f"<span style='color:#c8605a;'>⚠ {note}</span>" if note else ""
