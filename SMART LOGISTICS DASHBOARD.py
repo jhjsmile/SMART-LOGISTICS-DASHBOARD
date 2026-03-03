@@ -695,6 +695,44 @@ def upload_img_to_drive(file_obj, serial_no: str) -> str:
 # 4. 캘린더 다이얼로그
 # =================================================================
 
+
+# ── 일정 변경 로그 ───────────────────────────────────────────────
+SCH_CHANGE_REASONS = [
+    "(선택 필수)",
+    "영업 요구량 변경 (주문 취소)",
+    "영업 요구량 변경 (물량 증가)",
+    "긴급 주문 (Rush Order)",
+    "자재 수급 문제 (입고 지연)",
+    "자재 수급 문제 (불량 자재)",
+    "설비 고장 / 유지보수",
+    "인력 변동 (부족/결원)",
+    "품질 문제 (불량 발생)",
+    "계획 오입력 수정",
+    "기타 (직접 입력)",
+]
+
+def insert_schedule_change_log(sch_id: int, 날짜: str, 반: str, 모델명: str,
+                                이전내용: str, 변경내용: str,
+                                변경사유: str, 사유상세: str, 작업자: str) -> bool:
+    """schedule_change_log 테이블에 일정 변경 이력 기록"""
+    try:
+        sb = get_supabase()
+        sb.table("schedule_change_log").insert({
+            "시간":     get_now_kst_str(),
+            "일정id":   sch_id,
+            "날짜":     날짜,
+            "반":       반,
+            "모델명":   모델명,
+            "이전내용": 이전내용,
+            "변경내용": 변경내용,
+            "변경사유": 변경사유,
+            "사유상세": 사유상세,
+            "작업자":   작업자,
+        }).execute()
+        return True
+    except:
+        return False
+
 @st.dialog("📅 일정 상세", width="large")
 def dialog_view_day(selected_date: str):
     can_edit = st.session_state.user_role in CALENDAR_EDIT_ROLES
@@ -719,16 +757,33 @@ def dialog_view_day(selected_date: str):
                 qty2   = ig1.number_input("조립수", min_value=0, step=1, value=int(r2.get('조립수', 0) or 0))
                 ship2  = ig2.text_input("출하계획", value=str(r2.get('출하계획', '')))
                 note2  = st.text_input("특이사항", value=str(r2.get('특이사항', '')))
+                st.markdown("---")
+                sr1, sr2 = st.columns(2)
+                reason2 = sr1.selectbox("변경 사유 *(필수)", SCH_CHANGE_REASONS, key="inline_reason")
+                detail2 = sr2.text_input("상세 내용", placeholder="예: 고객사 요청, 긴급 오더 등", key="inline_detail")
                 s1, s2, s3 = st.columns(3)
                 if s1.form_submit_button("💾 저장", use_container_width=True, type="primary"):
-                    update_schedule(sub_id, {
-                        '카테고리': cat2, 'pn': pn2.strip(), '모델명': model2.strip(),
-                        '조립수': int(qty2), '출하계획': ship2.strip(), '특이사항': note2.strip()
-                    })
-                    st.session_state.schedule_db    = load_schedule()
-                    st.session_state.cal_action     = None
-                    st.session_state.cal_action_sub = None
-                    st.rerun()
+                    if reason2 == "(선택 필수)":
+                        st.error("변경 사유를 반드시 선택해주세요.")
+                    else:
+                        _prev = f"유형:{r2.get('카테고리','')} 모델:{r2.get('모델명','')} 조립수:{r2.get('조립수',0)}"
+                        _next = f"유형:{cat2} 모델:{model2.strip()} 조립수:{int(qty2)}"
+                        _reason_final = detail2.strip() if reason2 == "기타 (직접 입력)" and detail2.strip() else reason2
+                        update_schedule(sub_id, {
+                            '카테고리': cat2, 'pn': pn2.strip(), '모델명': model2.strip(),
+                            '조립수': int(qty2), '출하계획': ship2.strip(), '특이사항': note2.strip()
+                        })
+                        insert_schedule_change_log(
+                            sch_id=sub_id, 날짜=selected_date,
+                            반=str(r2.get('반','')), 모델명=model2.strip(),
+                            이전내용=_prev, 변경내용=_next,
+                            변경사유=_reason_final, 사유상세=detail2.strip(),
+                            작업자=st.session_state.user_id
+                        )
+                        st.session_state.schedule_db    = load_schedule()
+                        st.session_state.cal_action     = None
+                        st.session_state.cal_action_sub = None
+                        st.rerun()
                 if s2.form_submit_button("🔙 목록으로", use_container_width=True):
                     st.session_state.cal_action_sub = None
                     st.rerun()
@@ -918,20 +973,36 @@ def dialog_edit_schedule(sch_id: int):
         ship  = ff2.text_input("출하계획", value=str(r.get('출하계획', '')))
         note  = st.text_input("특이사항", value=str(r.get('특이사항', '')))
         etc   = st.text_input("기타")
+        st.markdown("---")
+        dr1, dr2 = st.columns(2)
+        sch_reason = dr1.selectbox("변경 사유 *(필수)", SCH_CHANGE_REASONS, key=f"dlg_reason_{sch_id}")
+        sch_detail = dr2.text_input("상세 내용", placeholder="예: 고객사 요청, 긴급 오더 등", key=f"dlg_detail_{sch_id}")
         c1, c2 = st.columns(2)
 
-        # 저장 완료 상태면 버튼 라벨 변경
         save_label = "✅ 저장 완료" if st.session_state.get(save_done_key) else "💾 저장"
         if c1.form_submit_button(save_label, use_container_width=True, type="primary"):
             if not st.session_state.get(save_done_key):
-                note_combined = " / ".join(filter(None, [note.strip(), etc.strip()]))
-                update_schedule(sch_id, {
-                    '카테고리': cat, 'pn': pn.strip(), '모델명': model.strip(),
-                    '조립수': int(qty), '출하계획': ship.strip(), '특이사항': note_combined
-                })
-                st.session_state.schedule_db   = load_schedule()
-                st.session_state[save_done_key] = True
-                st.rerun()
+                if sch_reason == "(선택 필수)":
+                    st.error("변경 사유를 반드시 선택해주세요.")
+                else:
+                    note_combined = " / ".join(filter(None, [note.strip(), etc.strip()]))
+                    _prev = f"유형:{r.get('카테고리','')} 모델:{r.get('모델명','')} 조립수:{r.get('조립수',0)}"
+                    _next = f"유형:{cat} 모델:{model.strip()} 조립수:{int(qty)}"
+                    _reason_final = sch_detail.strip() if sch_reason == "기타 (직접 입력)" and sch_detail.strip() else sch_reason
+                    update_schedule(sch_id, {
+                        '카테고리': cat, 'pn': pn.strip(), '모델명': model.strip(),
+                        '조립수': int(qty), '출하계획': ship.strip(), '특이사항': note_combined
+                    })
+                    insert_schedule_change_log(
+                        sch_id=sch_id, 날짜=saved_date,
+                        반=str(r.get('반','')), 모델명=model.strip(),
+                        이전내용=_prev, 변경내용=_next,
+                        변경사유=_reason_final, 사유상세=sch_detail.strip(),
+                        작업자=st.session_state.user_id
+                    )
+                    st.session_state.schedule_db    = load_schedule()
+                    st.session_state[save_done_key] = True
+                    st.rerun()
         if c2.form_submit_button("🗑️ 삭제", use_container_width=True):
             delete_schedule(sch_id)
             st.session_state.schedule_db    = load_schedule()
@@ -2192,68 +2263,115 @@ elif curr_l == "생산 지표 관리":
     else:
         st.info("계획 수량을 입력하면 달성률 그래프가 표시됩니다.")
 
-    # ── 계획 변경 이력 로그 ────────────────────────────────────────
+    # ── 변경 이력 로그 (탭 구분) ─────────────────────────────────
     st.divider()
-    st.markdown("<div class='db-section' style='background:#5a4f8a;'>📋 계획 변경 이력</div>", unsafe_allow_html=True)
+    st.markdown("<div class='db-section' style='background:#5a4f8a;'>📋 변경 이력 로그</div>", unsafe_allow_html=True)
 
-    log_f1, log_f2, log_f3 = st.columns([1.5, 2, 1])
-    log_ban    = log_f1.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="plog_ban")
-    log_reason = log_f2.selectbox("사유 필터", ["전체"] + PLAN_CHANGE_REASONS, key="plog_reason")
-    if log_f3.button("🔄 새로고침", key="plog_refresh", use_container_width=True):
-        st.cache_data.clear(); st.rerun()
+    REASON_COLOR = {
+        "신규 계획 등록":              "#ddeeff",
+        "영업 요구량 변경 (주문 취소)": "#fde8e7",
+        "영업 요구량 변경 (물량 증가)": "#d4f0e2",
+        "긴급 주문 (Rush Order)":      "#fff3d4",
+        "자재 수급 문제 (입고 지연)":   "#fde8d4",
+        "자재 수급 문제 (불량 자재)":   "#fde8d4",
+        "설비 고장 / 유지보수":         "#fde8e7",
+        "인력 변동 (부족/결원)":        "#ede0f5",
+        "품질 문제 (불량 발생)":        "#fde8e7",
+        "계획 오입력 수정":             "#f5f2ec",
+    }
 
-    plog_df = load_plan_change_log()
+    log_tab1, log_tab2 = st.tabs(["📊 월별 계획 수량 변경", "📅 일정 수정 이력"])
 
-    if not plog_df.empty:
-        if log_ban    != "전체": plog_df = plog_df[plog_df['반'] == log_ban]
-        if log_reason != "전체": plog_df = plog_df[plog_df['변경사유'].str.contains(log_reason, na=False)]
+    # ── 탭1: 월별 계획 수량 변경 이력 ───────────────────────────
+    with log_tab1:
+        lf1, lf2, lf3 = st.columns([1.5, 2, 1])
+        log_ban    = lf1.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="plog_ban")
+        log_reason = lf2.selectbox("사유 필터", ["전체"] + PLAN_CHANGE_REASONS, key="plog_reason")
+        if lf3.button("🔄 새로고침", key="plog_refresh", use_container_width=True):
+            st.cache_data.clear(); st.rerun()
 
-        # KPI 요약
-        pk1, pk2, pk3, pk4 = st.columns(4)
-        pk1.metric("전체 변경 건수", f"{len(plog_df)}건")
-        inc = plog_df[plog_df['증감'] > 0]['증감'].sum()
-        dec = plog_df[plog_df['증감'] < 0]['증감'].sum()
-        pk2.metric("총 증가량", f"+{int(inc):,}대", delta_color="normal")
-        pk3.metric("총 감소량", f"{int(dec):,}대", delta_color="inverse")
-        pk4.metric("순 변동량", f"{int(inc+dec):+,}대",
-                   delta_color="normal" if inc+dec >= 0 else "inverse")
+        plog_df = load_plan_change_log()
+        if not plog_df.empty:
+            if log_ban    != "전체": plog_df = plog_df[plog_df['반'] == log_ban]
+            if log_reason != "전체": plog_df = plog_df[plog_df['변경사유'].str.contains(log_reason, na=False)]
 
-        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            pk1, pk2, pk3, pk4 = st.columns(4)
+            pk1.metric("전체 변경 건수", f"{len(plog_df)}건")
+            inc = plog_df[plog_df['증감'] > 0]['증감'].sum()
+            dec = plog_df[plog_df['증감'] < 0]['증감'].sum()
+            pk2.metric("총 증가량", f"+{int(inc):,}대")
+            pk3.metric("총 감소량", f"{int(dec):,}대")
+            pk4.metric("순 변동량", f"{int(inc+dec):+,}대")
 
-        # 이력 테이블 헤더
-        REASON_COLOR = {
-            "신규 계획 등록":              "#ddeeff",
-            "영업 요구량 변경 (주문 취소)": "#fde8e7",
-            "영업 요구량 변경 (물량 증가)": "#d4f0e2",
-            "긴급 주문 (Rush Order)":      "#fff3d4",
-            "자재 수급 문제 (입고 지연)":   "#fde8d4",
-            "자재 수급 문제 (불량 자재)":   "#fde8d4",
-            "설비 고장 / 유지보수":         "#fde8e7",
-            "인력 변동 (부족/결원)":        "#ede0f5",
-            "품질 문제 (불량 발생)":        "#fde8e7",
-        }
+            th = st.columns([1.8, 1.0, 1.0, 1.0, 1.0, 0.9, 2.5, 2.0, 1.2])
+            for col, txt in zip(th, ["시간","반","월","이전","변경","증감","변경 사유","상세 내용","작업자"]):
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+            for _, row in plog_df.iterrows():
+                tr = st.columns([1.8, 1.0, 1.0, 1.0, 1.0, 0.9, 2.5, 2.0, 1.2])
+                tr[0].caption(str(row.get('시간',''))[:16])
+                tr[1].write(row.get('반',''))
+                tr[2].write(row.get('월',''))
+                tr[3].caption(f"{int(row.get('이전수량',0)):,}대")
+                tr[4].write(f"**{int(row.get('변경수량',0)):,}대**")
+                증감 = int(row.get('증감', 0))
+                clr = "#1e8449" if 증감 > 0 else "#c0392b" if 증감 < 0 else "#888"
+                tr[5].markdown(f"<span style='color:{clr};font-weight:bold;font-size:0.85rem;'>{증감:+,}</span>", unsafe_allow_html=True)
+                reason_v = str(row.get('변경사유',''))
+                rbg = REASON_COLOR.get(reason_v, "#f5f2ec")
+                tr[6].markdown(f"<span style='background:{rbg};padding:1px 6px;border-radius:4px;font-size:0.72rem;'>{reason_v}</span>", unsafe_allow_html=True)
+                tr[7].caption(row.get('사유상세',''))
+                tr[8].caption(row.get('작업자',''))
+        else:
+            st.info("계획 변경 이력이 없습니다. 계획 수량 저장 시 자동 기록됩니다.")
 
-        th = st.columns([1.8, 1.0, 1.0, 1.0, 1.0, 0.9, 2.5, 2.0, 1.2])
-        for col, txt in zip(th, ["시간","반","월","이전","변경","증감","변경 사유","상세 내용","작업자"]):
-            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+    # ── 탭2: 일정 수정 이력 ──────────────────────────────────────
+    with log_tab2:
+        @st.cache_data(ttl=30)
+        def load_schedule_change_log(limit: int = 200) -> pd.DataFrame:
+            try:
+                sb  = get_supabase()
+                res = sb.table("schedule_change_log").select("*").order("시간", desc=True).limit(limit).execute()
+                if res.data:
+                    return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
+                return pd.DataFrame(columns=['시간','일정id','날짜','반','모델명','이전내용','변경내용','변경사유','사유상세','작업자'])
+            except:
+                return pd.DataFrame(columns=['시간','일정id','날짜','반','모델명','이전내용','변경내용','변경사유','사유상세','작업자'])
 
-        for _, row in plog_df.iterrows():
-            tr = st.columns([1.8, 1.0, 1.0, 1.0, 1.0, 0.9, 2.5, 2.0, 1.2])
-            tr[0].caption(str(row.get('시간',''))[:16])
-            tr[1].write(row.get('반',''))
-            tr[2].write(row.get('월',''))
-            tr[3].caption(f"{int(row.get('이전수량',0)):,}대")
-            tr[4].write(f"**{int(row.get('변경수량',0)):,}대**")
-            증감 = int(row.get('증감', 0))
-            clr = "#1e8449" if 증감 > 0 else "#c0392b" if 증감 < 0 else "#888"
-            tr[5].markdown(f"<span style='color:{clr};font-weight:bold;font-size:0.85rem;'>{증감:+,}</span>", unsafe_allow_html=True)
-            reason_v = str(row.get('변경사유',''))
-            rbg = REASON_COLOR.get(reason_v, "#f5f2ec")
-            tr[6].markdown(f"<span style='background:{rbg};padding:1px 6px;border-radius:4px;font-size:0.72rem;'>{reason_v}</span>", unsafe_allow_html=True)
-            tr[7].caption(row.get('사유상세',''))
-            tr[8].caption(row.get('작업자',''))
-    else:
-        st.info("계획 변경 이력이 없습니다. 계획 수량 저장 시 자동으로 기록됩니다.")
+        sf1, sf2, sf3 = st.columns([1.5, 2, 1])
+        s_ban    = sf1.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="slog_ban")
+        s_reason = sf2.selectbox("사유 필터", ["전체"] + SCH_CHANGE_REASONS[1:], key="slog_reason")
+        if sf3.button("🔄 새로고침", key="slog_refresh", use_container_width=True):
+            st.cache_data.clear(); st.rerun()
+
+        slog_df = load_schedule_change_log()
+        if not slog_df.empty:
+            if s_ban    != "전체": slog_df = slog_df[slog_df['반'] == s_ban]
+            if s_reason != "전체": slog_df = slog_df[slog_df['변경사유'].str.contains(s_reason, na=False)]
+
+            sk1, sk2, sk3 = st.columns(3)
+            sk1.metric("전체 수정 건수", f"{len(slog_df)}건")
+            sk2.metric("수정 관여 작업자", f"{slog_df['작업자'].nunique()}명")
+            sk3.metric("수정된 날짜 수", f"{slog_df['날짜'].nunique()}일")
+
+            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+            th2 = st.columns([1.6, 1.0, 1.0, 1.2, 2.0, 2.0, 2.2, 1.8, 1.2])
+            for col, txt in zip(th2, ["수정 시간","날짜","반","모델","이전 내용","변경 내용","변경 사유","상세","작업자"]):
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+            for _, row in slog_df.iterrows():
+                tr2 = st.columns([1.6, 1.0, 1.0, 1.2, 2.0, 2.0, 2.2, 1.8, 1.2])
+                tr2[0].caption(str(row.get('시간',''))[:16])
+                tr2[1].caption(str(row.get('날짜',''))[:10])
+                tr2[2].write(row.get('반',''))
+                tr2[3].write(row.get('모델명',''))
+                tr2[4].caption(row.get('이전내용',''))
+                tr2[5].caption(row.get('변경내용',''))
+                reason_v2 = str(row.get('변경사유',''))
+                rbg2 = REASON_COLOR.get(reason_v2, "#f5f2ec")
+                tr2[6].markdown(f"<span style='background:{rbg2};padding:1px 6px;border-radius:4px;font-size:0.72rem;'>{reason_v2}</span>", unsafe_allow_html=True)
+                tr2[7].caption(row.get('사유상세',''))
+                tr2[8].caption(row.get('작업자',''))
+        else:
+            st.info("일정 수정 이력이 없습니다. 캘린더에서 일정 수정 시 자동 기록됩니다.")
 
 
 # ── 불량 공정 ────────────────────────────────────────────────────
