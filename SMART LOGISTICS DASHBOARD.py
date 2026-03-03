@@ -724,8 +724,9 @@ def dialog_view_day(selected_date: str):
                     if not st.session_state.get(confirm_key, False):
                         bc1, bc2 = rcols[5].columns(2)
                         if bc1.button("✏️", key=f"mod_{row_id}", help="수정"):
-                            st.session_state.cal_action_sub      = "edit"
-                            st.session_state.cal_action_sub_data = int(row_id)
+                            st.session_state.cal_action      = "edit"
+                            st.session_state.cal_action_data = int(row_id)
+                            st.session_state.cal_action_sub  = None
                             st.rerun()
                         if bc2.button("🗑️", key=f"del_{row_id}", help="삭제"):
                             st.session_state[confirm_key] = True
@@ -791,7 +792,7 @@ def dialog_add_schedule(selected_date: str):
             else:
                 st.warning("모델명 또는 특이사항을 입력해주세요.")
 
-@st.dialog("✏️ 일정 수정/삭제")
+@st.dialog("✏️ 일정 수정", width="large")
 def dialog_edit_schedule(sch_id: int):
     can_edit = st.session_state.user_role in CALENDAR_EDIT_ROLES
     sch_df   = st.session_state.schedule_db
@@ -802,46 +803,67 @@ def dialog_edit_schedule(sch_id: int):
         return
 
     r = matched.iloc[0]
-    st.markdown(f"**날짜: {r.get('날짜','')}**")
+    saved_date = str(r.get('날짜', ''))
+    st.markdown(f"**날짜: {saved_date}**")
 
     if not can_edit:
         st.info(f"카테고리: {r.get('카테고리','')} / 모델명: {r.get('모델명','')} / 조립수: {r.get('조립수',0)}대")
         if st.button("닫기"): st.rerun()
         return
 
+    # 저장 완료 상태 체크
+    save_done_key = f"edit_saved_{sch_id}"
+
     cur_cat = r.get('카테고리', '조립계획')
-    # 기존 데이터가 특이사항/기타 카테고리였으면 조립계획으로 fallback
     cat_idx = PLAN_CATEGORIES.index(cur_cat) if cur_cat in PLAN_CATEGORIES else 0
 
     with st.form("edit_sch_form"):
         cat   = st.selectbox("계획 유형 *", PLAN_CATEGORIES, index=cat_idx)
         fe1, fe2 = st.columns(2)
-        model = fe1.text_input("모델명",   value=str(r.get('모델명','')))
-        pn    = fe2.text_input("P/N",      value=str(r.get('pn','')))
+        model = fe1.text_input("모델명",   value=str(r.get('모델명', '')))
+        pn    = fe2.text_input("P/N",      value=str(r.get('pn', '')))
         ff1, ff2 = st.columns(2)
         qty   = ff1.number_input("조립수", min_value=0, step=1, value=int(r.get('조립수', 0) or 0))
-        ship  = ff2.text_input("출하계획", value=str(r.get('출하계획','')))
-        note  = st.text_input("특이사항", value=str(r.get('특이사항','')))
+        ship  = ff2.text_input("출하계획", value=str(r.get('출하계획', '')))
+        note  = st.text_input("특이사항", value=str(r.get('특이사항', '')))
         etc   = st.text_input("기타")
         c1, c2 = st.columns(2)
-        if c1.form_submit_button("💾 저장", use_container_width=True, type="primary"):
-            note_combined = " / ".join(filter(None, [note.strip(), etc.strip()]))
-            update_schedule(sch_id, {
-                '카테고리': cat, 'pn': pn.strip(), '모델명': model.strip(),
-                '조립수': int(qty), '출하계획': ship.strip(), '특이사항': note_combined
-            })
-            st.session_state.schedule_db = load_schedule()
-            st.session_state.cal_action  = None
-            st.rerun()
+
+        # 저장 완료 상태면 버튼 라벨 변경
+        save_label = "✅ 저장 완료" if st.session_state.get(save_done_key) else "💾 저장"
+        if c1.form_submit_button(save_label, use_container_width=True, type="primary"):
+            if not st.session_state.get(save_done_key):
+                note_combined = " / ".join(filter(None, [note.strip(), etc.strip()]))
+                update_schedule(sch_id, {
+                    '카테고리': cat, 'pn': pn.strip(), '모델명': model.strip(),
+                    '조립수': int(qty), '출하계획': ship.strip(), '특이사항': note_combined
+                })
+                st.session_state.schedule_db   = load_schedule()
+                st.session_state[save_done_key] = True
+                st.rerun()
         if c2.form_submit_button("🗑️ 삭제", use_container_width=True):
             delete_schedule(sch_id)
-            st.session_state.schedule_db = load_schedule()
-            st.session_state.cal_action  = None
+            st.session_state.schedule_db    = load_schedule()
+            st.session_state.cal_action     = None
+            st.session_state[save_done_key] = False
             st.rerun()
-    # 폼 밖 닫기 버튼 - 누르면 cal_action 초기화 후 닫힘
-    if st.button("✖ 닫기", key="edit_close_btn", use_container_width=True):
+
+    st.divider()
+    # 저장 완료 후 안내 메시지
+    if st.session_state.get(save_done_key):
+        st.success("저장되었습니다.")
+
+    bc1, bc2 = st.columns(2)
+    # 목록으로: 일정 상세 팝업 다시 열기
+    if bc1.button("🔙 목록으로", use_container_width=True):
+        st.session_state.cal_action      = "view_day"
+        st.session_state.cal_action_data = saved_date
+        st.session_state[save_done_key]  = False
+        st.rerun()
+    if bc2.button("✖ 닫기", use_container_width=True):
         st.session_state.cal_action      = None
         st.session_state.cal_action_data = None
+        st.session_state[save_done_key]  = False
         st.rerun()
 
 # =================================================================
