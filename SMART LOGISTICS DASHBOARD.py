@@ -1288,10 +1288,14 @@ if curr_l == "현황판":
             fig = px.bar(
                 db_all.groupby(['반','라인']).size().reset_index(name='수량'),
                 x='라인', y='수량', color='반', barmode='group',
-                title="<b>반별 공정 진행 현황</b>", template="plotly_white"
+                title="반별 공정 진행 현황", template="plotly_white"
             )
             fig.update_yaxes(dtick=1)
-            fig.update_layout(margin=dict(t=40,b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02))
+            fig.update_layout(
+                margin=dict(t=50, b=50, l=20, r=20),
+                legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
+                title=dict(font=dict(size=13), x=0, xanchor='left', pad=dict(t=4))
+            )
             st.plotly_chart(fig, use_container_width=True, key="dashboard_bar")
         with ch2:
             fig2 = px.pie(
