@@ -590,24 +590,23 @@ def delete_schedule(row_id: int) -> bool:
 
 # ── 생산 계획 수량 (대시보드용) ──────────────────────────────────
 def load_production_plan() -> dict:
-    """Supabase production_plan 테이블에서 {반_날짜_모델: 계획수량} 로드
-       테이블 없으면 session_state 캐시만 사용"""
+    """Supabase production_plan 테이블에서 {반_YYYY-MM: 계획수량} 로드"""
     try:
         sb  = get_supabase()
         res = sb.table("production_plan").select("*").execute()
         if res.data:
-            return {f"{r['반']}_{r['날짜']}_{r['모델명']}": int(r.get('계획수량', 0)) for r in res.data}
+            return {f"{r['반']}_{r['월']}": int(r.get('계획수량', 0)) for r in res.data}
         return {}
     except:
         return {}
 
-def save_production_plan(반: str, 날짜: str, 모델명: str, 계획수량: int) -> bool:
-    """production_plan upsert (반+날짜+모델명 복합키)"""
+def save_production_plan(반: str, 월: str, 계획수량: int) -> bool:
+    """production_plan upsert (반+월 복합키)"""
     try:
         sb = get_supabase()
         sb.table("production_plan").upsert({
-            "반": 반, "날짜": 날짜, "모델명": 모델명, "계획수량": 계획수량
-        }, on_conflict="반,날짜,모델명").execute()
+            "반": 반, "월": 월, "계획수량": 계획수량
+        }, on_conflict="반,월").execute()
         return True
     except Exception as e:
         st.error(f"계획 수량 저장 실패: {e}")
@@ -1938,28 +1937,142 @@ elif curr_l == "생산 지표 관리":
             st.info("현재 진행 중인 작업 없음")
 
     # ══════════════════════════════════════════════════════════════
-    # [F] 계획 수량 입력 (관리자 전용)
+    # [F] 계획 수량 입력 + 월별 달성률 그래프
     # ══════════════════════════════════════════════════════════════
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='db-section' style='background:#5a4f8a;'>📅 월별 계획 수량 관리</div>", unsafe_allow_html=True)
+
+    # 입력 폼 (관리자 전용)
     if st.session_state.user_role in CALENDAR_EDIT_ROLES:
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        with st.expander("⚙️ 계획 수량 입력 (달성률 계산 기준)", expanded=False):
-            st.caption("반/날짜/모델별 목표 수량을 입력하면 달성률 계산에 반영됩니다.")
-            pl1, pl2, pl3, pl4 = st.columns([1.5, 1.5, 2.5, 1])
-            p_ban   = pl1.selectbox("반", PRODUCTION_GROUPS, key="plan_ban")
-            p_date  = pl2.date_input("날짜", value=_today, key="plan_date")
-            p_models = st.session_state.group_master_models.get(p_ban, [])
-            p_model = pl3.selectbox("모델명", p_models if p_models else ["(모델 없음)"], key="plan_model")
-            p_qty   = pl4.number_input("계획 수량", min_value=0, step=1, key="plan_qty")
-            if st.button("💾 계획 수량 저장", type="primary", key="plan_save_btn"):
-                if p_model and p_model != "(모델 없음)":
-                    p_date_str = p_date.strftime('%Y-%m-%d')
-                    if save_production_plan(p_ban, p_date_str, p_model, int(p_qty)):
-                        plan_key = f"{p_ban}_{p_date_str}_{p_model}"
-                        st.session_state.production_plan[plan_key] = int(p_qty)
-                        st.success(f"✅ {p_ban} / {p_date_str} / {p_model} → {p_qty}대 저장 완료")
-                        st.rerun()
-                else:
-                    st.warning("모델을 선택해주세요.")
+        with st.expander("⚙️ 월 계획 수량 입력", expanded=False):
+            st.caption("반/월별 목표 수량을 입력합니다. 월 단위로 관리됩니다.")
+            pl1, pl2, pl3 = st.columns([1.5, 1.5, 1])
+            p_ban  = pl1.selectbox("반", PRODUCTION_GROUPS, key="plan_ban")
+            # 월 선택: 최근 6개월 목록
+            from datetime import date as _d2
+            _months = []
+            for i in range(6):
+                _m = (_d2.today().replace(day=1) - __import__('datetime').timedelta(days=i*28)).strftime('%Y-%m')
+                if _m not in _months: _months.append(_m)
+            _months = sorted(set(_months), reverse=True)[:6]
+            p_month = pl2.selectbox("월", _months, key="plan_month")
+            p_qty   = pl3.number_input("계획 수량 (대)", min_value=0, step=10, key="plan_qty")
+            if st.button("💾 저장", type="primary", key="plan_save_btn"):
+                if save_production_plan(p_ban, p_month, int(p_qty)):
+                    plan_key = f"{p_ban}_{p_month}"
+                    st.session_state.production_plan[plan_key] = int(p_qty)
+                    st.success(f"✅ {p_ban} / {p_month} → {p_qty:,}대 저장 완료")
+                    st.rerun()
+
+    # ── 월별 달성률 그래프 ────────────────────────────────────────
+    plan_map_now = st.session_state.production_plan  # {반_YYYY-MM: 계획수량}
+
+    # 최근 6개월 목록
+    from datetime import date as _d3
+    months_list = []
+    for i in range(5, -1, -1):
+        _m = (_d3.today().replace(day=1) - __import__('datetime').timedelta(days=i*28))
+        months_list.append(_m.strftime('%Y-%m'))
+    months_list = sorted(set(months_list))[-6:]
+
+    # 반별 월별 실적 집계
+    db_raw = st.session_state.production_db.copy()
+    chart_rows = []
+    for ban in PRODUCTION_GROUPS:
+        for mo in months_list:
+            plan_v = plan_map_now.get(f"{ban}_{mo}", 0)
+            # 해당 월 포장 완료 건수
+            if not db_raw.empty:
+                actual_v = len(db_raw[
+                    (db_raw['반'] == ban) &
+                    (db_raw['상태'] == '완료') &
+                    (db_raw['라인'] == '포장 라인') &
+                    (db_raw['시간'].str[:7] == mo)
+                ])
+            else:
+                actual_v = 0
+            pct = round(actual_v / plan_v * 100, 1) if plan_v > 0 else 0
+            chart_rows.append({
+                '월': mo, '반': ban,
+                '계획': plan_v, '실적': actual_v, '달성률(%)': pct
+            })
+
+    chart_df = pd.DataFrame(chart_rows)
+
+    if not chart_df.empty and chart_df['계획'].sum() > 0:
+        import plotly.graph_objects as go
+
+        BAN_CLR = {"제조1반": "#2471a3", "제조2반": "#1e8449", "제조3반": "#6c3483"}
+        BAN_CLR_LIGHT = {"제조1반": "#aad4f5", "제조2반": "#a8dfc4", "제조3반": "#caaee8"}
+
+        gc1, gc2 = st.columns([3, 2])
+
+        with gc1:
+            # 그룹 막대 차트: 계획 vs 실적
+            fig_plan = go.Figure()
+            for ban in PRODUCTION_GROUPS:
+                bdf = chart_df[chart_df['반'] == ban]
+                fig_plan.add_trace(go.Bar(
+                    name=f"{ban} 계획",
+                    x=bdf['월'], y=bdf['계획'],
+                    marker_color=BAN_CLR_LIGHT.get(ban, "#ccc"),
+                    opacity=0.6, offsetgroup=ban,
+                    text=bdf['계획'].apply(lambda v: f"{v:,}" if v > 0 else ""),
+                    textposition='outside', textfont=dict(size=9)
+                ))
+                fig_plan.add_trace(go.Bar(
+                    name=f"{ban} 실적",
+                    x=bdf['월'], y=bdf['실적'],
+                    marker_color=BAN_CLR.get(ban, "#888"),
+                    offsetgroup=ban + "_실적",
+                    text=bdf['실적'].apply(lambda v: f"{v:,}" if v > 0 else ""),
+                    textposition='outside', textfont=dict(size=9)
+                ))
+            fig_plan.update_layout(
+                title="월별 계획 vs 실적 (반별)",
+                barmode='group',
+                template='plotly_white',
+                height=320,
+                margin=dict(t=40, b=40, l=20, r=20),
+                legend=dict(orientation='h', y=-0.2, font=dict(size=10)),
+                yaxis_title="수량 (대)"
+            )
+            st.plotly_chart(fig_plan, use_container_width=True)
+
+        with gc2:
+            # 달성률 라인 차트
+            fig_pct = go.Figure()
+            for ban in PRODUCTION_GROUPS:
+                bdf = chart_df[chart_df['반'] == ban]
+                fig_pct.add_trace(go.Scatter(
+                    name=ban, x=bdf['월'], y=bdf['달성률(%)'],
+                    mode='lines+markers+text',
+                    line=dict(color=BAN_CLR.get(ban, "#888"), width=2),
+                    marker=dict(size=7),
+                    text=bdf['달성률(%)'].apply(lambda v: f"{v}%" if v > 0 else ""),
+                    textposition='top center', textfont=dict(size=9)
+                ))
+            # 100% 기준선
+            fig_pct.add_hline(y=100, line_dash="dash", line_color="#e8908a",
+                              annotation_text="목표 100%", annotation_font_size=10)
+            fig_pct.update_layout(
+                title="월별 달성률 추이 (%)",
+                template='plotly_white',
+                height=320,
+                margin=dict(t=40, b=40, l=20, r=20),
+                legend=dict(orientation='h', y=-0.2, font=dict(size=10)),
+                yaxis=dict(title="달성률 (%)", range=[0, max(120, chart_df['달성률(%)'].max() + 10)])
+            )
+            st.plotly_chart(fig_pct, use_container_width=True)
+
+        # 요약 테이블
+        summary = chart_df.groupby('반').agg(
+            총계획=('계획','sum'), 총실적=('실적','sum')
+        ).reset_index()
+        summary['전체달성률(%)'] = (summary['총실적'] / summary['총계획'] * 100).round(1).where(summary['총계획'] > 0, 0)
+        st.dataframe(summary, use_container_width=True, hide_index=True)
+    else:
+        st.info("계획 수량을 입력하면 달성률 그래프가 표시됩니다.")
 
 
 # ── 불량 공정 ────────────────────────────────────────────────────
