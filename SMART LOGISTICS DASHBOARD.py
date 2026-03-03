@@ -2788,7 +2788,7 @@ elif curr_l == "생산 지표 관리":
                 else:
                     st.warning("모델명 또는 특이사항을 입력해주세요.")
 
-    with sch_tab2:
+    with sch_tab3:
         sch_list = st.session_state.schedule_db
         if not sch_list.empty:
             # ── 전체 삭제 버튼 ──
