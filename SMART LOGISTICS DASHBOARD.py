@@ -606,55 +606,82 @@ def upload_img_to_drive(file_obj, serial_no: str) -> str:
 # 4. 캘린더 다이얼로그
 # =================================================================
 
-@st.dialog("📅 일정 상세")
+@st.dialog("📅 일정 상세", width="large")
 def dialog_view_day(selected_date: str):
     can_edit = st.session_state.user_role in CALENDAR_EDIT_ROLES
     sch_df   = st.session_state.schedule_db
     day_data = sch_df[sch_df['날짜'] == selected_date] if not sch_df.empty else pd.DataFrame()
 
-    st.markdown(f"### 📆 {selected_date}")
+    st.markdown(f"### 📆 {selected_date}  <span style='font-size:0.85rem; color:#8a7f72; font-weight:normal;'>총 {len(day_data)}건</span>", unsafe_allow_html=True)
 
     if not day_data.empty:
-        for _, r in day_data.iterrows():
-            cat    = str(r.get('카테고리', '기타')) if r.get('카테고리') else '기타'
-            color  = SCHEDULE_COLORS.get(cat, "#888")
-            row_id = r.get('id', None)
-            with st.container(border=True):
-                st.markdown(
-                    f"<span style='background:{color}; color:#fff; padding:2px 10px; "
-                    f"border-radius:10px; font-size:0.8rem; font-weight:bold;'>{cat}</span>",
-                    unsafe_allow_html=True
-                )
-                c1, c2 = st.columns(2)
-                c1.markdown(f"**P/N:** {r.get('pn','')}")
-                c2.markdown(f"**모델명:** {r.get('모델명','')}")
-                c3, c4 = st.columns(2)
-                c3.markdown(f"**조립수:** {r.get('조립수',0)}대")
-                c4.markdown(f"**출하계획:** {r.get('출하계획','')}")
-                note = str(r.get('특이사항',''))
-                if note.strip() and note != 'nan':
-                    st.markdown(f"⚠️ **특이사항:** {note}")
+        # 카테고리별로 그룹핑해서 표시
+        for cat in day_data['카테고리'].unique():
+            color    = SCHEDULE_COLORS.get(str(cat), "#888")
+            cat_rows = day_data[day_data['카테고리'] == cat]
+
+            # 카테고리 헤더
+            st.markdown(
+                f"<div style='background:{color}18; border-left:4px solid {color}; "
+                f"padding:6px 12px; border-radius:4px; margin:10px 0 6px 0;'>"
+                f"<span style='color:{color}; font-weight:bold; font-size:0.9rem;'>{cat}</span>"
+                f"<span style='color:#8a7f72; font-size:0.8rem; margin-left:8px;'>{len(cat_rows)}건</span>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+
+            # 표 헤더
+            h0,h1,h2,h3,h4,h5 = st.columns([1.2, 2.5, 1.5, 1.5, 2.0, 1.0] if can_edit else [1.2, 2.5, 1.5, 1.5, 2.5, 0.1])
+            for col, label in zip([h0,h1,h2,h3,h4], ["반","모델명","P/N","조립수","출하계획"]):
+                col.markdown(f"<p style='color:#8a7f72; font-size:0.75rem; font-weight:bold; margin:0; border-bottom:1px solid #e0d8c8; padding-bottom:3px;'>{label}</p>", unsafe_allow_html=True)
+            if can_edit:
+                h5.markdown("<p style='color:#8a7f72; font-size:0.75rem; font-weight:bold; margin:0; border-bottom:1px solid #e0d8c8; padding-bottom:3px;'>관리</p>", unsafe_allow_html=True)
+
+            # 행 데이터
+            for _, r in cat_rows.iterrows():
+                row_id  = r.get('id', None)
+                ban_v   = str(r.get('반',''))
+                model_v = str(r.get('모델명',''))
+                pn_v    = str(r.get('pn',''))
+                qty_v   = r.get('조립수', 0)
+                ship_v  = str(r.get('출하계획',''))
+                note_v  = str(r.get('특이사항',''))
+                qty_str = f"{qty_v}대" if qty_v else "-"
+                ship_str= ship_v if ship_v and ship_v != 'nan' else "-"
+                note_str= f" ⚠️ {note_v}" if note_v and note_v != 'nan' else ""
+
                 if can_edit and row_id:
-                    e1, e2, e3 = st.columns(3)
-                    if e1.button("✏️ 수정", key=f"mod_{row_id}"):
-                        st.session_state.cal_action      = "edit"
-                        st.session_state.cal_action_data = int(row_id)
-                        st.rerun()
+                    r0,r1,r2,r3,r4,r5 = st.columns([1.2, 2.5, 1.5, 1.5, 2.0, 1.0])
+                else:
+                    r0,r1,r2,r3,r4 = st.columns([1.2, 2.5, 1.5, 1.5, 2.5])
+
+                r0.markdown(f"<p style='font-size:0.78rem; margin:2px 0; color:#5a5048;'>{ban_v}</p>", unsafe_allow_html=True)
+                r1.markdown(f"<p style='font-size:0.78rem; margin:2px 0; color:#2a2420; font-weight:bold;'>{model_v}{note_str}</p>", unsafe_allow_html=True)
+                r2.markdown(f"<p style='font-size:0.78rem; margin:2px 0; color:#5a5048;'>{pn_v or '-'}</p>", unsafe_allow_html=True)
+                r3.markdown(f"<p style='font-size:0.78rem; margin:2px 0; color:#2471a3; font-weight:bold;'>{qty_str}</p>", unsafe_allow_html=True)
+                r4.markdown(f"<p style='font-size:0.78rem; margin:2px 0; color:#5a5048;'>{ship_str}</p>", unsafe_allow_html=True)
+
+                if can_edit and row_id:
                     confirm_key = f"del_confirm_{row_id}"
                     if not st.session_state.get(confirm_key, False):
-                        if e2.button("🗑️ 삭제", key=f"del_{row_id}"):
+                        btn_c1, btn_c2 = r5.columns(2)
+                        if btn_c1.button("✏️", key=f"mod_{row_id}", help="수정"):
+                            st.session_state.cal_action      = "edit"
+                            st.session_state.cal_action_data = int(row_id)
+                            st.rerun()
+                        if btn_c2.button("🗑️", key=f"del_{row_id}", help="삭제"):
                             st.session_state[confirm_key] = True
                             st.rerun()
                     else:
-                        st.warning("⚠️ 이 일정을 삭제하시겠습니까?")
+                        st.warning(f"⚠️ [{model_v}] 일정을 삭제하시겠습니까?")
                         y1, y2 = st.columns(2)
-                        if y1.button("✅ 예, 삭제", key=f"del_yes_{row_id}", type="primary"):
+                        if y1.button("✅ 예, 삭제", key=f"del_yes_{row_id}", type="primary", use_container_width=True):
                             delete_schedule(int(row_id))
                             st.session_state.schedule_db = load_schedule()
                             st.session_state[confirm_key] = False
                             st.session_state.cal_action  = None
                             st.rerun()
-                        if y2.button("취소", key=f"del_no_{row_id}"):
+                        if y2.button("취소", key=f"del_no_{row_id}", use_container_width=True):
                             st.session_state[confirm_key] = False
                             st.rerun()
     else:
@@ -970,38 +997,19 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                 border    = "2px solid #7ec8a0" if is_today else "1px solid #e0d8c8"
                 today_cls = " today" if is_today else ""
 
+                # 카테고리별 건수 집계
+                cat_counts = {}
                 event_count = 0
-                event_htmls = []
                 if not day_data.empty:
                     for _, r in day_data.iterrows():
-                        cat    = str(r.get("카테고리","기타")) if r.get("카테고리") else "기타"
-                        color  = SCHEDULE_COLORS.get(cat, "#888")
-                        ban_tag= str(r.get("반",""))
-                        label  = (str(r.get("모델명","")) or str(r.get("특이사항","")))[:12]
-                        qty    = r.get("조립수", 0)
-                        pn_v   = str(r.get("pn",""))
-                        ship_v = str(r.get("출하계획",""))
-                        note_v = str(r.get("특이사항",""))
-                        tip = (f"[{cat}] {ban_tag}&#10;모델: {label}"
-                               + (f"&#10;P/N: {pn_v}" if pn_v else "")
-                               + (f"&#10;조립수: {qty}대" if qty else "")
-                               + (f"&#10;출하: {ship_v}" if ship_v else "")
-                               + (f"&#10;특이사항: {note_v}" if note_v and note_v != "nan" else ""))
-                        event_htmls.append(
-                            f"<div class='cal-event' title='{tip}' "
-                            f"style='background:{color}22; border-left:3px solid {color}; cursor:pointer;'>"
-                            f"<span style='color:{color}; font-weight:bold; font-size:0.68rem;'>[{cat}]</span> "
-                            f"<span style='color:#8a7f72; font-size:0.56rem;'>{ban_tag}</span> "
-                            f"<span style='color:#3d3830; font-size:0.72rem;'>{label}</span>"
-                            + (f" <span style='color:#8a7f72;font-size:0.62rem;'>({qty}대)</span>" if qty else "")
-                            + "</div>"
-                        )
+                        cat = str(r.get("카테고리","기타")) if r.get("카테고리") else "기타"
+                        cat_counts[cat] = cat_counts.get(cat, 0) + 1
                         event_count += 1
 
                 today_mark = " 🟢" if is_today else ""
                 btn_label  = f"{day}{today_mark}"
 
-                # ── 날짜 버튼 (div로 감싸서 CSS 클래스 적용)
+                # ── 날짜 버튼
                 day_cls = "cal-today-btn" if is_today else "cal-day-btn"
                 st.markdown(f"<div class='{day_cls}'>", unsafe_allow_html=True)
                 if st.button(btn_label, key=f"{key_prefix}_{day_str}", use_container_width=True):
@@ -1010,12 +1018,20 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                     st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
 
-                # ── 이벤트 블록 (버튼 바로 아래)
-                if event_htmls:
-                    st.markdown(
-                        "<div style='margin-top:0px;'>" + "".join(event_htmls) + "</div>",
-                        unsafe_allow_html=True
-                    )
+                # ── 카테고리별 뱃지 (건수만)
+                if cat_counts:
+                    badge_html = "<div style='margin-top:3px; display:flex; flex-direction:column; gap:2px;'>"
+                    for cat, cnt in cat_counts.items():
+                        color = SCHEDULE_COLORS.get(cat, "#888")
+                        badge_html += (
+                            f"<div style='background:{color}18; border-left:3px solid {color}; "
+                            f"border-radius:3px; padding:2px 5px; font-size:0.65rem; line-height:1.4;'>"
+                            f"<span style='color:{color}; font-weight:bold;'>{cat}</span> "
+                            f"<span style='color:#5a5048; font-weight:bold;'>{cnt}건</span>"
+                            f"</div>"
+                        )
+                    badge_html += "</div>"
+                    st.markdown(badge_html, unsafe_allow_html=True)
 
 
 # ── 범례 공통
