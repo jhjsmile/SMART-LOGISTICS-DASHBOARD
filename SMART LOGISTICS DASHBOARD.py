@@ -551,11 +551,17 @@ def sync_master_to_session():
 
 def insert_schedule(row: dict) -> bool:
     try:
-        get_supabase().table("production_schedule").insert(row).execute()
+        # Supabase에 넣을 컬럼만 추출 (id, created_at 등 자동생성 컬럼 제외)
+        allowed = {'날짜', '반', '카테고리', 'pn', '모델명', '조립수', '출하계획', '특이사항', '작성자'}
+        clean_row = {k: v for k, v in row.items() if k in allowed}
+        # 날짜 문자열 보정
+        if '날짜' in clean_row and hasattr(clean_row['날짜'], 'strftime'):
+            clean_row['날짜'] = clean_row['날짜'].strftime('%Y-%m-%d')
+        get_supabase().table("production_schedule").insert(clean_row).execute()
         # ── 일정 등록 시 해당 반 모델/품목 마스터 자동 등록 ──
-        반   = str(row.get('반', '')).strip()
-        모델 = str(row.get('모델명', '')).strip()
-        pn   = str(row.get('pn', '')).strip()
+        반   = str(clean_row.get('반', '')).strip()
+        모델 = str(clean_row.get('모델명', '')).strip()
+        pn   = str(clean_row.get('pn', '')).strip()
         if 반 in PRODUCTION_GROUPS and 모델:
             upsert_model_master(반, 모델, pn if pn else 모델)
             if 모델 not in st.session_state.group_master_models.get(반, []):
@@ -566,7 +572,8 @@ def insert_schedule(row: dict) -> bool:
                 st.session_state.group_master_items[반][모델].append(pn)
         return True
     except Exception as e:
-        st.error(f"일정 등록 실패: {e}"); return False
+        st.error(f"일정 등록 실패: {e}")
+        return False
 
 def update_schedule(row_id: int, data: dict) -> bool:
     try:
@@ -1950,9 +1957,10 @@ elif curr_l == "마스터 관리":
                                 st.error("반을 선택해주세요.")
                             else:
                                 existing = st.session_state.schedule_db
-                                success_cnt = skip_cnt = 0
+                                success_cnt = skip_cnt = fail_cnt = 0
+                                fail_rows = []
                                 for row in filtered:
-                                    # 반 강제 지정 (MNT 양식)
+                                    # 반 강제 지정
                                     if upload_ban:
                                         row['반'] = upload_ban
                                     # 반 최종 확인
@@ -1973,9 +1981,13 @@ elif curr_l == "마스터 관리":
                                     if insert_schedule(row):
                                         success_cnt += 1
                                     else:
-                                        skip_cnt += 1
+                                        fail_cnt += 1
+                                        fail_rows.append(f"{row.get('날짜','')} / {row.get('모델명','')}")
                                 st.session_state.schedule_db = load_schedule()
-                                st.success(f"✅ 등록 완료: {success_cnt}건  |  건너뜀: {skip_cnt}건")
+                                if success_cnt > 0:
+                                    st.success(f"✅ 등록 완료: {success_cnt}건  |  건너뜀(중복): {skip_cnt}건" + (f"  |  실패: {fail_cnt}건" if fail_cnt else ""))
+                                if fail_rows:
+                                    st.error("등록 실패 행:\n" + "\n".join(fail_rows))
                                 st.rerun()
                     else:
                         st.warning("파싱된 일정이 없습니다. 파일 형식을 확인해주세요.")
