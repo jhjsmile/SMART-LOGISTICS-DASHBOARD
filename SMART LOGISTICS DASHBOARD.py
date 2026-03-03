@@ -30,12 +30,12 @@ PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
 CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower", "schedule_manager"]
 
 ROLES = {
-    "master":        ["생산 대시보드", "조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
-    "control_tower": ["생산 대시보드", "생산 현황 리포트", "수리 현황 리포트", "마스터 관리"],
+    "master":        ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
+    "control_tower": ["생산 지표 관리", "생산 현황 리포트", "수리 현황 리포트", "마스터 관리"],
     "assembly_team": ["조립 라인"],
     "qc_team":       ["검사 라인", "불량 공정"],
     "packing_team":  ["포장 라인"],
-    "admin":         ["생산 대시보드", "조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
+    "admin":         ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
     "schedule_manager": ["마스터 관리"]
 }
 
@@ -918,23 +918,10 @@ if 'user_db' not in st.session_state:
     }
 
 if 'group_master_models' not in st.session_state:
-    st.session_state.group_master_models = {
-        "제조1반": ["NEW-101", "NEW-102"],
-        "제조2반": ["EPS7150", "EPS7133", "T20i", "T20C"],
-        "제조3반": ["AION-X", "AION-Z"]
-    }
+    st.session_state.group_master_models = {"제조1반": [], "제조2반": [], "제조3반": []}
 
 if 'group_master_items' not in st.session_state:
-    st.session_state.group_master_items = {
-        "제조1반": {"NEW-101": ["101-A"], "NEW-102": ["102-A"]},
-        "제조2반": {
-            "EPS7150": ["7150-A", "7150-B"],
-            "EPS7133": ["7133-S", "7133-Standard"],
-            "T20i":    ["T20i-P", "T20i-Premium"],
-            "T20C":    ["T20C-S", "T20C-Standard"]
-        },
-        "제조3반": {"AION-X": ["AX-PRO"], "AION-Z": ["AZ-ULTRA"]}
-    }
+    st.session_state.group_master_items = {"제조1반": {}, "제조2반": {}, "제조3반": {}}
 
 # DB model_master → session 동기화 (앱 시작 시 1회)
 if 'master_synced' not in st.session_state:
@@ -996,6 +983,15 @@ if st.sidebar.button("🏠 메인 현황판", use_container_width=True,
     st.session_state.current_line  = "현황판"
     st.rerun()
 
+if "생산 지표 관리" in allowed_nav:
+    if st.sidebar.button("📡 생산 지표 관리", use_container_width=True,
+        type="primary" if st.session_state.current_line == "생산 지표 관리" else "secondary"):
+        clear_cal()
+        st.session_state.production_db = load_realtime_ledger()
+        st.session_state.schedule_db   = load_schedule()
+        st.session_state.current_line  = "생산 지표 관리"
+        st.rerun()
+
 st.sidebar.divider()
 
 for group in PRODUCTION_GROUPS:
@@ -1022,7 +1018,7 @@ for group in PRODUCTION_GROUPS:
 
 st.sidebar.divider()
 
-for p in ["생산 현황 리포트", "수리 현황 리포트", "생산 대시보드"]:
+for p in ["생산 현황 리포트", "수리 현황 리포트"]:
     if p in allowed_nav:
         if st.sidebar.button(p, key=f"fnav_{p}", use_container_width=True,
             type="primary" if st.session_state.current_line == p else "secondary"):
@@ -1657,9 +1653,9 @@ elif curr_l == "생산 현황 리포트":
     else:
         st.info("조회 가능한 데이터가 없습니다.")
 
-# ── 생산 대시보드 ─────────────────────────────────────────────────
-elif curr_l == "생산 대시보드":
-    st.markdown("<h2 class='centered-title'>📡 생산 대시보드</h2>", unsafe_allow_html=True)
+# ── 생산 지표 관리 ─────────────────────────────────────────────────
+elif curr_l == "생산 지표 관리":
+    st.markdown("<h2 class='centered-title'>📡 생산 지표 관리</h2>", unsafe_allow_html=True)
 
     db_all   = st.session_state.production_db.copy()
     sch_all  = st.session_state.schedule_db.copy()
@@ -2017,7 +2013,7 @@ elif curr_l == "마스터 관리":
                         _TAB_COLORS = {"제조1반":"2471A3","제조2반":"1E8449","제조3반":"6C3483"}
                         _EXAMPLES = {
                             "제조1반": ["2026-03-05","조립계획","TMP1115TI405","AM-1115 BLACK","32","3/15 32" ,"정상",""],
-                            "제조2반": ["2026-03-05","조립계획","TMP6133002","S6133 GRIFFIN [13.3\"]","30","3/15 30" ,"정상",""],
+                            "제조2반": ["2026-03-05","조립계획","","모델명 예시","0","" ,"",""],
                             "제조3반": ["2026-03-05","포장계획","TMS9150008","T20i (i3-12세대) DUAL","20","3/20 20" ,"정상",""],
                         }
 
@@ -2257,8 +2253,7 @@ elif curr_l == "마스터 관리":
                         ws = wb["생산계획_업로드"]
                         for row in ws.iter_rows(min_row=5, values_only=True):
                             ban, date_val, cat, pn, model, qty, ship, note = (list(row) + [None]*8)[:8]
-                            if str(ban) == "제조2반" and str(model or "").startswith("S6133 GRIFFIN") and str(date_val) == "2026-03-05":
-                                continue
+
                             if not ban and not model and not date_val: continue
                             if not model and not note: continue
                             if isinstance(date_val, _dt):
