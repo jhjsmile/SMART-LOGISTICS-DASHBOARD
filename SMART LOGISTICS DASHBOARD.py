@@ -1553,11 +1553,11 @@ elif curr_l == "조립 라인":
         sn_search = sc1.text_input("🔍 시리얼 검색", placeholder="S/N 일부 입력...", key=f"sn_search_{curr_g}")
         if sn_search.strip():
             f_df = f_df[f_df['시리얼'].str.contains(sn_search.strip(), case=False, na=False)]
-        h = st.columns([2.2, 1.5, 1.5, 1.8, 4])
+        h = st.columns([2.2, 2.0, 1.5, 1.8, 2.2])
         for col, txt in zip(h, ["기록 시간","모델","품목","시리얼","현장 제어"]):
             col.write(f"**{txt}**")
         for idx, row in f_df.sort_values('시간', ascending=False).iterrows():
-            r = st.columns([2.2, 1.5, 1.5, 1.8, 4])
+            r = st.columns([2.2, 2.0, 1.5, 1.8, 2.2])
             r[0].write(row['시간']); r[1].write(row['모델'])
             r[2].write(row['품목코드']); r[3].write(f"`{row['시리얼']}`")
             with r[4]:
@@ -1565,12 +1565,12 @@ elif curr_l == "조립 라인":
                     ck_ok = f"ck_ok_{idx}"; ck_ng = f"ck_ng_{idx}"
                     if not st.session_state.get(ck_ok) and not st.session_state.get(ck_ng):
                         b1, b2 = st.columns(2)
-                        if b1.button("조립 완료", key=f"ok_{idx}"):
+                        if b1.button("✅ 완료", key=f"ok_{idx}", use_container_width=True):
                             st.session_state[ck_ok] = True; st.rerun()
-                        if b2.button("🚫불량", key=f"ng_{idx}"):
+                        if b2.button("🚫 불량", key=f"ng_{idx}", use_container_width=True):
                             st.session_state[ck_ng] = True; st.rerun()
                     elif st.session_state.get(ck_ok):
-                        st.warning(f"✅ [{row['시리얼']}] 조립 완료 처리하시겠습니까?")
+                        st.caption(f"✅ 완료 처리?")
                         y1, y2 = st.columns(2)
                         if y1.button("확인", key=f"ok_y_{idx}", type="primary", use_container_width=True):
                             update_row(row['시리얼'], {'상태':'검사대기','시간':get_now_kst_str()})
@@ -1581,7 +1581,7 @@ elif curr_l == "조립 라인":
                         if y2.button("취소", key=f"ok_n_{idx}", use_container_width=True):
                             st.session_state[ck_ok] = False; st.rerun()
                     elif st.session_state.get(ck_ng):
-                        st.error(f"🚫 [{row['시리얼']}] 불량 처리하시겠습니까?")
+                        st.caption(f"🚫 불량 처리?")
                         y1, y2 = st.columns(2)
                         if y1.button("확인", key=f"ng_y_{idx}", type="primary", use_container_width=True):
                             update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str()})
@@ -1601,10 +1601,10 @@ elif curr_l == "조립 라인":
                     }
                     s = row['상태']
                     if "불량" in str(s):
-                        st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #e8908a;'>🚫 {s}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:3px 8px;border-radius:6px;text-align:center;font-weight:bold;border:1px solid #e8908a;font-size:0.8rem;'>🚫 {s}</div>", unsafe_allow_html=True)
                     else:
                         bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
-                        st.markdown(f"<div style='background:{bg};color:{tc};padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid {bc};'>{ic} {s}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:{bg};color:{tc};padding:3px 8px;border-radius:6px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.8rem;display:inline-block;width:100%;'>{ic} {s}</div>", unsafe_allow_html=True)
     else:
         st.info("등록된 생산 내역이 없습니다.")
 
@@ -1637,11 +1637,11 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     st.divider()
     f_df = db_s[(db_s['반']==curr_g)&(db_s['라인']==curr_l)]
     if not f_df.empty:
-        h = st.columns([2.2, 1.5, 1.5, 1.8, 4])
+        h = st.columns([2.2, 2.0, 1.5, 1.8, 2.2])
         for col, txt in zip(h, ["기록 시간","모델","품목","시리얼","제어"]):
             col.write(f"**{txt}**")
         for idx, row in f_df.sort_values('시간', ascending=False).iterrows():
-            r = st.columns([2.2, 1.5, 1.5, 1.8, 4])
+            r = st.columns([2.2, 2.0, 1.5, 1.8, 2.2])
             r[0].write(row['시간']); r[1].write(row['모델'])
             r[2].write(row['품목코드']); r[3].write(f"`{row['시리얼']}`")
             with r[4]:
@@ -1655,7 +1655,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         if c2.button("🚫불량", key=f"ng_{idx}"):
                             st.session_state[qck_ng] = True; st.rerun()
                     elif st.session_state.get(qck_ok):
-                        st.warning(f"✅ [{row['시리얼']}] {btn_lbl} 처리하시겠습니까?")
+                        st.caption(f"✅ {btn_lbl}?")
                         y1, y2 = st.columns(2)
                         if y1.button("확인", key=f"qok_y_{idx}", type="primary", use_container_width=True):
                             _ok_status = '포장대기' if curr_l == '검사 라인' else '완료'
@@ -1668,7 +1668,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         if y2.button("취소", key=f"qok_n_{idx}", use_container_width=True):
                             st.session_state[qck_ok] = False; st.rerun()
                     elif st.session_state.get(qck_ng):
-                        st.error(f"🚫 [{row['시리얼']}] 불량 처리하시겠습니까?")
+                        st.caption(f"🚫 불량 처리?")
                         y1, y2 = st.columns(2)
                         if y1.button("확인", key=f"qng_y_{idx}", type="primary", use_container_width=True):
                             update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str()})
@@ -1688,10 +1688,10 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         '완료':     ('#d4f0e2','#1f6640','#7ec8a0','✅'),
                     }
                     if "불량" in str(s2):
-                        st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #e8908a;'>🚫 {s2}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:3px 8px;border-radius:6px;text-align:center;font-weight:bold;border:1px solid #e8908a;font-size:0.8rem;'>🚫 {s2}</div>", unsafe_allow_html=True)
                     else:
                         bg2,tc2,bc2,ic2 = STATUS_STYLE2.get(s2, ('#f5f2ec','#5a5048','#c8b89a','•'))
-                        st.markdown(f"<div style='background:{bg2};color:{tc2};padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid {bc2};'>{ic2} {s2}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:{bg2};color:{tc2};padding:3px 8px;border-radius:6px;text-align:center;font-weight:bold;border:1px solid {bc2};font-size:0.8rem;display:inline-block;width:100%;'>{ic2} {s2}</div>", unsafe_allow_html=True)
     else:
         st.info("해당 공정 내역이 없습니다.")
 
