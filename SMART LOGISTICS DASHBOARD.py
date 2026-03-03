@@ -644,6 +644,40 @@ def insert_audit_log(시리얼: str, 모델: str, 반: str,
     except:
         return False  # 로그 실패는 무시 (주요 흐름 방해 안 함)
 
+
+# ── 생산 계획 변경 로그 ──────────────────────────────────────────
+def insert_plan_change_log(반: str, 월: str, 이전수량: int, 변경수량: int,
+                            변경사유: str, 사유상세: str, 작업자: str) -> bool:
+    """plan_change_log 테이블에 계획 변경 이력 기록"""
+    try:
+        sb = get_supabase()
+        sb.table("plan_change_log").insert({
+            "시간":     get_now_kst_str(),
+            "반":       반,
+            "월":       월,
+            "이전수량": 이전수량,
+            "변경수량": 변경수량,
+            "증감":     변경수량 - 이전수량,
+            "변경사유": 변경사유,
+            "사유상세": 사유상세,
+            "작업자":   작업자,
+        }).execute()
+        return True
+    except:
+        return False
+
+@st.cache_data(ttl=60)
+def load_plan_change_log(limit: int = 100) -> pd.DataFrame:
+    """plan_change_log 최근 N건 조회"""
+    try:
+        sb  = get_supabase()
+        res = sb.table("plan_change_log").select("*").order("시간", desc=True).limit(limit).execute()
+        if res.data:
+            return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
+        return pd.DataFrame(columns=['시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
+    except:
+        return pd.DataFrame(columns=['시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
+
 def upload_img_to_drive(file_obj, serial_no: str) -> str:
     try:
         gcp_info  = st.secrets["connections"]["gsheets"]
@@ -1993,13 +2027,26 @@ elif curr_l == "생산 지표 관리":
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     st.markdown("<div class='db-section' style='background:#5a4f8a;'>📅 월별 계획 수량 관리</div>", unsafe_allow_html=True)
 
+    # 변경 사유 선택지
+    PLAN_CHANGE_REASONS = [
+        "신규 계획 등록",
+        "영업 요구량 변경 (주문 취소)",
+        "영업 요구량 변경 (물량 증가)",
+        "긴급 주문 (Rush Order)",
+        "자재 수급 문제 (입고 지연)",
+        "자재 수급 문제 (불량 자재)",
+        "설비 고장 / 유지보수",
+        "인력 변동 (부족/결원)",
+        "품질 문제 (불량 발생)",
+        "기타 (직접 입력)",
+    ]
+
     # 입력 폼 (관리자 전용)
     if st.session_state.user_role in CALENDAR_EDIT_ROLES:
-        with st.expander("⚙️ 월 계획 수량 입력", expanded=False):
-            st.caption("반/월별 목표 수량을 입력합니다. 월 단위로 관리됩니다.")
-            pl1, pl2, pl3 = st.columns([1.5, 1.5, 1])
+        with st.expander("⚙️ 월 계획 수량 입력 / 변경", expanded=False):
+            st.caption("반/월별 목표 수량을 입력합니다. 변경 시 사유를 선택하면 이력이 자동 기록됩니다.")
+            pl1, pl2, pl3 = st.columns([1.5, 1.5, 1.2])
             p_ban  = pl1.selectbox("반", PRODUCTION_GROUPS, key="plan_ban")
-            # 월 선택: 최근 6개월 목록
             from datetime import date as _d2
             _months = []
             for i in range(6):
@@ -2008,10 +2055,30 @@ elif curr_l == "생산 지표 관리":
             _months = sorted(set(_months), reverse=True)[:6]
             p_month = pl2.selectbox("월", _months, key="plan_month")
             p_qty   = pl3.number_input("계획 수량 (대)", min_value=0, step=10, key="plan_qty")
+
+            # 현재 저장된 수량 표시
+            _cur_qty = st.session_state.production_plan.get(f"{p_ban}_{p_month}", 0)
+            if _cur_qty > 0:
+                st.caption(f"📌 현재 저장된 수량: **{_cur_qty:,}대** → 변경 후: **{int(p_qty):,}대** "
+                           f"({'▲' if int(p_qty) > _cur_qty else '▼'} {abs(int(p_qty)-_cur_qty):,}대)")
+
+            pr1, pr2 = st.columns([2, 2])
+            p_reason = pr1.selectbox("변경 사유 *", PLAN_CHANGE_REASONS, key="plan_reason")
+            p_detail = pr2.text_input("상세 내용 (선택)", placeholder="예: 고객사 요청, 부품 수급 지연 등", key="plan_detail")
+
             if st.button("💾 저장", type="primary", key="plan_save_btn"):
+                _reason_final = p_detail.strip() if p_reason == "기타 (직접 입력)" and p_detail.strip() else p_reason
                 if save_production_plan(p_ban, p_month, int(p_qty)):
+                    # 변경 로그 기록
+                    insert_plan_change_log(
+                        반=p_ban, 월=p_month,
+                        이전수량=_cur_qty, 변경수량=int(p_qty),
+                        변경사유=_reason_final, 사유상세=p_detail.strip(),
+                        작업자=st.session_state.user_id
+                    )
                     plan_key = f"{p_ban}_{p_month}"
                     st.session_state.production_plan[plan_key] = int(p_qty)
+                    st.cache_data.clear()
                     st.success(f"✅ {p_ban} / {p_month} → {p_qty:,}대 저장 완료")
                     st.rerun()
 
@@ -2124,6 +2191,69 @@ elif curr_l == "생산 지표 관리":
         st.dataframe(summary, use_container_width=True, hide_index=True)
     else:
         st.info("계획 수량을 입력하면 달성률 그래프가 표시됩니다.")
+
+    # ── 계획 변경 이력 로그 ────────────────────────────────────────
+    st.divider()
+    st.markdown("<div class='db-section' style='background:#5a4f8a;'>📋 계획 변경 이력</div>", unsafe_allow_html=True)
+
+    log_f1, log_f2, log_f3 = st.columns([1.5, 2, 1])
+    log_ban    = log_f1.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="plog_ban")
+    log_reason = log_f2.selectbox("사유 필터", ["전체"] + PLAN_CHANGE_REASONS, key="plog_reason")
+    if log_f3.button("🔄 새로고침", key="plog_refresh", use_container_width=True):
+        st.cache_data.clear(); st.rerun()
+
+    plog_df = load_plan_change_log()
+
+    if not plog_df.empty:
+        if log_ban    != "전체": plog_df = plog_df[plog_df['반'] == log_ban]
+        if log_reason != "전체": plog_df = plog_df[plog_df['변경사유'].str.contains(log_reason, na=False)]
+
+        # KPI 요약
+        pk1, pk2, pk3, pk4 = st.columns(4)
+        pk1.metric("전체 변경 건수", f"{len(plog_df)}건")
+        inc = plog_df[plog_df['증감'] > 0]['증감'].sum()
+        dec = plog_df[plog_df['증감'] < 0]['증감'].sum()
+        pk2.metric("총 증가량", f"+{int(inc):,}대", delta_color="normal")
+        pk3.metric("총 감소량", f"{int(dec):,}대", delta_color="inverse")
+        pk4.metric("순 변동량", f"{int(inc+dec):+,}대",
+                   delta_color="normal" if inc+dec >= 0 else "inverse")
+
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+
+        # 이력 테이블 헤더
+        REASON_COLOR = {
+            "신규 계획 등록":              "#ddeeff",
+            "영업 요구량 변경 (주문 취소)": "#fde8e7",
+            "영업 요구량 변경 (물량 증가)": "#d4f0e2",
+            "긴급 주문 (Rush Order)":      "#fff3d4",
+            "자재 수급 문제 (입고 지연)":   "#fde8d4",
+            "자재 수급 문제 (불량 자재)":   "#fde8d4",
+            "설비 고장 / 유지보수":         "#fde8e7",
+            "인력 변동 (부족/결원)":        "#ede0f5",
+            "품질 문제 (불량 발생)":        "#fde8e7",
+        }
+
+        th = st.columns([1.8, 1.0, 1.0, 1.0, 1.0, 0.9, 2.5, 2.0, 1.2])
+        for col, txt in zip(th, ["시간","반","월","이전","변경","증감","변경 사유","상세 내용","작업자"]):
+            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+
+        for _, row in plog_df.iterrows():
+            tr = st.columns([1.8, 1.0, 1.0, 1.0, 1.0, 0.9, 2.5, 2.0, 1.2])
+            tr[0].caption(str(row.get('시간',''))[:16])
+            tr[1].write(row.get('반',''))
+            tr[2].write(row.get('월',''))
+            tr[3].caption(f"{int(row.get('이전수량',0)):,}대")
+            tr[4].write(f"**{int(row.get('변경수량',0)):,}대**")
+            증감 = int(row.get('증감', 0))
+            clr = "#1e8449" if 증감 > 0 else "#c0392b" if 증감 < 0 else "#888"
+            tr[5].markdown(f"<span style='color:{clr};font-weight:bold;font-size:0.85rem;'>{증감:+,}</span>", unsafe_allow_html=True)
+            reason_v = str(row.get('변경사유',''))
+            rbg = REASON_COLOR.get(reason_v, "#f5f2ec")
+            tr[6].markdown(f"<span style='background:{rbg};padding:1px 6px;border-radius:4px;font-size:0.72rem;'>{reason_v}</span>", unsafe_allow_html=True)
+            tr[7].caption(row.get('사유상세',''))
+            tr[8].caption(row.get('작업자',''))
+    else:
+        st.info("계획 변경 이력이 없습니다. 계획 수량 저장 시 자동으로 기록됩니다.")
 
 
 # ── 불량 공정 ────────────────────────────────────────────────────
