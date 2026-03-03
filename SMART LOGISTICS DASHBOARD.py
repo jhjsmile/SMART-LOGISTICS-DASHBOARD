@@ -1420,7 +1420,8 @@ elif curr_l == "조립 라인":
 
     # ── 생산 이력 테이블 ──────────────────────────────────────────
     if not f_df.empty:
-        sn_search = st.text_input("🔍 시리얼 검색", placeholder="S/N 일부 입력...", key=f"sn_search_{curr_g}")
+        sc1, sc2 = st.columns([1, 1])
+        sn_search = sc1.text_input("🔍 시리얼 검색", placeholder="S/N 일부 입력...", key=f"sn_search_{curr_g}")
         if sn_search.strip():
             f_df = f_df[f_df['시리얼'].str.contains(sn_search.strip(), case=False, na=False)]
         h = st.columns([2.2, 1.5, 1.5, 1.8, 4])
