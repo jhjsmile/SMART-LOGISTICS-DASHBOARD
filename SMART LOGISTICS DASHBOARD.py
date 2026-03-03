@@ -1300,16 +1300,7 @@ elif curr_l == "조립 라인":
     # 변경 알림 팝업
     if has_new_sch and not st.session_state.get(f"sch_popup_dismissed_{curr_g}", False):
         with st.container():
-            st.markdown(f"""
-<div style='background:#fff8e6; border:2px solid #f0c878; border-radius:12px;
-     padding:16px 20px; margin-bottom:16px;'>
-  <div style='font-size:1.05rem; font-weight:bold; color:#7a5c00; margin-bottom:6px;'>
-    🔔 오늘 생산 일정이 등록/변경되었습니다!
-  </div>
-  <div style='font-size:0.88rem; color:#5a4400;'>
-    {today_str} 기준 <b>{curr_g}</b> 일정 <b>{len(today_sch)}건</b>이 있습니다. 아래에서 확인하세요.
-  </div>
-</div>""", unsafe_allow_html=True)
+            st.warning(f"🔔 오늘 생산 일정이 등록/변경되었습니다!\n\n{today_str} 기준 **{curr_g}** 일정 **{len(today_sch)}건**이 있습니다. 아래에서 확인하세요.")
             ack_c1, ack_c2 = st.columns([3, 1])
             if ack_c2.button("✅ 확인했습니다", key=f"sch_ack_{curr_g}", use_container_width=True, type="primary"):
                 st.session_state[last_seen_key] = sch_ids_now
@@ -1320,52 +1311,31 @@ elif curr_l == "조립 라인":
     st.markdown(f"<div class='section-title'>📋 오늘({today_str}) {curr_g} 작업 일정</div>", unsafe_allow_html=True)
 
     if today_sch.empty:
-        st.markdown("""<div style='background:#fffdf7; border:1px solid #e0d8c8; border-radius:10px;
-            padding:16px; text-align:center; color:#8a7f72; margin-bottom:16px;'>
-            오늘 등록된 작업 일정이 없습니다.</div>""", unsafe_allow_html=True)
+        st.info("오늘 등록된 작업 일정이 없습니다.")
     else:
-        # 일정 카드 렌더링
         for _, sr in today_sch.iterrows():
-            cat    = str(sr.get('카테고리', '기타'))
-            color  = SCHEDULE_COLORS.get(cat, "#888")
-            model  = str(sr.get('모델명', ''))
-            pn     = str(sr.get('pn', ''))
-            qty    = sr.get('조립수', 0)
+            cat   = str(sr.get('카테고리', '기타'))
+            color = SCHEDULE_COLORS.get(cat, "#888")
+            model = str(sr.get('모델명', ''))
+            pn    = str(sr.get('pn', ''))
+            qty   = sr.get('조립수', 0)
             try:
                 qty = int(float(qty)) if qty not in (None, '', 'nan') else 0
             except:
                 qty = 0
-            ship   = str(sr.get('출하계획', ''))
-            note   = str(sr.get('특이사항', ''))
-            ban    = str(sr.get('반', ''))
-            # HTML 특수문자 이스케이프 (꺾쇠 등 포함 시 HTML 깨짐 방지)
-            def _esc(s):
-                return s.replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
-            model = _esc(model); pn = _esc(pn)
-            ship  = _esc(ship);  note = _esc(note)
+            ship  = str(sr.get('출하계획', ''))
+            note  = str(sr.get('특이사항', ''))
 
-            ship_html = f"<span style='color:#5a4400;'>📦 출하계획: {ship}</span>&nbsp;&nbsp;" if ship else ""
-            note_html = f"<span style='color:#c8605a;'>⚠ {note}</span>" if note else ""
-            ban_html  = ""
-
-            st.markdown(f"""
-<div style='background:{color}12; border-left:5px solid {color};
-     border-radius:10px; padding:14px 18px; margin-bottom:10px;
-     border:1px solid {color}44;'>
-  <div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;'>
-    <div>
-      {ban_html}
-      <span style='background:{color}; color:#fff; border-radius:6px;
-            padding:3px 10px; font-size:0.78rem; font-weight:bold;'>{cat}</span>
-      <span style='font-size:1.05rem; font-weight:bold; color:#2a2420; margin-left:10px;'>{model}</span>
-      {f"<span style='font-size:0.82rem; color:#8a7f72; margin-left:8px;'>({pn})</span>" if pn else ""}
-    </div>
-    <div style='font-size:1.4rem; font-weight:bold; color:{color};'>
-      🔢 {qty:,} 대
-    </div>
-  </div>
-  {f"<div style='margin-top:8px; font-size:0.85rem;'>{ship_html}{note_html}</div>" if ship or note else ""}
-</div>""", unsafe_allow_html=True)
+            with st.container(border=True):
+                ca, cb = st.columns([3, 1])
+                with ca:
+                    st.markdown(f"**{cat}** &nbsp; {model}" + (f" `{pn}`" if pn and pn != 'nan' else ""))
+                with cb:
+                    st.metric(label="조립수", value=f"{qty:,} 대")
+                if ship and ship != 'nan':
+                    st.caption(f"📦 출하계획: {ship}")
+                if note and note != 'nan':
+                    st.warning(f"⚠️ {note}", icon=None)
 
         # 일정 전체 보기 토글
         with st.expander(f"📅 {curr_g} 이번 달 전체 일정 보기"):
@@ -1424,34 +1394,18 @@ elif curr_l == "조립 라인":
         # 카드 렌더링 (모델별)
         for (model, pn, total, done, wip, defect) in count_rows:
             pct     = int(done / total * 100) if total > 0 else 0
-            bar_w   = pct
-            bar_col = "#7ec8a0" if pct >= 100 else "#7eb8e8"
-            st.markdown(f"""
-<div style='background:#fffdf8; border:1px solid #e0d8c8; border-radius:12px;
-     padding:14px 18px; margin-bottom:10px;'>
-  <div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;'>
-    <div>
-      <span style='font-size:1rem; font-weight:bold; color:#2a2420;'>{model}</span>
-      {f"<span style='font-size:0.8rem; color:#8a7f72; margin-left:8px;'>({pn})</span>" if pn else ""}
-    </div>
-    <div style='display:flex; gap:10px; flex-wrap:wrap;'>
-      <span style='background:#f0ebe0; border-radius:8px; padding:4px 12px; font-size:0.82rem; color:#3d3530;'>
-        📋 전체 <b>{total}</b>
-      </span>
-      <span style='background:#d4f0e2; border-radius:8px; padding:4px 12px; font-size:0.82rem; color:#1f6640;'>
-        ✅ 완료 <b>{done}</b>
-      </span>
-      <span style='background:#ddeeff; border-radius:8px; padding:4px 12px; font-size:0.82rem; color:#2a5080;'>
-        🏗️ 작업중 <b>{wip}</b>
-      </span>
-      {f"<span style='background:#fde8e7; border-radius:8px; padding:4px 12px; font-size:0.82rem; color:#7a2e2a;'>🚨 불량 <b>{defect}</b></span>" if defect > 0 else ""}
-    </div>
-  </div>
-  <div style='background:#e8e2d8; border-radius:99px; height:8px; overflow:hidden;'>
-    <div style='background:{bar_col}; width:{bar_w}%; height:100%; border-radius:99px; transition:width 0.4s;'></div>
-  </div>
-  <div style='text-align:right; font-size:0.75rem; color:#8a7f72; margin-top:4px;'>완료율 {pct}%</div>
-</div>""", unsafe_allow_html=True)
+            with st.container(border=True):
+                mc1, mc2 = st.columns([3, 1])
+                mc1.markdown(f"**{model}**" + (f" `{pn}`" if pn else ""))
+                mc2.markdown(f"완료율 **{pct}%**")
+                # 진행바
+                st.progress(min(pct, 100) / 100)
+                # 수치
+                sc1, sc2, sc3, sc4 = st.columns(4)
+                sc1.metric("전체", total)
+                sc2.metric("✅ 완료", done)
+                sc3.metric("🏗️ 작업중", wip)
+                sc4.metric("🚨 불량", defect, delta=None if defect == 0 else f"{defect}건", delta_color="inverse")
 
     # ── 생산 이력 테이블 ──────────────────────────────────────────
     if not f_df.empty:
