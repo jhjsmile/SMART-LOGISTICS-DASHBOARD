@@ -1655,226 +1655,275 @@ elif curr_l == "생산 현황 리포트":
 
 # ── 생산 지표 관리 ─────────────────────────────────────────────────
 elif curr_l == "생산 지표 관리":
-    st.markdown("<h2 class='centered-title'>📡 생산 지표 관리</h2>", unsafe_allow_html=True)
 
-    db_all   = st.session_state.production_db.copy()
-    sch_all  = st.session_state.schedule_db.copy()
-    plan_map = st.session_state.production_plan   # {반_날짜_모델: 계획수량}
+    # ── CSS: 전광판 스타일 ─────────────────────────────────────────
+    st.markdown("""
+<style>
+.db-title   { font-size:1.35rem; font-weight:800; color:#2a2420; letter-spacing:-0.5px; margin:0 0 2px 0; }
+.db-section { display:flex; align-items:center; gap:8px; font-size:0.78rem; font-weight:700;
+              color:#fff; padding:5px 14px; border-radius:20px; margin:14px 0 8px 0;
+              width:fit-content; letter-spacing:0.3px; }
+.kpi-card   { background:#fff; border:1px solid #e8e2d8; border-radius:10px;
+              padding:12px 16px 10px 16px; text-align:center; }
+.kpi-lbl    { font-size:0.68rem; font-weight:600; color:#8a7f72;
+              text-transform:uppercase; letter-spacing:0.6px; margin-bottom:2px; }
+.kpi-val    { font-size:2.2rem; font-weight:800; line-height:1.1; color:#2a2420; }
+.kpi-sub    { font-size:0.68rem; color:#aaa; margin-top:2px; }
+.kpi-green  { color:#1e8449; }
+.kpi-red    { color:#c0392b; }
+.kpi-blue   { color:#2471a3; }
+.kpi-amber  { color:#d68910; }
+.ban-card   { border-radius:10px; padding:10px 14px 8px 14px; margin-bottom:2px; }
+.ban-name   { font-size:0.72rem; font-weight:700; letter-spacing:0.4px; margin-bottom:4px; }
+.ban-pct    { font-size:2.6rem; font-weight:900; line-height:1.05; }
+.ban-sub    { font-size:0.65rem; color:#888; margin-top:1px; }
+.ban-row    { display:flex; gap:6px; margin-top:8px; }
+.ban-chip   { flex:1; border-radius:6px; padding:5px 0; text-align:center; }
+.ban-chip-lbl { font-size:0.6rem; font-weight:600; color:#888; }
+.ban-chip-val { font-size:1.3rem; font-weight:800; line-height:1.1; }
+.proc-card  { border-radius:10px; padding:10px 14px 10px 14px; }
+.proc-name  { font-size:0.75rem; font-weight:700; letter-spacing:0.3px; margin-bottom:6px; }
+.proc-row   { display:flex; gap:6px; }
+.proc-chip  { flex:1; background:#f5f2ec; border-radius:6px; padding:6px 4px; text-align:center; }
+.proc-chip-lbl { font-size:0.58rem; font-weight:600; color:#888; }
+.proc-chip-val { font-size:1.5rem; font-weight:800; line-height:1.1; color:#2a2420; }
+.proc-arrow { display:flex; align-items:center; justify-content:center;
+              font-size:1.6rem; color:#c8b89a; padding:0 2px; }
+.ng-row     { display:flex; gap:8px; align-items:center; padding:6px 0;
+              border-bottom:1px solid #f0ebe0; }
+.ng-model   { flex:2; font-size:0.82rem; font-weight:600; color:#2a2420; }
+.ng-bar-wrap{ flex:3; background:#f0ebe0; border-radius:99px; height:7px; overflow:hidden; }
+.ng-bar     { height:100%; border-radius:99px; }
+.ng-pct     { flex:1; font-size:0.82rem; font-weight:700; text-align:right; }
+.ng-cnt     { flex:1; font-size:0.72rem; color:#888; text-align:right; }
+.rt-row     { display:flex; gap:0; padding:5px 0; border-bottom:1px solid #f5f2ec;
+              align-items:center; font-size:0.78rem; }
+.rt-chip    { font-size:0.65rem; font-weight:600; border-radius:4px;
+              padding:1px 6px; margin-right:6px; }
+</style>""", unsafe_allow_html=True)
+
+    db_all    = st.session_state.production_db.copy()
+    sch_all   = st.session_state.schedule_db.copy()
     today_str = datetime.now(KST).strftime('%Y-%m-%d')
 
-    # ── 상단 필터 ──────────────────────────────────────────────────
-    fc1, fc2, fc3 = st.columns([1.5, 1.5, 2])
-    period = fc1.radio("조회 기간", ["오늘", "이번 주", "이번 달"], horizontal=True, key="dash_period")
-    ban_filter = fc2.radio("반 선택", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="dash_ban")
+    # ── 상단 필터 (한 줄, 컴팩트) ─────────────────────────────────
+    st.markdown("<div class='db-title'>📡 생산 지표 관리</div>", unsafe_allow_html=True)
+    fc1, fc2, _sp = st.columns([2, 2.5, 3])
+    period     = fc1.radio("기간", ["오늘","이번 주","이번 달"], horizontal=True, key="dash_period")
+    ban_filter = fc2.radio("반", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="dash_ban")
 
-    # 날짜 범위 계산
     from datetime import date as _date, timedelta as _td
     _today = _date.today()
     if period == "오늘":
         date_from = date_to_d = today_str
     elif period == "이번 주":
         _mon = _today - _td(days=_today.weekday())
-        date_from = _mon.strftime('%Y-%m-%d')
-        date_to_d = today_str
+        date_from = _mon.strftime('%Y-%m-%d'); date_to_d = today_str
     else:
-        date_from = today_str[:7] + "-01"
-        date_to_d = today_str
+        date_from = today_str[:7] + "-01"; date_to_d = today_str
 
-    # 데이터 필터링
     if not db_all.empty:
-        db_f = db_all[db_all['시간'].str[:10] >= date_from] if '시간' in db_all.columns else db_all
+        db_f = db_all[db_all['시간'].str[:10] >= date_from]
         db_f = db_f[db_f['시간'].str[:10] <= date_to_d]
-        if ban_filter != "전체":
-            db_f = db_f[db_f['반'] == ban_filter]
+        if ban_filter != "전체": db_f = db_f[db_f['반'] == ban_filter]
     else:
-        db_f = db_all
+        db_f = db_all.copy()
 
     if not sch_all.empty:
         sch_f = sch_all[(sch_all['날짜'] >= date_from) & (sch_all['날짜'] <= date_to_d)]
-        if ban_filter != "전체":
-            sch_f = sch_f[sch_f['반'] == ban_filter]
+        if ban_filter != "전체": sch_f = sch_f[sch_f['반'] == ban_filter]
     else:
-        sch_f = sch_all
+        sch_f = sch_all.copy()
 
-    st.divider()
+    def _qty(df, col='조립수'):
+        if df.empty: return 0
+        return int(df[col].apply(lambda x: int(float(x)) if str(x) not in ('','nan') else 0).sum())
 
-    # ══════════════════════════════════════════════════════════════
-    # [A] 핵심 KPI 지표
-    # ══════════════════════════════════════════════════════════════
     total_in   = len(db_f) if not db_f.empty else 0
-    total_done = len(db_f[db_f['라인']=='포장 라인'][db_f['상태']=='완료']) if not db_f.empty else 0
+    total_done = len(db_f[(db_f['라인']=='포장 라인') & (db_f['상태']=='완료')]) if not db_f.empty else 0
     total_wip  = len(db_f[db_f['상태']=='진행 중']) if not db_f.empty else 0
     total_ng   = len(db_f[db_f['상태'].str.contains('불량', na=False)]) if not db_f.empty else 0
-
-    # 계획 수량 합계 (일정 조립수 기준)
-    plan_qty = int(sch_f['조립수'].apply(lambda x: int(float(x)) if str(x) not in ('','nan') else 0).sum()) if not sch_f.empty else 0
+    plan_qty   = _qty(sch_f)
     achieve_pct = round(total_done / plan_qty * 100, 1) if plan_qty > 0 else 0
     defect_pct  = round(total_ng / total_in * 100, 1) if total_in > 0 else 0
 
-    st.markdown(f"<div class='section-title'>📊 핵심 지표 — {period} ({date_from} ~ {date_to_d})</div>", unsafe_allow_html=True)
-    k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("📋 계획 수량",   f"{plan_qty:,} 대")
-    k2.metric("✅ 최종 생산",   f"{total_done:,} 대")
-    k3.metric("🎯 달성률",      f"{achieve_pct} %",
-              delta=f"{'▲' if achieve_pct >= 100 else '▼'} {'초과달성' if achieve_pct >= 100 else '미달'}",
-              delta_color="normal" if achieve_pct >= 100 else "inverse")
-    k4.metric("⚡ 진행 중",     f"{total_wip:,} 대")
-    k5.metric("🚨 불량률",      f"{defect_pct} %",
-              delta=f"{total_ng}건", delta_color="inverse" if total_ng > 0 else "off")
-
-    st.divider()
+    # ══════════════════════════════════════════════════════════════
+    # [A] KPI 5개 — 한 줄
+    # ══════════════════════════════════════════════════════════════
+    st.markdown("<div class='db-section' style='background:#4a4540;'>▪ 핵심 지표</div>", unsafe_allow_html=True)
+    k = st.columns(5)
+    kpi_data = [
+        ("계획", f"{plan_qty:,}", "대", "#2471a3"),
+        ("생산 완료", f"{total_done:,}", "대", "#1e8449"),
+        ("달성률", f"{achieve_pct}", "%", "#1e8449" if achieve_pct >= 100 else "#d68910" if achieve_pct >= 70 else "#c0392b"),
+        ("진행 중", f"{total_wip:,}", "대", "#2471a3"),
+        ("불량률", f"{defect_pct}", "%", "#c0392b" if defect_pct > 3 else "#d68910" if defect_pct > 0 else "#1e8449"),
+    ]
+    for col, (lbl, val, unit, color) in zip(k, kpi_data):
+        col.markdown(f"""
+<div class='kpi-card'>
+  <div class='kpi-lbl'>{lbl}</div>
+  <div class='kpi-val' style='color:{color};'>{val}<span style='font-size:1rem;font-weight:600;color:#aaa;margin-left:2px;'>{unit}</span></div>
+  <div class='kpi-sub'>{date_from} ~ {date_to_d}</div>
+</div>""", unsafe_allow_html=True)
 
     # ══════════════════════════════════════════════════════════════
-    # [B] 반별 달성률
+    # [B+C] 반별 달성률 + 공정 병목 — 한 줄 (4+3 비율)
     # ══════════════════════════════════════════════════════════════
-    st.markdown("<div class='section-title'>🏭 반별 달성률</div>", unsafe_allow_html=True)
-    ban_cols = st.columns(len(PRODUCTION_GROUPS))
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+    left_col, right_col = st.columns([4, 3])
+
     BAN_COLORS_D = {"제조1반": "#2471a3", "제조2반": "#1e8449", "제조3반": "#6c3483"}
 
-    for bi, ban in enumerate(PRODUCTION_GROUPS):
-        ban_db  = db_f[db_f['반'] == ban] if not db_f.empty else pd.DataFrame()
-        ban_sch = sch_f[sch_f['반'] == ban] if not sch_f.empty else pd.DataFrame()
-        b_plan  = int(ban_sch['조립수'].apply(lambda x: int(float(x)) if str(x) not in ('','nan') else 0).sum()) if not ban_sch.empty else 0
-        b_done  = len(ban_db[(ban_db['라인']=='포장 라인') & (ban_db['상태']=='완료')]) if not ban_db.empty else 0
-        b_wip   = len(ban_db[ban_db['상태']=='진행 중']) if not ban_db.empty else 0
-        b_ng    = len(ban_db[ban_db['상태'].str.contains('불량', na=False)]) if not ban_db.empty else 0
-        b_pct   = round(b_done / b_plan * 100, 1) if b_plan > 0 else 0
-        b_color = BAN_COLORS_D.get(ban, "#888")
+    with left_col:
+        st.markdown("<div class='db-section' style='background:#2471a3;'>🏭 반별 달성률</div>", unsafe_allow_html=True)
+        bc = st.columns(3)
+        for bi, ban in enumerate(PRODUCTION_GROUPS):
+            bdb  = db_f[db_f['반']==ban] if not db_f.empty else pd.DataFrame()
+            bsch = sch_f[sch_f['반']==ban] if not sch_f.empty else pd.DataFrame()
+            b_plan = _qty(bsch)
+            b_done = len(bdb[(bdb['라인']=='포장 라인')&(bdb['상태']=='완료')]) if not bdb.empty else 0
+            b_wip  = len(bdb[bdb['상태']=='진행 중']) if not bdb.empty else 0
+            b_ng   = len(bdb[bdb['상태'].str.contains('불량',na=False)]) if not bdb.empty else 0
+            b_pct  = round(b_done / b_plan * 100, 1) if b_plan > 0 else 0
+            clr    = BAN_COLORS_D.get(ban, "#888")
+            bar_w  = min(int(b_pct), 100)
+            pct_clr = "#1e8449" if b_pct >= 100 else "#d68910" if b_pct >= 70 else "#c0392b"
 
-        with ban_cols[bi]:
-            with st.container(border=True):
-                st.markdown(f"**{ban}**")
-                st.progress(min(b_pct, 100) / 100)
-                st.metric("달성률", f"{b_pct}%", delta=f"계획 {b_plan}대 → 완료 {b_done}대")
-                sc1, sc2, sc3 = st.columns(3)
-                sc1.metric("진행", f"{b_wip}대")
-                sc2.metric("완료", f"{b_done}대")
-                sc3.metric("불량", f"{b_ng}건", delta_color="inverse" if b_ng > 0 else "off")
+            with bc[bi]:
+                st.markdown(f"""
+<div class='ban-card' style='background:{clr}0d; border:1.5px solid {clr}44;'>
+  <div class='ban-name' style='color:{clr};'>{ban}</div>
+  <div style='background:#e8e2d8;border-radius:99px;height:5px;margin-bottom:6px;overflow:hidden;'>
+    <div style='background:{clr};width:{bar_w}%;height:100%;border-radius:99px;'></div>
+  </div>
+  <div class='ban-pct' style='color:{pct_clr};'>{b_pct}<span style='font-size:1.1rem;'>%</span></div>
+  <div class='ban-sub'>계획 {b_plan}대 → 완료 {b_done}대</div>
+  <div class='ban-row'>
+    <div class='ban-chip' style='background:#ddeeff;'>
+      <div class='ban-chip-lbl'>진행</div>
+      <div class='ban-chip-val' style='color:#2471a3;'>{b_wip}</div>
+    </div>
+    <div class='ban-chip' style='background:#d4f0e2;'>
+      <div class='ban-chip-lbl'>완료</div>
+      <div class='ban-chip-val' style='color:#1e8449;'>{b_done}</div>
+    </div>
+    <div class='ban-chip' style='background:{"#fde8e7" if b_ng>0 else "#f5f5f5"};'>
+      <div class='ban-chip-lbl'>불량</div>
+      <div class='ban-chip-val' style='color:{"#c0392b" if b_ng>0 else "#aaa"};'>{b_ng}</div>
+    </div>
+  </div>
+</div>""", unsafe_allow_html=True)
 
-    st.divider()
+    with right_col:
+        st.markdown("<div class='db-section' style='background:#7a6f65;'>🔄 공정 흐름</div>", unsafe_allow_html=True)
+        lines_info = [
+            ("🔧", "조립", "#7eb8e8"),
+            ("🔍", "검사", "#7ec8a0"),
+            ("📦", "포장", "#c8a07e"),
+        ]
+        line_names_full = ["조립 라인", "검사 라인", "포장 라인"]
+        proc_html = "<div style='display:flex;align-items:stretch;gap:0;'>"
+        for pi, (emoji, name, clr) in enumerate(lines_info):
+            ldf    = db_f[db_f['라인']==line_names_full[pi]] if not db_f.empty else pd.DataFrame()
+            l_tot  = len(ldf)
+            l_done = len(ldf[ldf['상태']=='완료']) if not ldf.empty else 0
+            l_wip  = len(ldf[ldf['상태']=='진행 중']) if not ldf.empty else 0
+            l_ng   = len(ldf[ldf['상태'].str.contains('불량',na=False)]) if not ldf.empty else 0
+            l_wait = len(db_f[(db_f['라인']==line_names_full[pi-1])&(db_f['상태']=='완료')]) if pi>0 and not db_f.empty else 0
+            btl_flag = "⚠" if l_wip > 5 else ""
+            wip_clr = "#c0392b" if l_wip > 5 else "#2471a3"
 
-    # ══════════════════════════════════════════════════════════════
-    # [C] 공정별 병목 현황 (조립 → 검사 → 포장 흐름)
-    # ══════════════════════════════════════════════════════════════
-    st.markdown("<div class='section-title'>🔄 공정별 병목 현황</div>", unsafe_allow_html=True)
-
-    lines = ["조립 라인", "검사 라인", "포장 라인"]
-    line_emoji = {"조립 라인": "🔧", "검사 라인": "🔍", "포장 라인": "📦"}
-    line_colors = {"조립 라인": "#7eb8e8", "검사 라인": "#7ec8a0", "포장 라인": "#c8a07e"}
-
-    if not db_f.empty:
-        pc1, pc2, pc3, pc4, pc5 = st.columns([2, 0.3, 2, 0.3, 2])
-        pcols = [pc1, pc3, pc5]
-        arrow_cols = [pc2, pc4]
-
-        for i, line in enumerate(lines):
-            ldf      = db_f[db_f['라인'] == line]
-            l_total  = len(ldf)
-            l_done   = len(ldf[ldf['상태'] == '완료'])
-            l_wip    = len(ldf[ldf['상태'] == '진행 중'])
-            l_ng     = len(ldf[ldf['상태'].str.contains('불량', na=False)])
-            l_wait   = len(db_f[(db_f['라인'] == (lines[i-1] if i > 0 else line)) & (db_f['상태'] == '완료')]) if i > 0 else 0
-            lcolor   = line_colors[line]
-
-            with pcols[i]:
-                with st.container(border=True):
-                    st.markdown(f"#### {line_emoji[line]} {line}")
-                    m1, m2 = st.columns(2)
-                    m1.metric("투입", f"{l_total}대")
-                    m2.metric("완료", f"{l_done}대")
-                    m3, m4 = st.columns(2)
-                    m3.metric("진행 중", f"{l_wip}대",
-                              delta="⚠️ 병목" if l_wip > 5 else None,
-                              delta_color="inverse" if l_wip > 5 else "off")
-                    m4.metric("불량", f"{l_ng}건",
-                              delta_color="inverse" if l_ng > 0 else "off")
-                    if i > 0:
-                        st.caption(f"📥 이전 공정 대기: {l_wait}대")
-
-            if i < 2:
-                arrow_cols[i].markdown("<div style='text-align:center; font-size:2rem; padding-top:60px; color:#c8a07e;'>▶</div>", unsafe_allow_html=True)
-    else:
-        st.info("조회 기간 내 생산 데이터가 없습니다.")
-
-    st.divider()
-
-    # ══════════════════════════════════════════════════════════════
-    # [D] 모델별 불량률 분석
-    # ══════════════════════════════════════════════════════════════
-    st.markdown("<div class='section-title'>📉 모델별 불량률 분석</div>", unsafe_allow_html=True)
-
-    if not db_f.empty:
-        ng_df = db_f.groupby('모델').agg(
-            투입=('시리얼', 'count'),
-            불량=('상태', lambda x: x.str.contains('불량', na=False).sum())
-        ).reset_index()
-        ng_df['불량률(%)'] = (ng_df['불량'] / ng_df['투입'] * 100).round(1)
-        ng_df = ng_df.sort_values('불량률(%)', ascending=False)
-
-        # 차트 + 테이블
-        ch1, ch2 = st.columns([3, 2])
-        with ch1:
-            import plotly.express as px
-            fig_ng = px.bar(
-                ng_df, x='모델', y='불량률(%)',
-                color='불량률(%)',
-                color_continuous_scale=["#7ec8a0", "#f0c878", "#e8908a"],
-                title="모델별 불량률 (%)",
-                template="plotly_white",
-                text='불량률(%)'
-            )
-            fig_ng.update_traces(texttemplate='%{text}%', textposition='outside')
-            fig_ng.update_layout(showlegend=False, coloraxis_showscale=False,
-                                 margin=dict(t=40, b=60), height=320)
-            st.plotly_chart(fig_ng, use_container_width=True)
-        with ch2:
-            st.dataframe(
-                ng_df[['모델','투입','불량','불량률(%)']].reset_index(drop=True),
-                use_container_width=True, hide_index=True
-            )
-    else:
-        st.info("조회 기간 내 데이터가 없습니다.")
-
-    st.divider()
+            proc_html += f"""
+<div class='proc-card' style='flex:1;background:{clr}18;border:1.5px solid {clr}55;border-radius:10px;'>
+  <div class='proc-name' style='color:{clr[:-2] if len(clr)>7 else clr};'>{emoji} {name} {btl_flag}</div>
+  <div class='proc-row'>
+    <div class='proc-chip'><div class='proc-chip-lbl'>투입</div><div class='proc-chip-val'>{l_tot}</div></div>
+    <div class='proc-chip'><div class='proc-chip-lbl'>완료</div><div class='proc-chip-val' style='color:#1e8449;'>{l_done}</div></div>
+  </div>
+  <div class='proc-row' style='margin-top:4px;'>
+    <div class='proc-chip'><div class='proc-chip-lbl'>진행</div><div class='proc-chip-val' style='color:{wip_clr};'>{l_wip}</div></div>
+    <div class='proc-chip'><div class='proc-chip-lbl'>불량</div><div class='proc-chip-val' style='color:{"#c0392b" if l_ng>0 else "#aaa"};'>{l_ng}</div></div>
+  </div>
+  {"<div style='font-size:0.6rem;color:#888;margin-top:4px;'>📥 대기 "+str(l_wait)+"대</div>" if pi>0 else ""}
+</div>"""
+            if pi < 2:
+                proc_html += "<div class='proc-arrow'>▶</div>"
+        proc_html += "</div>"
+        st.markdown(proc_html, unsafe_allow_html=True)
 
     # ══════════════════════════════════════════════════════════════
-    # [E] 실시간 진행 중 현황
+    # [D+E] 불량 분석 + 실시간 — 한 줄 (3+4 비율)
     # ══════════════════════════════════════════════════════════════
-    st.markdown("<div class='section-title'>⚡ 실시간 진행 중 현황</div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+    ng_col, rt_col = st.columns([3, 4])
 
-    rt_df = st.session_state.production_db.copy()
-    if ban_filter != "전체":
-        rt_df = rt_df[rt_df['반'] == ban_filter]
-    rt_wip = rt_df[rt_df['상태'] == '진행 중'] if not rt_df.empty else pd.DataFrame()
+    with ng_col:
+        st.markdown("<div class='db-section' style='background:#c0392b;'>📉 모델별 불량 분석</div>", unsafe_allow_html=True)
+        if not db_f.empty:
+            ng_df = db_f.groupby('모델').agg(
+                투입=('시리얼','count'),
+                불량=('상태', lambda x: x.str.contains('불량',na=False).sum())
+            ).reset_index()
+            ng_df['불량률'] = (ng_df['불량'] / ng_df['투입'] * 100).round(1)
+            ng_df = ng_df[ng_df['불량'] > 0].sort_values('불량률', ascending=False)
+            if not ng_df.empty:
+                max_pct = ng_df['불량률'].max() or 1
+                ng_html = ""
+                for _, row in ng_df.iterrows():
+                    bar_w = int(row['불량률'] / max_pct * 100)
+                    bar_c = "#c0392b" if row['불량률'] > 10 else "#d68910" if row['불량률'] > 5 else "#e8c97a"
+                    ng_html += f"""
+<div class='ng-row'>
+  <div class='ng-model'>{row['모델']}</div>
+  <div class='ng-bar-wrap'><div class='ng-bar' style='width:{bar_w}%;background:{bar_c};'></div></div>
+  <div class='ng-pct' style='color:{bar_c};'>{row['불량률']}%</div>
+  <div class='ng-cnt'>{int(row['불량'])}건</div>
+</div>"""
+                st.markdown(ng_html, unsafe_allow_html=True)
+            else:
+                st.success("✅ 불량 없음")
+        else:
+            st.info("데이터 없음")
 
-    if not rt_wip.empty:
-        rt_wip = rt_wip.sort_values('시간', ascending=False)
-        h0,h1,h2,h3,h4,h5 = st.columns([1.2, 1.5, 2, 1.5, 1.5, 1.5])
-        for col, txt in zip([h0,h1,h2,h3,h4,h5], ["반","라인","모델","품목코드","시리얼","시작 시간"]):
-            col.markdown(f"**{txt}**")
-        for _, row in rt_wip.iterrows():
-            r0,r1,r2,r3,r4,r5 = st.columns([1.2, 1.5, 2, 1.5, 1.5, 1.5])
-            r0.write(row.get('반',''))
-            r1.write(row.get('라인',''))
-            r2.write(row.get('모델',''))
-            r3.write(row.get('품목코드',''))
-            r4.write(f"`{row.get('시리얼','')}`")
-            r5.write(row.get('시간','')[:16] if row.get('시간') else '')
-    else:
-        st.info("현재 진행 중인 작업이 없습니다.")
+    with rt_col:
+        st.markdown("<div class='db-section' style='background:#1e8449;'>⚡ 실시간 진행 중</div>", unsafe_allow_html=True)
+        rt_df = st.session_state.production_db.copy()
+        if ban_filter != "전체": rt_df = rt_df[rt_df['반'] == ban_filter]
+        rt_wip = rt_df[rt_df['상태']=='진행 중'].sort_values('시간', ascending=False) if not rt_df.empty else pd.DataFrame()
 
-    st.divider()
+        if not rt_wip.empty:
+            BAN_BG = {"제조1반":"#ddeeff","제조2반":"#d4f0e2","제조3반":"#ede0f5"}
+            BAN_CL = {"제조1반":"#2471a3","제조2반":"#1e8449","제조3반":"#6c3483"}
+            LINE_BG = {"조립 라인":"#fff3d4","검사 라인":"#d4f0e2","포장 라인":"#fde8d4"}
+            rt_html = "<div style='font-size:0.7rem;font-weight:600;color:#aaa;display:flex;gap:0;padding:0 0 4px 0;border-bottom:2px solid #e8e2d8;margin-bottom:2px;'><span style='flex:1.2;'>반</span><span style='flex:1.5;'>라인</span><span style='flex:2.5;'>모델</span><span style='flex:2;'>시리얼</span><span style='flex:1.8;'>시작</span></div>"
+            for _, row in rt_wip.iterrows():
+                ban_v  = row.get('반','')
+                line_v = row.get('라인','')
+                bbg = BAN_BG.get(ban_v, "#f0f0f0"); bcl = BAN_CL.get(ban_v, "#666")
+                lbg = LINE_BG.get(line_v, "#f0f0f0")
+                rt_html += f"""
+<div class='rt-row'>
+  <span style='flex:1.2;'><span class='rt-chip' style='background:{bbg};color:{bcl};'>{ban_v[:3]}</span></span>
+  <span style='flex:1.5;'><span class='rt-chip' style='background:{lbg};color:#555;'>{line_v[:2]}</span></span>
+  <span style='flex:2.5;font-weight:600;'>{row.get('모델','')}</span>
+  <span style='flex:2;color:#5a5048;font-family:monospace;'>{row.get('시리얼','')}</span>
+  <span style='flex:1.8;color:#aaa;'>{str(row.get('시간',''))[:16]}</span>
+</div>"""
+            st.markdown(rt_html, unsafe_allow_html=True)
+        else:
+            st.info("현재 진행 중인 작업 없음")
 
     # ══════════════════════════════════════════════════════════════
     # [F] 계획 수량 입력 (관리자 전용)
     # ══════════════════════════════════════════════════════════════
     if st.session_state.user_role in CALENDAR_EDIT_ROLES:
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
         with st.expander("⚙️ 계획 수량 입력 (달성률 계산 기준)", expanded=False):
             st.caption("반/날짜/모델별 목표 수량을 입력하면 달성률 계산에 반영됩니다.")
             pl1, pl2, pl3, pl4 = st.columns([1.5, 1.5, 2.5, 1])
             p_ban   = pl1.selectbox("반", PRODUCTION_GROUPS, key="plan_ban")
             p_date  = pl2.date_input("날짜", value=_today, key="plan_date")
-            # 해당 반 모델 목록
             p_models = st.session_state.group_master_models.get(p_ban, [])
             p_model = pl3.selectbox("모델명", p_models if p_models else ["(모델 없음)"], key="plan_model")
             p_qty   = pl4.number_input("계획 수량", min_value=0, step=1, key="plan_qty")
@@ -1888,6 +1937,7 @@ elif curr_l == "생산 지표 관리":
                         st.rerun()
                 else:
                     st.warning("모델을 선택해주세요.")
+
 
 # ── 불량 공정 ────────────────────────────────────────────────────
 elif curr_l == "불량 공정":
