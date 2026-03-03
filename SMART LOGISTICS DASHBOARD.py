@@ -686,7 +686,7 @@ def dialog_view_day(selected_date: str):
                         if bc1.button("✏️", key=f"mod_{row_id}", help="수정"):
                             st.session_state.cal_action      = "edit"
                             st.session_state.cal_action_data = int(row_id)
-                            st.rerun()
+                            st.rerun()  # dialog_view_day는 edit로 교체되므로 자동 닫힘
                         if bc2.button("🗑️", key=f"del_{row_id}", help="삭제"):
                             st.session_state[confirm_key] = True
                             st.rerun()
@@ -798,6 +798,11 @@ def dialog_edit_schedule(sch_id: int):
             st.session_state.schedule_db = load_schedule()
             st.session_state.cal_action  = None
             st.rerun()
+    # 폼 밖 닫기 버튼 - 누르면 cal_action 초기화 후 닫힘
+    if st.button("✖ 닫기", key="edit_close_btn", use_container_width=True):
+        st.session_state.cal_action      = None
+        st.session_state.cal_action_data = None
+        st.rerun()
 
 # =================================================================
 # 5. 세션 상태 초기화
@@ -1285,10 +1290,16 @@ elif curr_l == "조립 라인":
     # ── 오늘 일정 알림 & 팝업 ─────────────────────────────────
     today_str   = datetime.now(KST).strftime('%Y-%m-%d')
     sch_all     = st.session_state.schedule_db
-    today_sch   = sch_all[
-        (sch_all['날짜'] == today_str) &
-        (sch_all['반'] == curr_g)
-    ] if not sch_all.empty else pd.DataFrame()
+    # 조립 라인은 조립계획만, 포장 라인은 포장계획만 표시
+    LINE_SCH_FILTER = {"조립 라인": "조립계획", "포장 라인": "포장계획"}
+    sch_cat_filter  = LINE_SCH_FILTER.get(curr_l)
+    if not sch_all.empty:
+        _mask = (sch_all['날짜'] == today_str) & (sch_all['반'] == curr_g)
+        if sch_cat_filter:
+            _mask = _mask & (sch_all['카테고리'] == sch_cat_filter)
+        today_sch = sch_all[_mask]
+    else:
+        today_sch = pd.DataFrame()
 
     # 변경 감지: 마지막 확인 이후 등록된 일정
     last_seen_key = f"sch_last_seen_{curr_g}"
@@ -1409,6 +1420,9 @@ elif curr_l == "조립 라인":
 
     # ── 생산 이력 테이블 ──────────────────────────────────────────
     if not f_df.empty:
+        sn_search = st.text_input("🔍 시리얼 검색", placeholder="S/N 일부 입력...", key=f"sn_search_{curr_g}")
+        if sn_search.strip():
+            f_df = f_df[f_df['시리얼'].str.contains(sn_search.strip(), case=False, na=False)]
         h = st.columns([2.2, 1.5, 1.5, 1.8, 4])
         for col, txt in zip(h, ["기록 시간","모델","품목","시리얼","현장 제어"]):
             col.write(f"**{txt}**")
@@ -1418,13 +1432,31 @@ elif curr_l == "조립 라인":
             r[2].write(row['품목코드']); r[3].write(f"`{row['시리얼']}`")
             with r[4]:
                 if row['상태'] in ["진행 중", "수리 완료(재투입)"]:
-                    b1, b2 = st.columns(2)
-                    if b1.button("조립 완료", key=f"ok_{idx}"):
-                        update_row(row['시리얼'], {'상태':'완료','시간':get_now_kst_str()})
-                        st.session_state.production_db = load_realtime_ledger(); st.rerun()
-                    if b2.button("🚫불량", key=f"ng_{idx}"):
-                        update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str()})
-                        st.session_state.production_db = load_realtime_ledger(); st.rerun()
+                    ck_ok = f"ck_ok_{idx}"; ck_ng = f"ck_ng_{idx}"
+                    if not st.session_state.get(ck_ok) and not st.session_state.get(ck_ng):
+                        b1, b2 = st.columns(2)
+                        if b1.button("조립 완료", key=f"ok_{idx}"):
+                            st.session_state[ck_ok] = True; st.rerun()
+                        if b2.button("🚫불량", key=f"ng_{idx}"):
+                            st.session_state[ck_ng] = True; st.rerun()
+                    elif st.session_state.get(ck_ok):
+                        st.warning(f"✅ [{row['시리얼']}] 조립 완료 처리하시겠습니까?")
+                        y1, y2 = st.columns(2)
+                        if y1.button("확인", key=f"ok_y_{idx}", type="primary", use_container_width=True):
+                            update_row(row['시리얼'], {'상태':'완료','시간':get_now_kst_str()})
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.session_state[ck_ok] = False; st.rerun()
+                        if y2.button("취소", key=f"ok_n_{idx}", use_container_width=True):
+                            st.session_state[ck_ok] = False; st.rerun()
+                    elif st.session_state.get(ck_ng):
+                        st.error(f"🚫 [{row['시리얼']}] 불량 처리하시겠습니까?")
+                        y1, y2 = st.columns(2)
+                        if y1.button("확인", key=f"ng_y_{idx}", type="primary", use_container_width=True):
+                            update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str()})
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.session_state[ck_ng] = False; st.rerun()
+                        if y2.button("취소", key=f"ng_n_{idx}", use_container_width=True):
+                            st.session_state[ck_ng] = False; st.rerun()
                 else:
                     if "불량" in str(row['상태']):
                         st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #e8908a;'>🚫 {row['상태']}</div>", unsafe_allow_html=True)
@@ -1438,17 +1470,25 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     st.markdown(f"<h2 class='centered-title'>🔍 {curr_g} {curr_l} 현황</h2>", unsafe_allow_html=True)
     prev = "조립 라인" if curr_l == "검사 라인" else "검사 라인"
 
-    with st.container(border=True):
-        st.markdown(f"#### 📥 이전 공정({prev}) 완료 입고 대기")
-        db_s      = st.session_state.production_db
-        wait_list = db_s[(db_s['반']==curr_g)&(db_s['라인']==prev)&(db_s['상태']=="완료")]
-        if not wait_list.empty:
-            w_cols = st.columns(4)
-            for i, (idx, row) in enumerate(wait_list.iterrows()):
-                if w_cols[i%4].button(f"승인: {row['시리얼']}", key=f"in_{idx}"):
-                    st.session_state.confirm_target = row['시리얼']; st.rerun()
-        else:
-            st.info("입고 대기 물량 없음")
+    db_s = st.session_state.production_db
+    wait_list = db_s[(db_s['반']==curr_g)&(db_s['라인']==prev)&(db_s['상태']=="완료")]
+    st.markdown(f"<div class='section-title'>📥 이전 공정({prev}) 완료 — 입고 대기</div>", unsafe_allow_html=True)
+    if not wait_list.empty:
+        # 모델/품목별 수량 카운트 (조립라인 수량현황 스타일)
+        grp_w = wait_list.groupby(['모델','품목코드'])
+        for (w_model, w_pn), w_gdf in grp_w:
+            w_total = len(w_gdf)
+            with st.container(border=True):
+                wc1, wc2 = st.columns([3, 1])
+                wc1.markdown(f"**{w_model}**" + (f" `{w_pn}`" if w_pn else ""))
+                wc2.metric("대기 수량", f"{w_total}대")
+                # 개별 시리얼 승인 버튼
+                sn_cols = st.columns(min(4, w_total))
+                for i, (idx, row) in enumerate(w_gdf.iterrows()):
+                    if sn_cols[i % min(4, w_total)].button(f"📥 {row['시리얼']}", key=f"in_{idx}", use_container_width=True):
+                        st.session_state.confirm_target = row['시리얼']; st.rerun()
+    else:
+        st.info("입고 대기 물량 없음")
 
     st.divider()
     f_df = db_s[(db_s['반']==curr_g)&(db_s['라인']==curr_l)]
@@ -1462,14 +1502,32 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             r[2].write(row['품목코드']); r[3].write(f"`{row['시리얼']}`")
             with r[4]:
                 if row['상태'] in ["진행 중", "수리 완료(재투입)"]:
-                    c1, c2 = st.columns(2)
-                    btn = "검사 합격" if curr_l == "검사 라인" else "포장 완료"
-                    if c1.button(btn, key=f"ok_{idx}"):
-                        update_row(row['시리얼'], {'상태':'완료','시간':get_now_kst_str()})
-                        st.session_state.production_db = load_realtime_ledger(); st.rerun()
-                    if c2.button("🚫불량", key=f"ng_{idx}"):
-                        update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str()})
-                        st.session_state.production_db = load_realtime_ledger(); st.rerun()
+                    btn_lbl = "검사 합격" if curr_l == "검사 라인" else "포장 완료"
+                    qck_ok = f"qck_ok_{idx}"; qck_ng = f"qck_ng_{idx}"
+                    if not st.session_state.get(qck_ok) and not st.session_state.get(qck_ng):
+                        c1, c2 = st.columns(2)
+                        if c1.button(btn_lbl, key=f"ok_{idx}"):
+                            st.session_state[qck_ok] = True; st.rerun()
+                        if c2.button("🚫불량", key=f"ng_{idx}"):
+                            st.session_state[qck_ng] = True; st.rerun()
+                    elif st.session_state.get(qck_ok):
+                        st.warning(f"✅ [{row['시리얼']}] {btn_lbl} 처리하시겠습니까?")
+                        y1, y2 = st.columns(2)
+                        if y1.button("확인", key=f"qok_y_{idx}", type="primary", use_container_width=True):
+                            update_row(row['시리얼'], {'상태':'완료','시간':get_now_kst_str()})
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.session_state[qck_ok] = False; st.rerun()
+                        if y2.button("취소", key=f"qok_n_{idx}", use_container_width=True):
+                            st.session_state[qck_ok] = False; st.rerun()
+                    elif st.session_state.get(qck_ng):
+                        st.error(f"🚫 [{row['시리얼']}] 불량 처리하시겠습니까?")
+                        y1, y2 = st.columns(2)
+                        if y1.button("확인", key=f"qng_y_{idx}", type="primary", use_container_width=True):
+                            update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str()})
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.session_state[qck_ng] = False; st.rerun()
+                        if y2.button("취소", key=f"qng_n_{idx}", use_container_width=True):
+                            st.session_state[qck_ng] = False; st.rerun()
                 else:
                     if "불량" in str(row['상태']):
                         st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #e8908a;'>🚫 {row['상태']}</div>", unsafe_allow_html=True)
@@ -2290,4 +2348,3 @@ elif curr_l == "마스터 관리":
 # =================================================================
 # [ PMS v22.3 종료 ]
 # =================================================================
-
