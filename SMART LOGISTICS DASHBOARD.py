@@ -22,11 +22,9 @@ st.set_page_config(
 
 KST = timezone(timedelta(hours=9))
 _refresh_count = st_autorefresh(interval=30000, key="pms_auto_refresh")
-# autorefresh 트리거 시 열려있는 캘린더 다이얼로그 자동 닫기
-if _refresh_count and _refresh_count != st.session_state.get("_last_refresh_count", 0):
+# autorefresh 카운터만 기록 - 팝업은 사용자가 직접 닫을 때까지 유지
+if _refresh_count:
     st.session_state["_last_refresh_count"] = _refresh_count
-    st.session_state["cal_action"]           = None
-    st.session_state["cal_action_data"]      = None
 
 PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
 CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower", "schedule_manager"]
@@ -615,61 +613,73 @@ def dialog_view_day(selected_date: str):
     st.markdown(f"### 📆 {selected_date}  <span style='font-size:0.85rem; color:#8a7f72; font-weight:normal;'>총 {len(day_data)}건</span>", unsafe_allow_html=True)
 
     if not day_data.empty:
-        # 카테고리별로 그룹핑해서 표시
-        for cat in day_data['카테고리'].unique():
-            color    = SCHEDULE_COLORS.get(str(cat), "#888")
-            cat_rows = day_data[day_data['카테고리'] == cat]
+        # 반별 색상
+        BAN_COLORS = {"제조1반": "#2471a3", "제조2반": "#1e8449", "제조3반": "#6c3483"}
 
-            # 카테고리 헤더
+        # 제조1반 → 제조2반 → 제조3반 순서로 그룹핑
+        for ban in PRODUCTION_GROUPS:
+            ban_rows = day_data[day_data['반'] == ban]
+            if ban_rows.empty:
+                continue
+
+            ban_color = BAN_COLORS.get(ban, "#7a6f65")
+            ban_bg    = ban_color + "12"
+
+            # 반 헤더
             st.markdown(
-                f"<div style='background:{color}18; border-left:4px solid {color}; "
-                f"padding:6px 12px; border-radius:4px; margin:10px 0 6px 0;'>"
-                f"<span style='color:{color}; font-weight:bold; font-size:0.9rem;'>{cat}</span>"
-                f"<span style='color:#8a7f72; font-size:0.8rem; margin-left:8px;'>{len(cat_rows)}건</span>"
+                f"<div style='background:{ban_bg}; border-left:4px solid {ban_color}; "
+                f"padding:7px 14px; border-radius:5px; margin:12px 0 4px 0;'>"
+                f"<span style='color:{ban_color}; font-weight:bold; font-size:0.92rem;'>🏭 {ban}</span>"
+                f"<span style='color:#8a7f72; font-size:0.8rem; margin-left:8px;'>{len(ban_rows)}건</span>"
                 f"</div>",
                 unsafe_allow_html=True
             )
 
             # 표 헤더
-            h0,h1,h2,h3,h4,h5 = st.columns([1.2, 2.5, 1.5, 1.5, 2.0, 1.0] if can_edit else [1.2, 2.5, 1.5, 1.5, 2.5, 0.1])
-            for col, label in zip([h0,h1,h2,h3,h4], ["반","모델명","P/N","조립수","출하계획"]):
-                col.markdown(f"<p style='color:#8a7f72; font-size:0.75rem; font-weight:bold; margin:0; border-bottom:1px solid #e0d8c8; padding-bottom:3px;'>{label}</p>", unsafe_allow_html=True)
-            if can_edit:
-                h5.markdown("<p style='color:#8a7f72; font-size:0.75rem; font-weight:bold; margin:0; border-bottom:1px solid #e0d8c8; padding-bottom:3px;'>관리</p>", unsafe_allow_html=True)
+            col_w = [1.8, 2.8, 1.5, 1.2, 1.8, 0.9] if can_edit else [1.8, 2.8, 1.5, 1.2, 2.2]
+            hdrs  = ["카테고리", "모델명", "P/N", "조립수", "출하계획"] + (["관리"] if can_edit else [])
+            hcols = st.columns(col_w)
+            for hc, hl in zip(hcols, hdrs):
+                hc.markdown(
+                    f"<p style='color:#8a7f72; font-size:0.72rem; font-weight:bold; "
+                    f"margin:0 0 2px 0; padding-bottom:3px; border-bottom:1px solid #e0d8c8;'>{hl}</p>",
+                    unsafe_allow_html=True
+                )
 
-            # 행 데이터
-            for _, r in cat_rows.iterrows():
+            # 행 데이터 (카테고리 정렬)
+            for _, r in ban_rows.sort_values('카테고리').iterrows():
                 row_id  = r.get('id', None)
-                ban_v   = str(r.get('반',''))
-                model_v = str(r.get('모델명',''))
-                pn_v    = str(r.get('pn',''))
+                cat_v   = str(r.get('카테고리', '기타'))
+                cat_color = SCHEDULE_COLORS.get(cat_v, "#888")
+                model_v = str(r.get('모델명', ''))
+                pn_v    = str(r.get('pn', ''))
                 qty_v   = r.get('조립수', 0)
-                ship_v  = str(r.get('출하계획',''))
-                note_v  = str(r.get('특이사항',''))
-                qty_str = f"{qty_v}대" if qty_v else "-"
-                ship_str= ship_v if ship_v and ship_v != 'nan' else "-"
-                note_str= f" ⚠️ {note_v}" if note_v and note_v != 'nan' else ""
+                ship_v  = str(r.get('출하계획', ''))
+                note_v  = str(r.get('특이사항', ''))
+                qty_str  = f"{qty_v}대" if qty_v else "-"
+                ship_str = ship_v if ship_v and ship_v != 'nan' else "-"
+                note_str = f" ⚠️ {note_v}" if note_v and note_v not in ('', 'nan') else ""
 
-                if can_edit and row_id:
-                    r0,r1,r2,r3,r4,r5 = st.columns([1.2, 2.5, 1.5, 1.5, 2.0, 1.0])
-                else:
-                    r0,r1,r2,r3,r4 = st.columns([1.2, 2.5, 1.5, 1.5, 2.5])
-
-                r0.markdown(f"<p style='font-size:0.78rem; margin:2px 0; color:#5a5048;'>{ban_v}</p>", unsafe_allow_html=True)
-                r1.markdown(f"<p style='font-size:0.78rem; margin:2px 0; color:#2a2420; font-weight:bold;'>{model_v}{note_str}</p>", unsafe_allow_html=True)
-                r2.markdown(f"<p style='font-size:0.78rem; margin:2px 0; color:#5a5048;'>{pn_v or '-'}</p>", unsafe_allow_html=True)
-                r3.markdown(f"<p style='font-size:0.78rem; margin:2px 0; color:#2471a3; font-weight:bold;'>{qty_str}</p>", unsafe_allow_html=True)
-                r4.markdown(f"<p style='font-size:0.78rem; margin:2px 0; color:#5a5048;'>{ship_str}</p>", unsafe_allow_html=True)
+                rcols = st.columns(col_w)
+                rcols[0].markdown(
+                    f"<span style='background:{cat_color}22; color:{cat_color}; font-weight:bold; "
+                    f"font-size:0.72rem; padding:1px 6px; border-radius:8px;'>{cat_v}</span>",
+                    unsafe_allow_html=True
+                )
+                rcols[1].markdown(f"<p style='font-size:0.78rem; margin:2px 0; color:#2a2420; font-weight:bold;'>{model_v}{note_str}</p>", unsafe_allow_html=True)
+                rcols[2].markdown(f"<p style='font-size:0.75rem; margin:2px 0; color:#5a5048;'>{pn_v or '-'}</p>", unsafe_allow_html=True)
+                rcols[3].markdown(f"<p style='font-size:0.78rem; margin:2px 0; color:#2471a3; font-weight:bold;'>{qty_str}</p>", unsafe_allow_html=True)
+                rcols[4].markdown(f"<p style='font-size:0.75rem; margin:2px 0; color:#5a5048;'>{ship_str}</p>", unsafe_allow_html=True)
 
                 if can_edit and row_id:
                     confirm_key = f"del_confirm_{row_id}"
                     if not st.session_state.get(confirm_key, False):
-                        btn_c1, btn_c2 = r5.columns(2)
-                        if btn_c1.button("✏️", key=f"mod_{row_id}", help="수정"):
+                        bc1, bc2 = rcols[5].columns(2)
+                        if bc1.button("✏️", key=f"mod_{row_id}", help="수정"):
                             st.session_state.cal_action      = "edit"
                             st.session_state.cal_action_data = int(row_id)
                             st.rerun()
-                        if btn_c2.button("🗑️", key=f"del_{row_id}", help="삭제"):
+                        if bc2.button("🗑️", key=f"del_{row_id}", help="삭제"):
                             st.session_state[confirm_key] = True
                             st.rerun()
                     else:
@@ -679,7 +689,7 @@ def dialog_view_day(selected_date: str):
                             delete_schedule(int(row_id))
                             st.session_state.schedule_db = load_schedule()
                             st.session_state[confirm_key] = False
-                            st.session_state.cal_action  = None
+                            st.session_state.cal_action   = None
                             st.rerun()
                         if y2.button("취소", key=f"del_no_{row_id}", use_container_width=True):
                             st.session_state[confirm_key] = False
