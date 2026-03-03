@@ -425,10 +425,18 @@ keep_supabase_alive()
 def get_now_kst_str() -> str:
     return datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
 
-def load_realtime_ledger() -> pd.DataFrame:
+def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
+    """최근 N개월 데이터만 로드 (기본 3개월, 성능 최적화)"""
     try:
-        sb  = get_supabase()
-        res = sb.table("production").select("*").order("created_at", desc=False).execute()
+        sb = get_supabase()
+        from datetime import date, timedelta
+        cutoff = (date.today().replace(day=1) -
+                  timedelta(days=(months-1)*28)).strftime('%Y-%m-%d')
+        res = (sb.table("production")
+                 .select("*")
+                 .gte("시간", cutoff)
+                 .order("created_at", desc=False)
+                 .execute())
         if res.data:
             df = pd.DataFrame(res.data)
             df = df.drop(columns=[c for c in ['id','created_at'] if c in df.columns])
@@ -459,6 +467,7 @@ def delete_all_rows() -> bool:
     except Exception as e:
         st.error(f"초기화 실패: {e}"); return False
 
+@st.cache_data(ttl=60)
 def load_schedule() -> pd.DataFrame:
     try:
         sb  = get_supabase()
@@ -589,6 +598,7 @@ def delete_schedule(row_id: int) -> bool:
 
 
 # ── 생산 계획 수량 (대시보드용) ──────────────────────────────────
+@st.cache_data(ttl=300)
 def load_production_plan() -> dict:
     """Supabase production_plan 테이블에서 {반_YYYY-MM: 계획수량} 로드"""
     try:
@@ -611,6 +621,28 @@ def save_production_plan(반: str, 월: str, 계획수량: int) -> bool:
     except Exception as e:
         st.error(f"계획 수량 저장 실패: {e}")
         return False
+
+
+# ── 감사 로그 (Audit Log) ────────────────────────────────────────
+def insert_audit_log(시리얼: str, 모델: str, 반: str,
+                     이전상태: str, 이후상태: str,
+                     작업자: str, 비고: str = "") -> bool:
+    """audit_log 테이블에 상태 변경 이력 기록"""
+    try:
+        sb = get_supabase()
+        sb.table("audit_log").insert({
+            "시간":    get_now_kst_str(),
+            "시리얼":  시리얼,
+            "모델":    모델,
+            "반":      반,
+            "이전상태": 이전상태,
+            "이후상태": 이후상태,
+            "작업자":  작업자,
+            "비고":    비고,
+        }).execute()
+        return True
+    except:
+        return False  # 로그 실패는 무시 (주요 흐름 방해 안 함)
 
 def upload_img_to_drive(file_obj, serial_no: str) -> str:
     try:
@@ -1055,10 +1087,16 @@ def trigger_entry_dialog():
     c_ok, c_no = st.columns(2)
     if c_ok.button("✅ 입고 승인", type="primary", use_container_width=True):
         _next_status = '검사중' if st.session_state.current_line == '검사 라인' else '포장중'
+        _prev_status = '검사대기' if st.session_state.current_line == '검사 라인' else '포장대기'
+        _sn_row = st.session_state.production_db[st.session_state.production_db['시리얼']==target_sn]
+        _sn_model = _sn_row.iloc[0]['모델'] if not _sn_row.empty else ''
+        _sn_ban   = _sn_row.iloc[0]['반']   if not _sn_row.empty else ''
         update_row(target_sn, {
             '시간': get_now_kst_str(), '라인': st.session_state.current_line,
             '상태': _next_status, '작업자': st.session_state.user_id
         })
+        insert_audit_log(시리얼=target_sn, 모델=_sn_model, 반=_sn_ban,
+            이전상태=_prev_status, 이후상태=_next_status, 작업자=st.session_state.user_id)
         st.session_state.production_db  = load_realtime_ledger()
         st.session_state.confirm_target = None
         st.rerun()
@@ -1536,6 +1574,8 @@ elif curr_l == "조립 라인":
                         y1, y2 = st.columns(2)
                         if y1.button("확인", key=f"ok_y_{idx}", type="primary", use_container_width=True):
                             update_row(row['시리얼'], {'상태':'검사대기','시간':get_now_kst_str()})
+                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                                이전상태='조립중', 이후상태='검사대기', 작업자=st.session_state.user_id)
                             st.session_state.production_db = load_realtime_ledger()
                             st.session_state[ck_ok] = False; st.rerun()
                         if y2.button("취소", key=f"ok_n_{idx}", use_container_width=True):
@@ -1545,6 +1585,8 @@ elif curr_l == "조립 라인":
                         y1, y2 = st.columns(2)
                         if y1.button("확인", key=f"ng_y_{idx}", type="primary", use_container_width=True):
                             update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str()})
+                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                                이전상태='조립중', 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
                             st.session_state.production_db = load_realtime_ledger()
                             st.session_state[ck_ng] = False; st.rerun()
                         if y2.button("취소", key=f"ng_n_{idx}", use_container_width=True):
@@ -1617,7 +1659,10 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         y1, y2 = st.columns(2)
                         if y1.button("확인", key=f"qok_y_{idx}", type="primary", use_container_width=True):
                             _ok_status = '포장대기' if curr_l == '검사 라인' else '완료'
+                            _prev_status = '검사중' if curr_l == '검사 라인' else '포장중'
                             update_row(row['시리얼'], {'상태':_ok_status,'시간':get_now_kst_str()})
+                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                                이전상태=_prev_status, 이후상태=_ok_status, 작업자=st.session_state.user_id)
                             st.session_state.production_db = load_realtime_ledger()
                             st.session_state[qck_ok] = False; st.rerun()
                         if y2.button("취소", key=f"qok_n_{idx}", use_container_width=True):
@@ -1627,6 +1672,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         y1, y2 = st.columns(2)
                         if y1.button("확인", key=f"qng_y_{idx}", type="primary", use_container_width=True):
                             update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str()})
+                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                                이전상태=row.get('상태',''), 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
                             st.session_state.production_db = load_realtime_ledger()
                             st.session_state[qck_ng] = False; st.rerun()
                         if y2.button("취소", key=f"qng_n_{idx}", use_container_width=True):
@@ -2114,7 +2161,27 @@ elif curr_l == "불량 공정":
 
     st.divider()
 
-    # 처리 대기 목록 (선택 반)
+    # 불량 원인 / 수리 조치 선택지
+    DEFECT_CAUSES = [
+        "(선택)",
+        "납땜 불량", "부품 미삽", "부품 오삽", "부품 불량",
+        "기구 파손", "기구 간섭", "나사 체결 불량",
+        "소프트웨어 오류", "펌웨어 오류", "설정 오류",
+        "외관 불량 (스크래치)", "외관 불량 (변형)",
+        "통신 불량", "전원 불량", "센서 불량",
+        "기타 (직접 입력)",
+    ]
+    REPAIR_ACTIONS = [
+        "(선택)",
+        "재납땜", "부품 교체", "부품 재삽입",
+        "기구 교체", "나사 재체결",
+        "펌웨어 재설치", "소프트웨어 초기화", "설정 재조정",
+        "외관 교체", "세척 후 재검사",
+        "재검사 후 양품 확인", "폐기 처리",
+        "기타 (직접 입력)",
+    ]
+
+    # 처리 대기 목록
     has_any = False
     for g in target_groups:
         wait = db[(db['반']==g)&(db['상태']=="불량 처리 중")]
@@ -2123,23 +2190,53 @@ elif curr_l == "불량 공정":
         st.markdown(f"#### 📍 {g} 불량 처리 대기")
         for idx, row in wait.iterrows():
             with st.container(border=True):
-                st.markdown(f"모델: `{row['모델']}` &nbsp;|&nbsp; 코드: `{row['품목코드']}` &nbsp;|&nbsp; S/N: `{row['시리얼']}`")
+                # 발생 정보
+                ic1, ic2, ic3, ic4 = st.columns([2, 1.5, 1.5, 1.5])
+                ic1.markdown(f"**{row['모델']}**")
+                ic2.markdown(f"`{row['품목코드']}`")
+                ic3.markdown(f"`{row['시리얼']}`")
+                ic4.caption(f"🕐 {str(row.get('시간',''))[:16]}")
+
                 r1, r2 = st.columns(2)
-                v_c = r1.text_input("불량 원인", key=f"c_{idx}")
-                v_a = r2.text_input("수리 조치", key=f"a_{idx}")
-                c_f, c_b = st.columns([3,1])
+                # 불량 원인 드롭다운 + 직접입력
+                cause_sel = r1.selectbox("불량 원인", DEFECT_CAUSES, key=f"cs_{idx}")
+                if cause_sel == "기타 (직접 입력)":
+                    v_c = r1.text_input("직접 입력", key=f"c_{idx}", placeholder="원인 직접 입력")
+                elif cause_sel == "(선택)":
+                    v_c = ""
+                else:
+                    v_c = cause_sel
+
+                # 수리 조치 드롭다운 + 직접입력
+                action_sel = r2.selectbox("수리 조치", REPAIR_ACTIONS, key=f"as_{idx}")
+                if action_sel == "기타 (직접 입력)":
+                    v_a = r2.text_input("직접 입력", key=f"a_{idx}", placeholder="조치 직접 입력")
+                elif action_sel == "(선택)":
+                    v_a = ""
+                else:
+                    v_a = action_sel
+
+                c_f, c_b = st.columns([3, 1])
                 img = c_f.file_uploader("사진 첨부", type=['jpg','png'], key=f"i_{idx}")
                 c_b.markdown("<div class='button-spacer'></div>", unsafe_allow_html=True)
-                if c_b.button("확정", key=f"b_{idx}", type="primary"):
+                if c_b.button("✅ 확정", key=f"b_{idx}", type="primary", use_container_width=True):
                     if v_c and v_a:
                         img_link = f" [사진: {upload_img_to_drive(img, row['시리얼'])}]" if img else ""
                         update_row(row['시리얼'], {
                             '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
                             '증상': v_c, '수리': v_a + img_link
                         })
-                        st.session_state.production_db = load_realtime_ledger(); st.rerun()
+                        # 감사 로그 기록
+                        insert_audit_log(
+                            시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                            이전상태="불량 처리 중", 이후상태="수리 완료(재투입)",
+                            작업자=st.session_state.user_id,
+                            비고=f"원인:{v_c} / 조치:{v_a}"
+                        )
+                        st.session_state.production_db = load_realtime_ledger()
+                        st.rerun()
                     else:
-                        st.warning("불량 원인과 수리 조치 내용을 모두 입력해주세요.")
+                        st.warning("불량 원인과 수리 조치를 모두 선택해주세요.")
     if not has_any:
         st.success("현재 처리 대기 중인 불량 이슈가 없습니다.")
 
