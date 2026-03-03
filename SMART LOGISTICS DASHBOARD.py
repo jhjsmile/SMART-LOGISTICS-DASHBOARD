@@ -1814,24 +1814,40 @@ elif curr_l == "마스터 관리":
                             ws = wb[g_sheet]
                             for row in ws.iter_rows(min_row=5, values_only=True):
                                 date_val, cat, pn, model, qty, ship, note = (list(row) + [None]*7)[:7]
-                                # 예시행 스킵 (4행과 동일한 패턴)
-                                if not date_val and not model: continue
-                                if not model: continue
-                                # 날짜 처리
+                                # 완전히 빈 행 스킵
+                                if not any([date_val, cat, pn, model, qty, ship, note]):
+                                    continue
+                                # 모델명 없으면 스킵
+                                if not model:
+                                    continue
+                                # 날짜 처리 (datetime / 문자열 / 숫자 모두 대응)
+                                date_str = None
                                 if isinstance(date_val, _dt):
                                     date_str = date_val.strftime('%Y-%m-%d')
-                                elif isinstance(date_val, str) and len(str(date_val).strip()) == 10:
-                                    date_str = str(date_val).strip()
-                                else:
+                                elif hasattr(date_val, 'strftime'):  # date 객체
+                                    date_str = date_val.strftime('%Y-%m-%d')
+                                elif isinstance(date_val, str):
+                                    dv = date_val.strip()
+                                    # YYYY-MM-DD 또는 YYYY/MM/DD 형식
+                                    m = _re.match(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', dv)
+                                    if m:
+                                        date_str = f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+                                elif isinstance(date_val, (int, float)):
+                                    # 엑셀 시리얼 날짜 변환
+                                    try:
+                                        from datetime import date as _date
+                                        date_str = (_date(1899, 12, 30) + __import__('datetime').timedelta(days=int(date_val))).strftime('%Y-%m-%d')
+                                    except:
+                                        pass
+                                if not date_str:
                                     continue
-                                # 수량 처리
+                                # 수량 처리 (비어있어도 0으로 등록 허용)
                                 qty_int = 0
-                                if isinstance(qty, (int, float)) and qty > 0:
-                                    qty_int = int(qty)
-                                elif isinstance(qty, str):
+                                if isinstance(qty, (int, float)):
+                                    qty_int = max(0, int(qty))
+                                elif isinstance(qty, str) and qty.strip():
                                     nums = _re.findall(r'\d+', qty)
                                     qty_int = int(nums[0]) if nums else 0
-                                if qty_int <= 0: continue
                                 parsed.append({
                                     '날짜':     date_str,
                                     '반':       g_sheet,
