@@ -2258,6 +2258,80 @@ elif curr_l == "수리 현황 리포트":
     else:
         st.info("기록된 이슈 내역이 없습니다.")
 
+    # ── 감사 로그 조회 ────────────────────────────────────────────
+    st.divider()
+    st.markdown("<div class='section-title'>🔍 감사 로그 (상태 변경 이력)</div>", unsafe_allow_html=True)
+
+    @st.cache_data(ttl=30)
+    def load_audit_log(limit: int = 200) -> pd.DataFrame:
+        try:
+            sb  = get_supabase()
+            res = sb.table("audit_log").select("*").order("시간", desc=True).limit(limit).execute()
+            if res.data:
+                return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
+            return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+        except:
+            return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+
+    # 필터
+    af1, af2, af3, af4 = st.columns([1.5, 1.5, 2, 1])
+    a_ban    = af1.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="audit_ban")
+    a_state  = af2.selectbox("이후 상태", ["전체", "검사대기", "검사중", "포장대기", "포장중",
+                                           "완료", "불량 처리 중", "수리 완료(재투입)"], key="audit_state")
+    a_sn     = af3.text_input("S/N 검색", placeholder="시리얼 일부 입력", key="audit_sn")
+    if af4.button("🔄 새로고침", key="audit_refresh", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
+    audit_df = load_audit_log()
+
+    if not audit_df.empty:
+        if a_ban   != "전체":  audit_df = audit_df[audit_df['반'] == a_ban]
+        if a_state != "전체":  audit_df = audit_df[audit_df['이후상태'] == a_state]
+        if a_sn.strip():       audit_df = audit_df[audit_df['시리얼'].str.contains(a_sn.strip(), case=False, na=False)]
+
+        # 요약 KPI
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("전체 기록",   f"{len(audit_df):,} 건")
+        k2.metric("완료 처리",   f"{len(audit_df[audit_df['이후상태']=='완료']):,} 건")
+        k3.metric("불량 발생",   f"{len(audit_df[audit_df['이후상태']=='불량 처리 중']):,} 건")
+        k4.metric("수리 완료",   f"{len(audit_df[audit_df['이후상태']=='수리 완료(재투입)']):,} 건")
+
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+
+        # 상태별 색상
+        STATE_CLR = {
+            '검사대기':        '#fff3d4',
+            '검사중':          '#ddeeff',
+            '포장대기':        '#ede0f5',
+            '포장중':          '#fde8d4',
+            '완료':            '#d4f0e2',
+            '불량 처리 중':    '#fde8e7',
+            '수리 완료(재투입)':'#e8f4fd',
+        }
+
+        # 테이블 헤더
+        th = st.columns([1.8, 1.5, 2.2, 1.2, 1.5, 1.5, 1.2, 2.5])
+        for col, txt in zip(th, ["시간", "시리얼", "모델", "반", "이전 상태", "이후 상태", "작업자", "비고"]):
+            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+
+        for _, row in audit_df.iterrows():
+            tr = st.columns([1.8, 1.5, 2.2, 1.2, 1.5, 1.5, 1.2, 2.5])
+            tr[0].caption(str(row.get('시간',''))[:16])
+            tr[1].markdown(f"`{row.get('시리얼','')}`")
+            tr[2].write(row.get('모델',''))
+            tr[3].write(row.get('반',''))
+            # 이전 상태
+            prev_clr = STATE_CLR.get(row.get('이전상태',''), '#f5f2ec')
+            tr[4].markdown(f"<span style='background:{prev_clr};padding:1px 6px;border-radius:4px;font-size:0.75rem;'>{row.get('이전상태','')}</span>", unsafe_allow_html=True)
+            # 이후 상태
+            next_clr = STATE_CLR.get(row.get('이후상태',''), '#f5f2ec')
+            tr[5].markdown(f"<span style='background:{next_clr};padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:bold;'>{row.get('이후상태','')}</span>", unsafe_allow_html=True)
+            tr[6].caption(row.get('작업자',''))
+            tr[7].caption(row.get('비고',''))
+    else:
+        st.info("감사 로그가 없습니다. 상태 변경 시 자동으로 기록됩니다.")
+
 # ── 마스터 관리 ──────────────────────────────────────────────────
 elif curr_l == "마스터 관리":
     st.markdown("<h2 class='centered-title'>🔐 시스템 마스터 데이터 관리</h2>", unsafe_allow_html=True)
