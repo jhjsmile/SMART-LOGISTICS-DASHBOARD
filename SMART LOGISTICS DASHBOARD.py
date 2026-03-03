@@ -1055,9 +1055,10 @@ def trigger_entry_dialog():
     st.write("---")
     c_ok, c_no = st.columns(2)
     if c_ok.button("✅ 입고 승인", type="primary", use_container_width=True):
+        _next_status = '검사중' if st.session_state.current_line == '검사 라인' else '포장중'
         update_row(target_sn, {
             '시간': get_now_kst_str(), '라인': st.session_state.current_line,
-            '상태': '진행 중', '작업자': st.session_state.user_id
+            '상태': _next_status, '작업자': st.session_state.user_id
         })
         st.session_state.production_db  = load_realtime_ledger()
         st.session_state.confirm_target = None
@@ -1332,7 +1333,7 @@ if curr_l == "현황판":
     for g in PRODUCTION_GROUPS:
         gdf  = db_all[db_all['반'] == g]
         완료 = len(gdf[(gdf['라인']=='포장 라인')&(gdf['상태']=='완료')])
-        재공 = len(gdf[gdf['상태']=='진행 중'])
+        재공 = len(gdf[gdf['상태'].isin(['조립중','검사대기','검사중','포장대기','포장중'])])
         불량 = len(gdf[gdf['상태'].str.contains('불량',na=False)])
         투입 = len(gdf)
         cards_html += (
@@ -1464,7 +1465,7 @@ elif curr_l == "조립 라인":
                     if insert_row({
                         '시간': get_now_kst_str(), '반': curr_g, '라인': "조립 라인",
                         'cell': "", '모델': target_model, '품목코드': target_item,
-                        '시리얼': target_sn.strip(), '상태': '진행 중',
+                        '시리얼': target_sn.strip(), '상태': '조립중',
                         '증상': '', '수리': '', '작업자': st.session_state.user_id
                     }):
                         st.session_state.production_db = load_realtime_ledger()
@@ -1484,8 +1485,8 @@ elif curr_l == "조립 라인":
         count_rows = []
         for (model, pn), gdf in grp:
             total    = len(gdf)
-            done     = len(gdf[gdf['상태'] == '완료'])
-            wip      = len(gdf[gdf['상태'].isin(['진행 중','수리 완료(재투입)'])])
+            done     = len(gdf[gdf['상태'].isin(['검사대기','검사중','포장대기','포장중','완료'])])
+            wip      = len(gdf[gdf['상태'].isin(['조립중','수리 완료(재투입)'])])
             defect   = len(gdf[gdf['상태'].str.contains('불량', na=False)])
             count_rows.append((model, pn, total, done, wip, defect))
 
@@ -1519,7 +1520,7 @@ elif curr_l == "조립 라인":
             r[0].write(row['시간']); r[1].write(row['모델'])
             r[2].write(row['품목코드']); r[3].write(f"`{row['시리얼']}`")
             with r[4]:
-                if row['상태'] in ["진행 중", "수리 완료(재투입)"]:
+                if row['상태'] in ["조립중", "수리 완료(재투입)"]:
                     ck_ok = f"ck_ok_{idx}"; ck_ng = f"ck_ng_{idx}"
                     if not st.session_state.get(ck_ok) and not st.session_state.get(ck_ng):
                         b1, b2 = st.columns(2)
@@ -1531,7 +1532,7 @@ elif curr_l == "조립 라인":
                         st.warning(f"✅ [{row['시리얼']}] 조립 완료 처리하시겠습니까?")
                         y1, y2 = st.columns(2)
                         if y1.button("확인", key=f"ok_y_{idx}", type="primary", use_container_width=True):
-                            update_row(row['시리얼'], {'상태':'완료','시간':get_now_kst_str()})
+                            update_row(row['시리얼'], {'상태':'검사대기','시간':get_now_kst_str()})
                             st.session_state.production_db = load_realtime_ledger()
                             st.session_state[ck_ok] = False; st.rerun()
                         if y2.button("취소", key=f"ok_n_{idx}", use_container_width=True):
@@ -1546,10 +1547,19 @@ elif curr_l == "조립 라인":
                         if y2.button("취소", key=f"ng_n_{idx}", use_container_width=True):
                             st.session_state[ck_ng] = False; st.rerun()
                 else:
-                    if "불량" in str(row['상태']):
-                        st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #e8908a;'>🚫 {row['상태']}</div>", unsafe_allow_html=True)
+                    STATUS_STYLE = {
+                        '검사대기': ('#fff3d4','#7a5c00','#f0c878','🔜'),
+                        '검사중':   ('#ddeeff','#1a4a7a','#7eb8e8','🔍'),
+                        '포장대기': ('#ede0f5','#4a1a7a','#b07ed8','🔜'),
+                        '포장중':   ('#fde8d4','#7a3c1a','#e8a87e','📦'),
+                        '완료':     ('#d4f0e2','#1f6640','#7ec8a0','✅'),
+                    }
+                    s = row['상태']
+                    if "불량" in str(s):
+                        st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #e8908a;'>🚫 {s}</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"<div style='background:#d4f0e2;color:#1f6640;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #7ec8a0;'>✅ {row['상태']}</div>", unsafe_allow_html=True)
+                        bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
+                        st.markdown(f"<div style='background:{bg};color:{tc};padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid {bc};'>{ic} {s}</div>", unsafe_allow_html=True)
     else:
         st.info("등록된 생산 내역이 없습니다.")
 
@@ -1559,7 +1569,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     prev = "조립 라인" if curr_l == "검사 라인" else "검사 라인"
 
     db_s = st.session_state.production_db
-    wait_list = db_s[(db_s['반']==curr_g)&(db_s['라인']==prev)&(db_s['상태']=="완료")]
+    wait_status = "검사대기" if curr_l == "검사 라인" else "포장대기"
+    wait_list = db_s[(db_s['반']==curr_g)&(db_s['상태']==wait_status)]
     st.markdown(f"<div class='section-title'>📥 이전 공정({prev}) 완료 — 입고 대기</div>", unsafe_allow_html=True)
     if not wait_list.empty:
         # 모델/품목별 수량 카운트 (조립라인 수량현황 스타일)
@@ -1589,7 +1600,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             r[0].write(row['시간']); r[1].write(row['모델'])
             r[2].write(row['품목코드']); r[3].write(f"`{row['시리얼']}`")
             with r[4]:
-                if row['상태'] in ["진행 중", "수리 완료(재투입)"]:
+                if row['상태'] in ["검사중", "포장중", "수리 완료(재투입)"]:
                     btn_lbl = "검사 합격" if curr_l == "검사 라인" else "포장 완료"
                     qck_ok = f"qck_ok_{idx}"; qck_ng = f"qck_ng_{idx}"
                     if not st.session_state.get(qck_ok) and not st.session_state.get(qck_ng):
@@ -1602,7 +1613,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         st.warning(f"✅ [{row['시리얼']}] {btn_lbl} 처리하시겠습니까?")
                         y1, y2 = st.columns(2)
                         if y1.button("확인", key=f"qok_y_{idx}", type="primary", use_container_width=True):
-                            update_row(row['시리얼'], {'상태':'완료','시간':get_now_kst_str()})
+                            _ok_status = '포장대기' if curr_l == '검사 라인' else '완료'
+                            update_row(row['시리얼'], {'상태':_ok_status,'시간':get_now_kst_str()})
                             st.session_state.production_db = load_realtime_ledger()
                             st.session_state[qck_ok] = False; st.rerun()
                         if y2.button("취소", key=f"qok_n_{idx}", use_container_width=True):
@@ -1617,10 +1629,19 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         if y2.button("취소", key=f"qng_n_{idx}", use_container_width=True):
                             st.session_state[qck_ng] = False; st.rerun()
                 else:
-                    if "불량" in str(row['상태']):
-                        st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #e8908a;'>🚫 {row['상태']}</div>", unsafe_allow_html=True)
+                    s2 = row['상태']
+                    STATUS_STYLE2 = {
+                        '검사대기': ('#fff3d4','#7a5c00','#f0c878','🔜'),
+                        '검사중':   ('#ddeeff','#1a4a7a','#7eb8e8','🔍'),
+                        '포장대기': ('#ede0f5','#4a1a7a','#b07ed8','🔜'),
+                        '포장중':   ('#fde8d4','#7a3c1a','#e8a87e','📦'),
+                        '완료':     ('#d4f0e2','#1f6640','#7ec8a0','✅'),
+                    }
+                    if "불량" in str(s2):
+                        st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #e8908a;'>🚫 {s2}</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"<div style='background:#d4f0e2;color:#1f6640;padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid #7ec8a0;'>✅ {row['상태']}</div>", unsafe_allow_html=True)
+                        bg2,tc2,bc2,ic2 = STATUS_STYLE2.get(s2, ('#f5f2ec','#5a5048','#c8b89a','•'))
+                        st.markdown(f"<div style='background:{bg2};color:{tc2};padding:6px 12px;border-radius:8px;text-align:center;font-weight:bold;border:1px solid {bc2};'>{ic2} {s2}</div>", unsafe_allow_html=True)
     else:
         st.info("해당 공정 내역이 없습니다.")
 
@@ -1635,7 +1656,7 @@ elif curr_l == "생산 현황 리포트":
         c1,c2,c3,c4 = st.columns(4)
         c1.metric("총 투입",      f"{len(df)} EA")
         c2.metric("최종 생산",    f"{len(df[(df['라인']=='포장 라인')&(df['상태']=='완료')])} EA")
-        c3.metric("현재 작업 중", f"{len(df[df['상태']=='진행 중'])} EA")
+        c3.metric("현재 작업 중", f"{len(df[df['상태'].isin(['조립중','검사중','포장중'])])} EA")
         c4.metric("품질 이슈",    f"{len(df[df['상태'].str.contains('불량',na=False)])} 건")
         st.divider()
         cl, cr = st.columns([1.8, 1.2])
@@ -1741,7 +1762,8 @@ elif curr_l == "생산 지표 관리":
 
     total_in   = len(db_f) if not db_f.empty else 0
     total_done = len(db_f[(db_f['라인']=='포장 라인') & (db_f['상태']=='완료')]) if not db_f.empty else 0
-    total_wip  = len(db_f[db_f['상태']=='진행 중']) if not db_f.empty else 0
+    WIP_ALL = ['조립중','검사대기','검사중','포장대기','포장중','수리 완료(재투입)']
+    total_wip  = len(db_f[db_f['상태'].isin(WIP_ALL)]) if not db_f.empty else 0
     total_ng   = len(db_f[db_f['상태'].str.contains('불량', na=False)]) if not db_f.empty else 0
     plan_qty   = _qty(sch_f)
     achieve_pct = round(total_done / plan_qty * 100, 1) if plan_qty > 0 else 0
@@ -1783,7 +1805,7 @@ elif curr_l == "생산 지표 관리":
             bsch = sch_f[sch_f['반']==ban] if not sch_f.empty else pd.DataFrame()
             b_plan = _qty(bsch)
             b_done = len(bdb[(bdb['라인']=='포장 라인')&(bdb['상태']=='완료')]) if not bdb.empty else 0
-            b_wip  = len(bdb[bdb['상태']=='진행 중']) if not bdb.empty else 0
+            b_wip  = len(bdb[bdb['상태'].isin(WIP_ALL)]) if not bdb.empty else 0
             b_ng   = len(bdb[bdb['상태'].str.contains('불량',na=False)]) if not bdb.empty else 0
             b_pct  = round(b_done / b_plan * 100, 1) if b_plan > 0 else 0
             clr    = BAN_COLORS_D.get(ban, "#888")
@@ -1828,7 +1850,7 @@ elif curr_l == "생산 지표 관리":
             ldf    = db_f[db_f['라인']==line_names_full[pi]] if not db_f.empty else pd.DataFrame()
             l_tot  = len(ldf)
             l_done = len(ldf[ldf['상태']=='완료']) if not ldf.empty else 0
-            l_wip  = len(ldf[ldf['상태']=='진행 중']) if not ldf.empty else 0
+            l_wip  = len(ldf[ldf['상태'].isin(['조립중','검사중','포장중','수리 완료(재투입)'])]) if not ldf.empty else 0
             l_ng   = len(ldf[ldf['상태'].str.contains('불량',na=False)]) if not ldf.empty else 0
             l_wait = len(db_f[(db_f['라인']==line_names_full[pi-1])&(db_f['상태']=='완료')]) if pi>0 and not db_f.empty else 0
             btl_flag = "⚠" if l_wip > 5 else ""
@@ -1890,7 +1912,8 @@ elif curr_l == "생산 지표 관리":
         st.markdown("<div class='db-section' style='background:#1e8449;'>⚡ 실시간 진행 중</div>", unsafe_allow_html=True)
         rt_df = st.session_state.production_db.copy()
         if ban_filter != "전체": rt_df = rt_df[rt_df['반'] == ban_filter]
-        rt_wip = rt_df[rt_df['상태']=='진행 중'].sort_values('시간', ascending=False) if not rt_df.empty else pd.DataFrame()
+        WIP_STATES = ['조립중','검사대기','검사중','포장대기','포장중','수리 완료(재투입)']
+        rt_wip = rt_df[rt_df['상태'].isin(WIP_STATES)].sort_values('시간', ascending=False) if not rt_df.empty else pd.DataFrame()
 
         if not rt_wip.empty:
             BAN_BG = {"제조1반":"#ddeeff","제조2반":"#d4f0e2","제조3반":"#ede0f5"}
