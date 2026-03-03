@@ -30,12 +30,12 @@ PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
 CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower", "schedule_manager"]
 
 ROLES = {
-    "master":        ["조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
-    "control_tower": ["생산 현황 리포트", "수리 현황 리포트", "마스터 관리"],
+    "master":        ["생산 대시보드", "조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
+    "control_tower": ["생산 대시보드", "생산 현황 리포트", "수리 현황 리포트", "마스터 관리"],
     "assembly_team": ["조립 라인"],
     "qc_team":       ["검사 라인", "불량 공정"],
     "packing_team":  ["포장 라인"],
-    "admin":         ["조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
+    "admin":         ["생산 대시보드", "조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
     "schedule_manager": ["마스터 관리"]
 }
 
@@ -587,6 +587,32 @@ def delete_schedule(row_id: int) -> bool:
     except Exception as e:
         st.error(f"일정 삭제 실패: {e}"); return False
 
+
+# ── 생산 계획 수량 (대시보드용) ──────────────────────────────────
+def load_production_plan() -> dict:
+    """Supabase production_plan 테이블에서 {반_날짜_모델: 계획수량} 로드
+       테이블 없으면 session_state 캐시만 사용"""
+    try:
+        sb  = get_supabase()
+        res = sb.table("production_plan").select("*").execute()
+        if res.data:
+            return {f"{r['반']}_{r['날짜']}_{r['모델명']}": int(r.get('계획수량', 0)) for r in res.data}
+        return {}
+    except:
+        return {}
+
+def save_production_plan(반: str, 날짜: str, 모델명: str, 계획수량: int) -> bool:
+    """production_plan upsert (반+날짜+모델명 복합키)"""
+    try:
+        sb = get_supabase()
+        sb.table("production_plan").upsert({
+            "반": 반, "날짜": 날짜, "모델명": 모델명, "계획수량": 계획수량
+        }, on_conflict="반,날짜,모델명").execute()
+        return True
+    except Exception as e:
+        st.error(f"계획 수량 저장 실패: {e}")
+        return False
+
 def upload_img_to_drive(file_obj, serial_no: str) -> str:
     try:
         gcp_info  = st.secrets["connections"]["gsheets"]
@@ -871,6 +897,7 @@ def dialog_edit_schedule(sch_id: int):
 # =================================================================
 
 if 'schedule_db'     not in st.session_state: st.session_state.schedule_db     = load_schedule()
+if 'production_plan' not in st.session_state: st.session_state.production_plan = load_production_plan()
 if 'production_db'   not in st.session_state: st.session_state.production_db   = load_realtime_ledger()
 if 'cal_year'         not in st.session_state: st.session_state.cal_year         = datetime.now(KST).year
 if 'cal_month'        not in st.session_state: st.session_state.cal_month        = datetime.now(KST).month
@@ -995,7 +1022,7 @@ for group in PRODUCTION_GROUPS:
 
 st.sidebar.divider()
 
-for p in ["생산 현황 리포트", "수리 현황 리포트"]:
+for p in ["생산 현황 리포트", "수리 현황 리포트", "생산 대시보드"]:
     if p in allowed_nav:
         if st.sidebar.button(p, key=f"fnav_{p}", use_container_width=True,
             type="primary" if st.session_state.current_line == p else "secondary"):
@@ -1629,6 +1656,242 @@ elif curr_l == "생산 현황 리포트":
         st.dataframe(df.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
     else:
         st.info("조회 가능한 데이터가 없습니다.")
+
+# ── 생산 대시보드 ─────────────────────────────────────────────────
+elif curr_l == "생산 대시보드":
+    st.markdown("<h2 class='centered-title'>📡 생산 대시보드</h2>", unsafe_allow_html=True)
+
+    db_all   = st.session_state.production_db.copy()
+    sch_all  = st.session_state.schedule_db.copy()
+    plan_map = st.session_state.production_plan   # {반_날짜_모델: 계획수량}
+    today_str = datetime.now(KST).strftime('%Y-%m-%d')
+
+    # ── 상단 필터 ──────────────────────────────────────────────────
+    fc1, fc2, fc3 = st.columns([1.5, 1.5, 2])
+    period = fc1.radio("조회 기간", ["오늘", "이번 주", "이번 달"], horizontal=True, key="dash_period")
+    ban_filter = fc2.radio("반 선택", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="dash_ban")
+
+    # 날짜 범위 계산
+    from datetime import date as _date, timedelta as _td
+    _today = _date.today()
+    if period == "오늘":
+        date_from = date_to_d = today_str
+    elif period == "이번 주":
+        _mon = _today - _td(days=_today.weekday())
+        date_from = _mon.strftime('%Y-%m-%d')
+        date_to_d = today_str
+    else:
+        date_from = today_str[:7] + "-01"
+        date_to_d = today_str
+
+    # 데이터 필터링
+    if not db_all.empty:
+        db_f = db_all[db_all['시간'].str[:10] >= date_from] if '시간' in db_all.columns else db_all
+        db_f = db_f[db_f['시간'].str[:10] <= date_to_d]
+        if ban_filter != "전체":
+            db_f = db_f[db_f['반'] == ban_filter]
+    else:
+        db_f = db_all
+
+    if not sch_all.empty:
+        sch_f = sch_all[(sch_all['날짜'] >= date_from) & (sch_all['날짜'] <= date_to_d)]
+        if ban_filter != "전체":
+            sch_f = sch_f[sch_f['반'] == ban_filter]
+    else:
+        sch_f = sch_all
+
+    st.divider()
+
+    # ══════════════════════════════════════════════════════════════
+    # [A] 핵심 KPI 지표
+    # ══════════════════════════════════════════════════════════════
+    total_in   = len(db_f) if not db_f.empty else 0
+    total_done = len(db_f[db_f['라인']=='포장 라인'][db_f['상태']=='완료']) if not db_f.empty else 0
+    total_wip  = len(db_f[db_f['상태']=='진행 중']) if not db_f.empty else 0
+    total_ng   = len(db_f[db_f['상태'].str.contains('불량', na=False)]) if not db_f.empty else 0
+
+    # 계획 수량 합계 (일정 조립수 기준)
+    plan_qty = int(sch_f['조립수'].apply(lambda x: int(float(x)) if str(x) not in ('','nan') else 0).sum()) if not sch_f.empty else 0
+    achieve_pct = round(total_done / plan_qty * 100, 1) if plan_qty > 0 else 0
+    defect_pct  = round(total_ng / total_in * 100, 1) if total_in > 0 else 0
+
+    st.markdown(f"<div class='section-title'>📊 핵심 지표 — {period} ({date_from} ~ {date_to_d})</div>", unsafe_allow_html=True)
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("📋 계획 수량",   f"{plan_qty:,} 대")
+    k2.metric("✅ 최종 생산",   f"{total_done:,} 대")
+    k3.metric("🎯 달성률",      f"{achieve_pct} %",
+              delta=f"{'▲' if achieve_pct >= 100 else '▼'} {'초과달성' if achieve_pct >= 100 else '미달'}",
+              delta_color="normal" if achieve_pct >= 100 else "inverse")
+    k4.metric("⚡ 진행 중",     f"{total_wip:,} 대")
+    k5.metric("🚨 불량률",      f"{defect_pct} %",
+              delta=f"{total_ng}건", delta_color="inverse" if total_ng > 0 else "off")
+
+    st.divider()
+
+    # ══════════════════════════════════════════════════════════════
+    # [B] 반별 달성률
+    # ══════════════════════════════════════════════════════════════
+    st.markdown("<div class='section-title'>🏭 반별 달성률</div>", unsafe_allow_html=True)
+    ban_cols = st.columns(len(PRODUCTION_GROUPS))
+    BAN_COLORS_D = {"제조1반": "#2471a3", "제조2반": "#1e8449", "제조3반": "#6c3483"}
+
+    for bi, ban in enumerate(PRODUCTION_GROUPS):
+        ban_db  = db_f[db_f['반'] == ban] if not db_f.empty else pd.DataFrame()
+        ban_sch = sch_f[sch_f['반'] == ban] if not sch_f.empty else pd.DataFrame()
+        b_plan  = int(ban_sch['조립수'].apply(lambda x: int(float(x)) if str(x) not in ('','nan') else 0).sum()) if not ban_sch.empty else 0
+        b_done  = len(ban_db[(ban_db['라인']=='포장 라인') & (ban_db['상태']=='완료')]) if not ban_db.empty else 0
+        b_wip   = len(ban_db[ban_db['상태']=='진행 중']) if not ban_db.empty else 0
+        b_ng    = len(ban_db[ban_db['상태'].str.contains('불량', na=False)]) if not ban_db.empty else 0
+        b_pct   = round(b_done / b_plan * 100, 1) if b_plan > 0 else 0
+        b_color = BAN_COLORS_D.get(ban, "#888")
+
+        with ban_cols[bi]:
+            with st.container(border=True):
+                st.markdown(f"**{ban}**")
+                st.progress(min(b_pct, 100) / 100)
+                st.metric("달성률", f"{b_pct}%", delta=f"계획 {b_plan}대 → 완료 {b_done}대")
+                sc1, sc2, sc3 = st.columns(3)
+                sc1.metric("진행", f"{b_wip}대")
+                sc2.metric("완료", f"{b_done}대")
+                sc3.metric("불량", f"{b_ng}건", delta_color="inverse" if b_ng > 0 else "off")
+
+    st.divider()
+
+    # ══════════════════════════════════════════════════════════════
+    # [C] 공정별 병목 현황 (조립 → 검사 → 포장 흐름)
+    # ══════════════════════════════════════════════════════════════
+    st.markdown("<div class='section-title'>🔄 공정별 병목 현황</div>", unsafe_allow_html=True)
+
+    lines = ["조립 라인", "검사 라인", "포장 라인"]
+    line_emoji = {"조립 라인": "🔧", "검사 라인": "🔍", "포장 라인": "📦"}
+    line_colors = {"조립 라인": "#7eb8e8", "검사 라인": "#7ec8a0", "포장 라인": "#c8a07e"}
+
+    if not db_f.empty:
+        pc1, pc2, pc3, pc4, pc5 = st.columns([2, 0.3, 2, 0.3, 2])
+        pcols = [pc1, pc3, pc5]
+        arrow_cols = [pc2, pc4]
+
+        for i, line in enumerate(lines):
+            ldf      = db_f[db_f['라인'] == line]
+            l_total  = len(ldf)
+            l_done   = len(ldf[ldf['상태'] == '완료'])
+            l_wip    = len(ldf[ldf['상태'] == '진행 중'])
+            l_ng     = len(ldf[ldf['상태'].str.contains('불량', na=False)])
+            l_wait   = len(db_f[(db_f['라인'] == (lines[i-1] if i > 0 else line)) & (db_f['상태'] == '완료')]) if i > 0 else 0
+            lcolor   = line_colors[line]
+
+            with pcols[i]:
+                with st.container(border=True):
+                    st.markdown(f"#### {line_emoji[line]} {line}")
+                    m1, m2 = st.columns(2)
+                    m1.metric("투입", f"{l_total}대")
+                    m2.metric("완료", f"{l_done}대")
+                    m3, m4 = st.columns(2)
+                    m3.metric("진행 중", f"{l_wip}대",
+                              delta="⚠️ 병목" if l_wip > 5 else None,
+                              delta_color="inverse" if l_wip > 5 else "off")
+                    m4.metric("불량", f"{l_ng}건",
+                              delta_color="inverse" if l_ng > 0 else "off")
+                    if i > 0:
+                        st.caption(f"📥 이전 공정 대기: {l_wait}대")
+
+            if i < 2:
+                arrow_cols[i].markdown("<div style='text-align:center; font-size:2rem; padding-top:60px; color:#c8a07e;'>▶</div>", unsafe_allow_html=True)
+    else:
+        st.info("조회 기간 내 생산 데이터가 없습니다.")
+
+    st.divider()
+
+    # ══════════════════════════════════════════════════════════════
+    # [D] 모델별 불량률 분석
+    # ══════════════════════════════════════════════════════════════
+    st.markdown("<div class='section-title'>📉 모델별 불량률 분석</div>", unsafe_allow_html=True)
+
+    if not db_f.empty:
+        ng_df = db_f.groupby('모델').agg(
+            투입=('시리얼', 'count'),
+            불량=('상태', lambda x: x.str.contains('불량', na=False).sum())
+        ).reset_index()
+        ng_df['불량률(%)'] = (ng_df['불량'] / ng_df['투입'] * 100).round(1)
+        ng_df = ng_df.sort_values('불량률(%)', ascending=False)
+
+        # 차트 + 테이블
+        ch1, ch2 = st.columns([3, 2])
+        with ch1:
+            import plotly.express as px
+            fig_ng = px.bar(
+                ng_df, x='모델', y='불량률(%)',
+                color='불량률(%)',
+                color_continuous_scale=["#7ec8a0", "#f0c878", "#e8908a"],
+                title="모델별 불량률 (%)",
+                template="plotly_white",
+                text='불량률(%)'
+            )
+            fig_ng.update_traces(texttemplate='%{text}%', textposition='outside')
+            fig_ng.update_layout(showlegend=False, coloraxis_showscale=False,
+                                 margin=dict(t=40, b=60), height=320)
+            st.plotly_chart(fig_ng, use_container_width=True)
+        with ch2:
+            st.dataframe(
+                ng_df[['모델','투입','불량','불량률(%)']].reset_index(drop=True),
+                use_container_width=True, hide_index=True
+            )
+    else:
+        st.info("조회 기간 내 데이터가 없습니다.")
+
+    st.divider()
+
+    # ══════════════════════════════════════════════════════════════
+    # [E] 실시간 진행 중 현황
+    # ══════════════════════════════════════════════════════════════
+    st.markdown("<div class='section-title'>⚡ 실시간 진행 중 현황</div>", unsafe_allow_html=True)
+
+    rt_df = st.session_state.production_db.copy()
+    if ban_filter != "전체":
+        rt_df = rt_df[rt_df['반'] == ban_filter]
+    rt_wip = rt_df[rt_df['상태'] == '진행 중'] if not rt_df.empty else pd.DataFrame()
+
+    if not rt_wip.empty:
+        rt_wip = rt_wip.sort_values('시간', ascending=False)
+        h0,h1,h2,h3,h4,h5 = st.columns([1.2, 1.5, 2, 1.5, 1.5, 1.5])
+        for col, txt in zip([h0,h1,h2,h3,h4,h5], ["반","라인","모델","품목코드","시리얼","시작 시간"]):
+            col.markdown(f"**{txt}**")
+        for _, row in rt_wip.iterrows():
+            r0,r1,r2,r3,r4,r5 = st.columns([1.2, 1.5, 2, 1.5, 1.5, 1.5])
+            r0.write(row.get('반',''))
+            r1.write(row.get('라인',''))
+            r2.write(row.get('모델',''))
+            r3.write(row.get('품목코드',''))
+            r4.write(f"`{row.get('시리얼','')}`")
+            r5.write(row.get('시간','')[:16] if row.get('시간') else '')
+    else:
+        st.info("현재 진행 중인 작업이 없습니다.")
+
+    st.divider()
+
+    # ══════════════════════════════════════════════════════════════
+    # [F] 계획 수량 입력 (관리자 전용)
+    # ══════════════════════════════════════════════════════════════
+    if st.session_state.user_role in CALENDAR_EDIT_ROLES:
+        with st.expander("⚙️ 계획 수량 입력 (달성률 계산 기준)", expanded=False):
+            st.caption("반/날짜/모델별 목표 수량을 입력하면 달성률 계산에 반영됩니다.")
+            pl1, pl2, pl3, pl4 = st.columns([1.5, 1.5, 2.5, 1])
+            p_ban   = pl1.selectbox("반", PRODUCTION_GROUPS, key="plan_ban")
+            p_date  = pl2.date_input("날짜", value=_today, key="plan_date")
+            # 해당 반 모델 목록
+            p_models = st.session_state.group_master_models.get(p_ban, [])
+            p_model = pl3.selectbox("모델명", p_models if p_models else ["(모델 없음)"], key="plan_model")
+            p_qty   = pl4.number_input("계획 수량", min_value=0, step=1, key="plan_qty")
+            if st.button("💾 계획 수량 저장", type="primary", key="plan_save_btn"):
+                if p_model and p_model != "(모델 없음)":
+                    p_date_str = p_date.strftime('%Y-%m-%d')
+                    if save_production_plan(p_ban, p_date_str, p_model, int(p_qty)):
+                        plan_key = f"{p_ban}_{p_date_str}_{p_model}"
+                        st.session_state.production_plan[plan_key] = int(p_qty)
+                        st.success(f"✅ {p_ban} / {p_date_str} / {p_model} → {p_qty}대 저장 완료")
+                        st.rerun()
+                else:
+                    st.warning("모델을 선택해주세요.")
 
 # ── 불량 공정 ────────────────────────────────────────────────────
 elif curr_l == "불량 공정":
