@@ -684,9 +684,9 @@ def dialog_view_day(selected_date: str):
                     if not st.session_state.get(confirm_key, False):
                         bc1, bc2 = rcols[5].columns(2)
                         if bc1.button("✏️", key=f"mod_{row_id}", help="수정"):
-                            st.session_state.cal_action      = "edit"
-                            st.session_state.cal_action_data = int(row_id)
-                            st.rerun()  # dialog_view_day는 edit로 교체되므로 자동 닫힘
+                            st.session_state.cal_action_sub      = "edit"
+                            st.session_state.cal_action_sub_data = int(row_id)
+                            st.rerun()
                         if bc2.button("🗑️", key=f"del_{row_id}", help="삭제"):
                             st.session_state[confirm_key] = True
                             st.rerun()
@@ -704,6 +704,47 @@ def dialog_view_day(selected_date: str):
                             st.rerun()
     else:
         st.info("등록된 일정이 없습니다.")
+
+    # ── 인라인 수정 폼 (수정 버튼 클릭 시 다이얼로그 내부에서 전환)
+    if st.session_state.get("cal_action_sub") == "edit":
+        sub_id  = st.session_state.get("cal_action_sub_data")
+        sub_df  = st.session_state.schedule_db
+        sub_row = sub_df[sub_df['id'] == sub_id]
+        if not sub_row.empty:
+            r2 = sub_row.iloc[0]
+            st.divider()
+            st.markdown("#### ✏️ 일정 수정")
+            cur_cat2 = r2.get('카테고리', '조립계획')
+            cat_idx2 = PLAN_CATEGORIES.index(cur_cat2) if cur_cat2 in PLAN_CATEGORIES else 0
+            with st.form("inline_edit_form"):
+                cat2   = st.selectbox("계획 유형 *", PLAN_CATEGORIES, index=cat_idx2)
+                ie1, ie2 = st.columns(2)
+                model2 = ie1.text_input("모델명", value=str(r2.get('모델명','')))
+                pn2    = ie2.text_input("P/N",    value=str(r2.get('pn','')))
+                ig1, ig2 = st.columns(2)
+                qty2   = ig1.number_input("조립수", min_value=0, step=1, value=int(r2.get('조립수',0) or 0))
+                ship2  = ig2.text_input("출하계획", value=str(r2.get('출하계획','')))
+                note2  = st.text_input("특이사항", value=str(r2.get('특이사항','')))
+                s1, s2, s3 = st.columns(3)
+                if s1.form_submit_button("💾 저장", use_container_width=True, type="primary"):
+                    update_schedule(sub_id, {
+                        '카테고리': cat2, 'pn': pn2.strip(), '모델명': model2.strip(),
+                        '조립수': int(qty2), '출하계획': ship2.strip(), '특이사항': note2.strip()
+                    })
+                    st.session_state.schedule_db     = load_schedule()
+                    st.session_state.cal_action      = None
+                    st.session_state.cal_action_sub  = None
+                    st.rerun()
+                if s2.form_submit_button("🔙 목록으로", use_container_width=True):
+                    st.session_state.cal_action_sub  = None
+                    st.rerun()
+                if s3.form_submit_button("🗑️ 삭제", use_container_width=True):
+                    delete_schedule(sub_id)
+                    st.session_state.schedule_db     = load_schedule()
+                    st.session_state.cal_action      = None
+                    st.session_state.cal_action_sub  = None
+                    st.rerun()
+        return  # 수정 폼 표시 중엔 하단 버튼 숨김
 
     st.divider()
     if can_edit:
@@ -818,6 +859,8 @@ if 'cal_view'        not in st.session_state: st.session_state.cal_view        =
 if 'cal_week_idx'    not in st.session_state: st.session_state.cal_week_idx    = 0
 if 'cal_action'      not in st.session_state: st.session_state.cal_action      = None
 if 'cal_action_data' not in st.session_state: st.session_state.cal_action_data = None
+if 'cal_action_sub'      not in st.session_state: st.session_state.cal_action_sub      = None
+if 'cal_action_sub_data' not in st.session_state: st.session_state.cal_action_sub_data = None
 
 if 'user_db' not in st.session_state:
     st.session_state.user_db = {
