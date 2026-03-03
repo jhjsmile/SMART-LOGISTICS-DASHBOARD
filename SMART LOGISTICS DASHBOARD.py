@@ -1696,10 +1696,9 @@ elif curr_l == "마스터 관리":
                                     _cell.alignment = _ca() if _c in [1,2,5] else _la()
                                     _cell.font      = _bf()
 
-                            # 카테고리 드롭다운
+                            # 카테고리 드롭다운 (직접 입력도 허용 - 유효성 검사 없음)
                             _dv = _DV(type="list", formula1='"조립계획,포장계획,출하계획"',
-                                      showDropDown=False, showErrorMessage=True,
-                                      errorTitle="입력 오류", error="목록에서 선택하세요.")
+                                      showDropDown=False, showErrorMessage=False)
                             _dv.sqref = "B5:B204"
                             _ws.add_data_validation(_dv)
 
