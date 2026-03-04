@@ -1657,36 +1657,105 @@ elif curr_l == "조립 라인":
 
     st.divider()
 
+    # 자재 목록 마스터 (커스터마이즈 가능)
+    MAT_NAME_OPTIONS = ["PCB", "배터리", "메인보드", "디스플레이", "케이블", "모듈", "센서", "커넥터", "기타"]
+
+    # session_state 키 정의
+    _mat_list_key  = f"mat_list_{curr_g}"   # 스캔된 자재 목록 [{"자재명":..,"자재시리얼":..}]
+    _scan_sn_key   = f"scan_sn_{curr_g}"    # 바코드 스캔 입력 버퍼
+    _mat_name_key  = f"mat_name_sel_{curr_g}" # 현재 선택된 자재명
+
+    if _mat_list_key not in st.session_state:
+        st.session_state[_mat_list_key] = []
+
     with st.container(border=True):
         st.markdown(f"#### ➕ {curr_g} 신규 생산 등록")
+
+        # ── 모델 / 품목 / 메인 S/N ───────────────────────────────
         g_models     = st.session_state.group_master_models.get(curr_g, [])
         target_model = st.selectbox("투입 모델 선택", ["선택하세요."] + g_models, key=f"model_sel_{curr_g}")
         g_items      = st.session_state.group_master_items.get(curr_g, {}).get(target_model, [])
 
         ef1, ef2 = st.columns(2)
-        target_item = ef1.selectbox("품목 코드", g_items if target_model != "선택하세요." else ["모델 선택 대기"], key=f"item_sel_{curr_g}")
-        target_sn   = ef2.text_input("제품 시리얼(S/N)", placeholder="메인 시리얼 입력", key=f"sn_input_{curr_g}")
+        target_item = ef1.selectbox("품목 코드",
+            g_items if target_model != "선택하세요." else ["모델 선택 대기"],
+            key=f"item_sel_{curr_g}")
+        target_sn = ef2.text_input(
+            "📦 메인 S/N (바코드 스캔 or 직접 입력)",
+            placeholder="스캐너로 스캔하거나 직접 입력",
+            key=f"sn_input_{curr_g}")
 
-        # 자재 시리얼 (form 밖 - 즉시 반응)
-        st.markdown("<p style='font-size:0.82rem;font-weight:600;color:#5a4f45;margin:8px 0 4px 0;'>🔩 자재 시리얼 <span style='font-weight:normal;color:#aaa;'>(선택사항 — 수량 설정 후 입력)</span></p>", unsafe_allow_html=True)
-        mat_count_key = f"mat_count_{curr_g}"
-        mc1, mc2, mc3 = st.columns([1, 1, 4])
-        if mc1.button("➕", key=f"mat_plus_{curr_g}", help="자재 추가"):
-            st.session_state[mat_count_key] = st.session_state.get(mat_count_key, 0) + 1
+        st.divider()
+
+        # ── 자재 시리얼 스캔 영역 ────────────────────────────────
+        st.markdown("<p style='font-size:0.88rem;font-weight:700;color:#5a4f45;margin:0 0 6px 0;'>🔩 자재 시리얼</p>", unsafe_allow_html=True)
+
+        sc1, sc2, sc3 = st.columns([2, 3, 1])
+        sel_mat_name = sc1.selectbox("자재명 선택", MAT_NAME_OPTIONS, key=_mat_name_key)
+        scan_input   = sc2.text_input(
+            "자재 S/N 스캔",
+            placeholder="바코드 스캔 → 자동 추가 (Enter)",
+            key=_scan_sn_key,
+            label_visibility="collapsed" if False else "visible"
+        )
+        sc2.caption("💡 스캐너로 스캔하면 Enter가 자동 입력됩니다")
+
+        # 스캔값이 있으면 즉시 목록에 추가
+        if scan_input.strip():
+            already = any(m["자재시리얼"] == scan_input.strip()
+                         for m in st.session_state[_mat_list_key])
+            if not already:
+                st.session_state[_mat_list_key].append({
+                    "자재명": sel_mat_name,
+                    "자재시리얼": scan_input.strip()
+                })
+            # 입력 필드 초기화
+            st.session_state[_scan_sn_key] = ""
             st.rerun()
-        if mc2.button("➖", key=f"mat_minus_{curr_g}", help="자재 제거"):
-            st.session_state[mat_count_key] = max(0, st.session_state.get(mat_count_key, 0) - 1)
+
+        # 수동 추가 버튼
+        if sc3.button("➕ 추가", key=f"mat_manual_add_{curr_g}", use_container_width=True):
+            st.session_state[_mat_list_key].append({
+                "자재명": sel_mat_name, "자재시리얼": ""
+            })
             st.rerun()
-        cur_mat_count = st.session_state.get(mat_count_key, 0)
-        mc3.caption(f"자재 {cur_mat_count}개 등록 예정" if cur_mat_count > 0 else "자재 없음 (➕ 버튼으로 추가)")
 
-        mat_inputs = []
-        for mi in range(cur_mat_count):
-            mcc1, mcc2 = st.columns(2)
-            m_name = mcc1.text_input(f"자재명 #{mi+1}", key=f"mat_name_{curr_g}_{mi}", placeholder="예: PCB, 배터리, 모듈")
-            m_sn   = mcc2.text_input(f"자재 S/N #{mi+1}", key=f"mat_sn_{curr_g}_{mi}", placeholder="자재 시리얼 번호")
-            mat_inputs.append({"자재명": m_name, "자재시리얼": m_sn})
+        # ── 스캔된 자재 목록 표시 ────────────────────────────────
+        mat_list_now = st.session_state[_mat_list_key]
+        if mat_list_now:
+            st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 2px 0;'>등록 예정 자재: <b>{len(mat_list_now)}개</b></p>", unsafe_allow_html=True)
+            lh1, lh2, lh3 = st.columns([2, 4, 1])
+            lh1.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>자재명</p>", unsafe_allow_html=True)
+            lh2.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>자재 S/N</p>", unsafe_allow_html=True)
 
+            updated_list = []
+            for mi, mat in enumerate(mat_list_now):
+                lc1, lc2, lc3 = st.columns([2, 4, 1])
+                # 자재명 수정 가능
+                new_name = lc1.selectbox("", MAT_NAME_OPTIONS,
+                    index=MAT_NAME_OPTIONS.index(mat["자재명"]) if mat["자재명"] in MAT_NAME_OPTIONS else 0,
+                    key=f"mat_nm_{curr_g}_{mi}", label_visibility="collapsed")
+                # S/N 수정 가능 (수동 입력 or 스캔)
+                new_sn = lc2.text_input("", value=mat["자재시리얼"],
+                    key=f"mat_sv_{curr_g}_{mi}", label_visibility="collapsed",
+                    placeholder="S/N 직접 입력 또는 스캔")
+                # 삭제 버튼
+                if not lc3.button("🗑", key=f"mat_del_{curr_g}_{mi}", help="삭제"):
+                    updated_list.append({"자재명": new_name, "자재시리얼": new_sn})
+                else:
+                    st.rerun()
+
+            st.session_state[_mat_list_key] = updated_list
+
+            if st.button("🗑 전체 초기화", key=f"mat_clear_{curr_g}", type="secondary"):
+                st.session_state[_mat_list_key] = []
+                st.rerun()
+        else:
+            st.caption("자재 없음 — 스캔하거나 ➕ 추가 버튼을 누르세요")
+
+        st.divider()
+
+        # ── 생산 시작 등록 버튼 ───────────────────────────────────
         if st.button("▶️ 생산 시작 등록", use_container_width=True, type="primary", key=f"start_btn_{curr_g}"):
             if target_model != "선택하세요." and target_sn.strip():
                 if insert_row({
@@ -1695,19 +1764,18 @@ elif curr_l == "조립 라인":
                     '시리얼': target_sn.strip(), '상태': '조립중',
                     '증상': '', '수리': '', '작업자': st.session_state.user_id
                 }):
-                    valid_mats = [m for m in mat_inputs if m["자재시리얼"].strip()]
+                    valid_mats = [m for m in st.session_state[_mat_list_key] if m["자재시리얼"].strip()]
                     if valid_mats:
                         insert_material_serials(
                             메인시리얼=target_sn.strip(), 모델=target_model,
                             반=curr_g, 자재목록=valid_mats,
                             작업자=st.session_state.user_id
                         )
-                    # 자재 카운트 초기화
-                    st.session_state[mat_count_key] = 0
+                    st.session_state[_mat_list_key] = []  # 자재 목록 초기화
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
             else:
-                st.warning("모델과 시리얼을 모두 입력해주세요.")
+                st.warning("모델과 메인 S/N을 모두 입력해주세요.")
 
     st.divider()
     db_v = st.session_state.production_db
