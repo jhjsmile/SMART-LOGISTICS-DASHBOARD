@@ -3221,7 +3221,7 @@ elif curr_l == "OQC 라인":
         sn_rows = db_all_h[db_all_h['시리얼'] == sn].sort_values('시간')
         if not sn_rows.empty:
             r = sn_rows.iloc[0]
-            st.markdown(f"**모델:** {r.get('모델','')}　|　**반:** {r.get('반','')}　|　**품목코드:** {r.get('품목코드','')}")
+            st.markdown(f"**반:** {r.get('반','')}　|　**모델:** {r.get('모델','')}　|　**품목코드:** {r.get('품목코드','')}")
             st.markdown("---")
 
         # 감사 로그 (상태 변경 이력)
