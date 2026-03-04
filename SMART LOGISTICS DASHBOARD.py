@@ -1616,6 +1616,11 @@ elif curr_l == "조립 라인":
     if today_sch.empty:
         st.info("오늘 등록된 작업 일정이 없습니다.")
     else:
+        # 헤더
+        th = st.columns([1.2, 2.8, 1.5, 0.8, 1.8, 2.5])
+        for col, txt in zip(th, ["유형", "모델명", "P/N", "조립수", "출하계획", "특이사항"]):
+            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:2px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+
         for _, sr in today_sch.iterrows():
             cat   = str(sr.get('카테고리', '기타'))
             color = SCHEDULE_COLORS.get(cat, "#888")
@@ -1629,16 +1634,13 @@ elif curr_l == "조립 라인":
             ship  = str(sr.get('출하계획', ''))
             note  = str(sr.get('특이사항', ''))
 
-            with st.container(border=True):
-                ca, cb = st.columns([3, 1])
-                with ca:
-                    st.markdown(f"**{cat}** &nbsp; {model}" + (f" `{pn}`" if pn and pn != 'nan' else ""))
-                with cb:
-                    st.metric(label="조립수", value=f"{qty:,} 대")
-                if ship and ship != 'nan':
-                    st.caption(f"📦 출하계획: {ship}")
-                if note and note != 'nan':
-                    st.warning(f"⚠️ {note}", icon=None)
+            rc = st.columns([1.2, 2.8, 1.5, 0.8, 1.8, 2.5])
+            rc[0].markdown(f"<span style='background:{color}22;color:{color};border-left:3px solid {color};padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:bold;'>{cat}</span>", unsafe_allow_html=True)
+            rc[1].write(model)
+            rc[2].caption(pn if pn and pn != 'nan' else "-")
+            rc[3].write(f"**{qty:,}**")
+            rc[4].caption(ship if ship and ship != 'nan' else "-")
+            rc[5].caption(f"⚠️ {note}" if note and note != 'nan' else "-")
 
         # 일정 전체 보기 토글
         with st.expander(f"📅 {curr_g} 이번 달 전체 일정 보기"):
