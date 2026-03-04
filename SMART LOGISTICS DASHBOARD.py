@@ -3211,78 +3211,23 @@ elif curr_l == "OQC 라인":
     st.markdown("<div class='section-title'>📋 OQC 결과 이력</div>", unsafe_allow_html=True)
     oqc_done = db_oqc[db_oqc['상태'].isin(['출하승인','부적합(OQC)'])].sort_values('시간', ascending=False)
 
-    # 이력 팝업 다이얼로그
-    @st.dialog("📋 제품 전체 이력", width="large")
-    def oqc_history_dialog(sn: str):
-        db_all_h = st.session_state.production_db
-        st.markdown(f"### S/N: `{sn}`")
-
-        # 생산 이력 (상태 변경 흐름)
-        sn_rows = db_all_h[db_all_h['시리얼'] == sn].sort_values('시간')
-        if not sn_rows.empty:
-            r = sn_rows.iloc[0]
-            st.markdown(f"**반:** {r.get('반','')}　|　**모델:** {r.get('모델','')}　|　**품목코드:** {r.get('품목코드','')}")
-            st.markdown("---")
-
-        # 감사 로그 (상태 변경 이력)
-        st.markdown("#### 🔄 상태 변경 이력")
-        try:
-            sb  = get_supabase()
-            res = sb.table("audit_log").select("*").eq("시리얼", sn).order("시간").execute()
-            if res.data:
-                aud_df = pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
-                STATE_CLR2 = {
-                    '조립중':'#fff3d4','검사대기':'#fff3d4','검사중':'#ddeeff',
-                    '포장대기':'#ede0f5','포장중':'#fde8d4','완료':'#d4f0e2',
-                    '불량 처리 중':'#fde8e7','수리 완료(재투입)':'#e8f4fd',
-                    'OQC대기':'#fff3d4','OQC중':'#ddeeff',
-                    '출하승인':'#d4f0e2','부적합(OQC)':'#fde8e7',
-                }
-                ah = st.columns([1.8, 1.5, 1.5, 1.2, 3])
-                for col, txt in zip(ah, ["시간","이전상태","이후상태","작업자","비고"]):
-                    col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-                for _, ar in aud_df.iterrows():
-                    ac = st.columns([1.8, 1.5, 1.5, 1.2, 3])
-                    ac[0].caption(str(ar.get('시간',''))[:16])
-                    prev_c = STATE_CLR2.get(ar.get('이전상태',''), '#f5f2ec')
-                    next_c = STATE_CLR2.get(ar.get('이후상태',''), '#f5f2ec')
-                    ac[1].markdown(f"<span style='background:{prev_c};padding:1px 6px;border-radius:4px;font-size:0.75rem;'>{ar.get('이전상태','')}</span>", unsafe_allow_html=True)
-                    ac[2].markdown(f"<span style='background:{next_c};padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:bold;'>{ar.get('이후상태','')}</span>", unsafe_allow_html=True)
-                    ac[3].caption(ar.get('작업자',''))
-                    ac[4].caption(ar.get('비고',''))
-            else:
-                st.info("상태 변경 이력 없음")
-        except Exception as e:
-            st.warning(f"이력 조회 실패: {e}")
-
-        # 자재 시리얼
-        st.markdown("---")
-        st.markdown("#### 🔩 연결된 자재 시리얼")
-        mat_df = load_material_serials(sn)
-        if not mat_df.empty:
-            for _, mr in mat_df.iterrows():
-                st.markdown(f"- **{mr.get('자재명','')}** : `{mr.get('자재시리얼','')}`　<span style='color:#aaa;font-size:0.75rem;'>{mr.get('작업자','')}</span>", unsafe_allow_html=True)
-        else:
-            st.info("등록된 자재 시리얼 없음")
-
-        # dialog 안 rerun 금지 - 닫기 버튼은 key만 삭제 (X 버튼과 동일 효과)
-        st.divider()
-        if st.button("✖ 닫기", use_container_width=True, key="oqc_hist_close"):
-            if "oqc_detail_sn" in st.session_state:
-                del st.session_state["oqc_detail_sn"]
-
-    # 이력 팝업 트리거 - 새로고침마다 재호출 방지
-    if st.session_state.get("oqc_detail_sn"):
-        oqc_history_dialog(st.session_state["oqc_detail_sn"])
-
     if not oqc_done.empty:
         oqc_sn_filter = st.text_input("🔍 S/N 검색", key="oqc_sn_filter", placeholder="시리얼 일부 입력")
         if oqc_sn_filter.strip():
             oqc_done = oqc_done[oqc_done['시리얼'].str.contains(oqc_sn_filter.strip(), case=False, na=False)]
 
+        STATE_CLR2 = {
+            '조립중':'#fff3d4','검사대기':'#fff3d4','검사중':'#ddeeff',
+            '포장대기':'#ede0f5','포장중':'#fde8d4','완료':'#d4f0e2',
+            '불량 처리 중':'#fde8e7','수리 완료(재투입)':'#e8f4fd',
+            'OQC대기':'#fff3d4','OQC중':'#ddeeff',
+            '출하승인':'#d4f0e2','부적합(OQC)':'#fde8e7',
+        }
+
         rh = st.columns([1.8, 2, 1.5, 2.2, 1.5, 2.5, 1])
         for col, txt in zip(rh, ["시간", "모델", "반", "시리얼", "결과", "비고", "이력"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+
         for idx2, row in oqc_done.iterrows():
             rr2 = st.columns([1.8, 2, 1.5, 2.2, 1.5, 2.5, 1])
             rr2[0].caption(str(row.get('시간',''))[:16])
@@ -3295,9 +3240,60 @@ elif curr_l == "OQC 라인":
             else:
                 rr2[4].markdown("<span style='background:#fde8e7;color:#7a2e2a;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>🚫 부적합</span>", unsafe_allow_html=True)
             rr2[5].caption(row.get('수리',''))
+
+            # 이력 버튼 → 해당 행 아래 인라인 expander로 표시
+            _hist_key = f"oqc_hist_open_{idx2}"
             if rr2[6].button("📋", key=f"oqc_hist_{idx2}", help="이력 조회"):
-                st.session_state.oqc_detail_sn = row.get('시리얼','')
-                st.rerun()
+                st.session_state[_hist_key] = not st.session_state.get(_hist_key, False)
+
+            if st.session_state.get(_hist_key, False):
+                sn = row.get('시리얼','')
+                with st.container(border=True):
+                    hc1, hc2 = st.columns([8, 1])
+                    hc1.markdown(f"📋 **제품 전체 이력** — `{sn}`")
+                    if hc2.button("✖ 닫기", key=f"oqc_hist_close_{idx2}"):
+                        st.session_state[_hist_key] = False
+                        st.rerun()
+
+                    db_all_h = st.session_state.production_db
+                    sn_rows = db_all_h[db_all_h['시리얼'] == sn]
+                    if not sn_rows.empty:
+                        r0 = sn_rows.iloc[0]
+                        st.caption(f"반: {r0.get('반','')}　|　모델: {r0.get('모델','')}　|　품목코드: {r0.get('품목코드','')}")
+                    st.markdown("---")
+
+                    # 상태 변경 이력
+                    st.markdown("**🔄 상태 변경 이력**")
+                    try:
+                        res = get_supabase().table("audit_log").select("*").eq("시리얼", sn).order("시간").execute()
+                        if res.data:
+                            aud_df = pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
+                            ah = st.columns([1.8, 1.5, 1.5, 1.2, 3])
+                            for col, txt in zip(ah, ["시간","이전상태","이후상태","작업자","비고"]):
+                                col.markdown(f"<p style='font-size:0.7rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                            for _, ar in aud_df.iterrows():
+                                ac = st.columns([1.8, 1.5, 1.5, 1.2, 3])
+                                ac[0].caption(str(ar.get('시간',''))[:16])
+                                prev_c = STATE_CLR2.get(ar.get('이전상태',''), '#f5f2ec')
+                                next_c = STATE_CLR2.get(ar.get('이후상태',''), '#f5f2ec')
+                                ac[1].markdown(f"<span style='background:{prev_c};padding:1px 6px;border-radius:4px;font-size:0.75rem;'>{ar.get('이전상태','')}</span>", unsafe_allow_html=True)
+                                ac[2].markdown(f"<span style='background:{next_c};padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:bold;'>{ar.get('이후상태','')}</span>", unsafe_allow_html=True)
+                                ac[3].caption(ar.get('작업자',''))
+                                ac[4].caption(ar.get('비고',''))
+                        else:
+                            st.info("상태 변경 이력 없음")
+                    except Exception as e:
+                        st.warning(f"이력 조회 실패: {e}")
+
+                    # 자재 시리얼
+                    st.markdown("---")
+                    st.markdown("**🔩 연결된 자재 시리얼**")
+                    mat_df = load_material_serials(sn)
+                    if not mat_df.empty:
+                        for _, mr in mat_df.iterrows():
+                            st.markdown(f"- **{mr.get('자재명','')}** : `{mr.get('자재시리얼','')}`　<span style='color:#aaa;font-size:0.75rem;'>{mr.get('작업자','')}</span>", unsafe_allow_html=True)
+                    else:
+                        st.info("등록된 자재 시리얼 없음")
     else:
         st.info("OQC 결과 이력이 없습니다.")
 
