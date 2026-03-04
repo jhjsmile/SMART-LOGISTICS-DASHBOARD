@@ -30,13 +30,14 @@ PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
 CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower", "schedule_manager"]
 
 ROLES = {
-    "master":        ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
+    "master":        ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
     "control_tower": ["생산 지표 관리", "생산 현황 리포트", "수리 현황 리포트", "마스터 관리"],
     "assembly_team": ["조립 라인"],
     "qc_team":       ["검사 라인", "불량 공정"],
     "packing_team":  ["포장 라인"],
-    "admin":         ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
-    "schedule_manager": ["생산 지표 관리"]
+    "admin":         ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리"],
+    "schedule_manager": ["생산 지표 관리"],
+    "oqc_team":       ["OQC 라인"]
 }
 
 ROLE_LABELS = {
@@ -47,6 +48,7 @@ ROLE_LABELS = {
     "qc_team":       "🔍 검사 담당자",
     "packing_team":  "📦 포장 담당자",
     "schedule_manager": "📅 일정 관리자",
+    "oqc_team":       "🏅 OQC 품질팀",
 }
 
 SCHEDULE_COLORS = {
@@ -1151,6 +1153,13 @@ for group in PRODUCTION_GROUPS:
                 st.session_state.current_line  = "불량 공정"
                 st.session_state.production_db = load_realtime_ledger()
                 st.rerun()
+        if group == PRODUCTION_GROUPS[-1] and "OQC 라인" in allowed_nav:
+            if st.sidebar.button("🏅 OQC 라인", key="nav_oqc", use_container_width=True,
+                type="primary" if st.session_state.current_line == "OQC 라인" else "secondary"):
+                clear_cal()
+                st.session_state.current_line  = "OQC 라인"
+                st.session_state.production_db = load_realtime_ledger()
+                st.rerun()
 
 st.sidebar.divider()
 
@@ -1917,7 +1926,7 @@ elif curr_l == "생산 지표 관리":
 
     total_in   = len(db_f) if not db_f.empty else 0
     total_done = len(db_f[(db_f['라인']=='포장 라인') & (db_f['상태']=='완료')]) if not db_f.empty else 0
-    WIP_ALL = ['조립중','검사대기','검사중','포장대기','포장중','수리 완료(재투입)']
+    WIP_ALL = ['조립중','검사대기','검사중','포장대기','포장중','수리 완료(재투입)','OQC대기','OQC중']
     total_wip  = len(db_f[db_f['상태'].isin(WIP_ALL)]) if not db_f.empty else 0
     total_ng   = len(db_f[db_f['상태'].str.contains('불량', na=False)]) if not db_f.empty else 0
     plan_qty   = _qty(sch_f)
@@ -2067,7 +2076,7 @@ elif curr_l == "생산 지표 관리":
         st.markdown("<div class='db-section' style='background:#1e8449;'>⚡ 실시간 진행 중</div>", unsafe_allow_html=True)
         rt_df = st.session_state.production_db.copy()
         if ban_filter != "전체": rt_df = rt_df[rt_df['반'] == ban_filter]
-        WIP_STATES = ['조립중','검사대기','검사중','포장대기','포장중','수리 완료(재투입)']
+        WIP_STATES = ['조립중','검사대기','검사중','포장대기','포장중','수리 완료(재투입)','OQC대기','OQC중']
         rt_wip = rt_df[rt_df['상태'].isin(WIP_STATES)].sort_values('시간', ascending=False) if not rt_df.empty else pd.DataFrame()
 
         if not rt_wip.empty:
@@ -2847,6 +2856,188 @@ elif curr_l == "생산 지표 관리":
 
 
 
+# ── OQC 라인 ─────────────────────────────────────────────────────
+elif curr_l == "OQC 라인":
+    st.markdown("<h2 class='centered-title'>🏅 OQC 출하 품질 검사</h2>", unsafe_allow_html=True)
+
+    # 부적합 사유 선택지
+    OQC_DEFECT_REASONS = [
+        "(선택)",
+        "외관 불량 (스크래치/변형)",
+        "기능 불량 (동작 이상)",
+        "라벨 / 刻印 오류",
+        "포장 불량",
+        "치수 불량",
+        "이물질 혼입",
+        "수량 부족",
+        "서류 오류",
+        "기타 (직접 입력)",
+    ]
+
+    db_oqc = st.session_state.production_db.copy()
+
+    # ── 요약 KPI ─────────────────────────────────────────────────
+    oqc_wait  = len(db_oqc[db_oqc['상태'] == 'OQC대기'])
+    oqc_ing   = len(db_oqc[db_oqc['상태'] == 'OQC중'])
+    oqc_pass  = len(db_oqc[db_oqc['상태'] == '출하승인'])
+    oqc_fail  = len(db_oqc[db_oqc['상태'] == '부적합(OQC)'])
+    ok1,ok2,ok3,ok4 = st.columns(4)
+    ok1.metric("📥 OQC 대기", f"{oqc_wait}건")
+    ok2.metric("🔍 검사 중",  f"{oqc_ing}건")
+    ok3.metric("✅ 출하 승인", f"{oqc_pass}건")
+    ok4.metric("🚫 부적합",   f"{oqc_fail}건")
+    st.divider()
+
+    # ── 입고 대기 목록 (포장 완료 → OQC 대기 전환) ───────────────
+    st.markdown("<div class='section-title'>📥 입고 대기 (포장 완료 제품)</div>", unsafe_allow_html=True)
+    packing_done = db_oqc[
+        (db_oqc['상태'] == '완료') & (db_oqc['라인'] == '포장 라인')
+    ].sort_values('시간', ascending=False)
+
+    if not packing_done.empty:
+        hh = st.columns([2, 2, 1.5, 2, 1.5])
+        for col, txt in zip(hh, ["시간", "모델", "반", "시리얼", "OQC 투입"]):
+            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+        for idx, row in packing_done.iterrows():
+            rr = st.columns([2, 2, 1.5, 2, 1.5])
+            rr[0].caption(str(row.get('시간',''))[:16])
+            rr[1].write(row.get('모델',''))
+            rr[2].write(row.get('반',''))
+            rr[3].markdown(f"`{row.get('시리얼','')}`")
+            if rr[4].button("▶ OQC 투입", key=f"oqc_in_{idx}", use_container_width=True, type="primary"):
+                update_row(row['시리얼'], {'상태': 'OQC대기', '시간': get_now_kst_str(), '라인': 'OQC 라인'})
+                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                    이전상태='완료', 이후상태='OQC대기', 작업자=st.session_state.user_id)
+                st.session_state.production_db = load_realtime_ledger()
+                st.rerun()
+    else:
+        st.info("포장 완료된 제품이 없습니다.")
+
+    st.divider()
+
+    # ── OQC 대기 → 검사 시작 ─────────────────────────────────────
+    st.markdown("<div class='section-title'>🔍 OQC 검사 진행</div>", unsafe_allow_html=True)
+    oqc_wait_list = db_oqc[db_oqc['상태'].isin(['OQC대기', 'OQC중'])].sort_values('시간', ascending=False)
+
+    if not oqc_wait_list.empty:
+        for idx, row in oqc_wait_list.iterrows():
+            with st.container(border=True):
+                ic1, ic2, ic3, ic4 = st.columns([2, 1.5, 1.5, 1.5])
+                ic1.markdown(f"**{row.get('모델','')}**")
+                ic2.markdown(f"`{row.get('시리얼','')}`")
+                ic3.write(row.get('반',''))
+                # 상태 배지
+                s_now = row.get('상태','')
+                s_clr = '#fff3d4' if s_now == 'OQC대기' else '#ddeeff'
+                s_txt = '#7a5c00' if s_now == 'OQC대기' else '#1a4a7a'
+                ic4.markdown(f"<span style='background:{s_clr};color:{s_txt};padding:2px 8px;border-radius:6px;font-size:0.8rem;font-weight:bold;'>{'⏳ OQC대기' if s_now=='OQC대기' else '🔍 검사중'}</span>", unsafe_allow_html=True)
+
+                # OQC 대기 → 검사 시작 버튼
+                if s_now == 'OQC대기':
+                    if st.button("🔍 검사 시작", key=f"oqc_start_{idx}", type="secondary"):
+                        update_row(row['시리얼'], {'상태': 'OQC중', '시간': get_now_kst_str()})
+                        insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                            이전상태='OQC대기', 이후상태='OQC중', 작업자=st.session_state.user_id)
+                        st.session_state.production_db = load_realtime_ledger()
+                        st.rerun()
+
+                # OQC 중 → 판정
+                if s_now == 'OQC중':
+                    oq1, oq2 = st.columns(2)
+                    # 샘플/검사 수량
+                    with oq1:
+                        with st.container():
+                            oqs1, oqs2 = st.columns(2)
+                            sample_qty = oqs1.number_input("샘플 수량", min_value=0, step=1, key=f"oqc_sample_{idx}")
+                            defect_qty = oqs2.number_input("부적합 수량", min_value=0, step=1, key=f"oqc_defect_qty_{idx}")
+                    with oq2:
+                        defect_sel = st.selectbox("부적합 사유", OQC_DEFECT_REASONS, key=f"oqc_reason_{idx}")
+                        if defect_sel == "기타 (직접 입력)":
+                            defect_txt = st.text_input("직접 입력", key=f"oqc_reason_txt_{idx}", placeholder="부적합 사유 입력")
+                        elif defect_sel == "(선택)":
+                            defect_txt = ""
+                        else:
+                            defect_txt = defect_sel
+
+                    btn1, btn2 = st.columns(2)
+                    # 합격
+                    ck_pass = f"oqc_pass_ck_{idx}"
+                    ck_fail = f"oqc_fail_ck_{idx}"
+                    if not st.session_state.get(ck_pass) and not st.session_state.get(ck_fail):
+                        if btn1.button("✅ 합격 (출하 승인)", key=f"oqc_ok_{idx}", use_container_width=True, type="primary"):
+                            st.session_state[ck_pass] = True; st.rerun()
+                        if btn2.button("🚫 부적합", key=f"oqc_ng_{idx}", use_container_width=True):
+                            st.session_state[ck_fail] = True; st.rerun()
+                    elif st.session_state.get(ck_pass):
+                        st.caption("✅ 출하 승인 처리하시겠습니까?")
+                        cy1, cy2 = st.columns(2)
+                        if cy1.button("확인", key=f"oqc_ok_y_{idx}", type="primary", use_container_width=True):
+                            비고 = f"샘플:{sample_qty} 부적합수:{defect_qty}"
+                            update_row(row['시리얼'], {
+                                '상태': '출하승인', '시간': get_now_kst_str(),
+                                '증상': f"OQC합격 샘플:{sample_qty}", '수리': 비고
+                            })
+                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                                이전상태='OQC중', 이후상태='출하승인',
+                                작업자=st.session_state.user_id, 비고=비고)
+                            st.session_state[ck_pass] = False
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.rerun()
+                        if cy2.button("취소", key=f"oqc_ok_n_{idx}", use_container_width=True):
+                            st.session_state[ck_pass] = False; st.rerun()
+                    elif st.session_state.get(ck_fail):
+                        st.caption("🚫 부적합 처리하시겠습니까?")
+                        if not defect_txt:
+                            st.warning("부적합 사유를 선택해주세요.")
+                        cy1, cy2 = st.columns(2)
+                        if cy1.button("확인", key=f"oqc_ng_y_{idx}", type="primary", use_container_width=True):
+                            if defect_txt:
+                                비고 = f"사유:{defect_txt} 샘플:{sample_qty} 부적합수:{defect_qty}"
+                                update_row(row['시리얼'], {
+                                    '상태': '부적합(OQC)', '시간': get_now_kst_str(),
+                                    '증상': defect_txt, '수리': 비고
+                                })
+                                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                                    이전상태='OQC중', 이후상태='부적합(OQC)',
+                                    작업자=st.session_state.user_id, 비고=비고)
+                                st.session_state[ck_fail] = False
+                                st.session_state.production_db = load_realtime_ledger()
+                                st.rerun()
+                        if cy2.button("취소", key=f"oqc_ng_n_{idx}", use_container_width=True):
+                            st.session_state[ck_fail] = False; st.rerun()
+    else:
+        st.info("OQC 검사 대기 중인 제품이 없습니다.")
+
+    st.divider()
+
+    # ── OQC 결과 이력 ─────────────────────────────────────────────
+    st.markdown("<div class='section-title'>📋 OQC 결과 이력</div>", unsafe_allow_html=True)
+    oqc_done = db_oqc[db_oqc['상태'].isin(['출하승인','부적합(OQC)'])].sort_values('시간', ascending=False)
+
+    if not oqc_done.empty:
+        oqc_sn_filter = st.text_input("🔍 S/N 검색", key="oqc_sn_filter", placeholder="시리얼 일부 입력")
+        if oqc_sn_filter.strip():
+            oqc_done = oqc_done[oqc_done['시리얼'].str.contains(oqc_sn_filter.strip(), case=False, na=False)]
+
+        rh = st.columns([1.8, 2, 1.5, 1.8, 1.5, 3])
+        for col, txt in zip(rh, ["시간", "모델", "반", "시리얼", "결과", "비고"]):
+            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+        for _, row in oqc_done.iterrows():
+            rr2 = st.columns([1.8, 2, 1.5, 1.8, 1.5, 3])
+            rr2[0].caption(str(row.get('시간',''))[:16])
+            rr2[1].write(row.get('모델',''))
+            rr2[2].write(row.get('반',''))
+            rr2[3].markdown(f"`{row.get('시리얼','')}`")
+            결과 = row.get('상태','')
+            if 결과 == '출하승인':
+                rr2[4].markdown("<span style='background:#d4f0e2;color:#1f6640;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>✅ 출하승인</span>", unsafe_allow_html=True)
+            else:
+                rr2[4].markdown("<span style='background:#fde8e7;color:#7a2e2a;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>🚫 부적합</span>", unsafe_allow_html=True)
+            rr2[5].caption(row.get('수리',''))
+    else:
+        st.info("OQC 결과 이력이 없습니다.")
+
+
 # ── 불량 공정 ────────────────────────────────────────────────────
 elif curr_l == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 분석 및 수리 조치</h2>", unsafe_allow_html=True)
@@ -3225,7 +3416,7 @@ elif curr_l == "마스터 관리":
                 st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>👤 사용자 계정 생성/업데이트</p>", unsafe_allow_html=True)
                 nu  = st.text_input("ID")
                 np_ = st.text_input("PW", type="password")
-                nr  = st.selectbox("Role", ["admin","master","control_tower","assembly_team","qc_team","packing_team","schedule_manager"])
+                nr  = st.selectbox("Role", ["admin","master","control_tower","assembly_team","qc_team","packing_team","schedule_manager","oqc_team"])
                 if st.form_submit_button("사용자 저장"):
                     if nu and np_:
                         st.session_state.user_db[nu] = {"pw_hash": hash_pw(np_), "role": nr}
