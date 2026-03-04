@@ -108,11 +108,31 @@ st.markdown("""
         border: 1px solid #ddd5c0 !important;
         border-radius: 8px !important;
         color: #3d3530 !important;
+        max-width: 480px !important;
+    }
+    /* 검색 필드는 더 짧게 */
+    .stTextInput input[placeholder*="검색"],
+    .stTextInput input[placeholder*="S/N"],
+    .stTextInput input[placeholder*="시리얼"] {
+        max-width: 320px !important;
     }
     .stTextInput input:focus,
     .stTextArea textarea:focus {
         border-color: #7eb8e8 !important;
         box-shadow: 0 0 0 2px rgba(126,184,232,0.25) !important;
+    }
+    /* selectbox, multiselect 너비 제한 */
+    .stSelectbox > div > div,
+    .stMultiSelect > div > div {
+        max-width: 480px !important;
+    }
+    /* number_input 짧게 */
+    .stNumberInput {
+        max-width: 200px !important;
+    }
+    /* 파일 업로더 너비 제한 */
+    .stFileUploader {
+        max-width: 520px !important;
     }
 
     /* ── 버튼 전체 공통 ── */
@@ -120,8 +140,9 @@ st.markdown("""
     div[data-testid="stFormSubmitButton"] > button,
     button[kind="primary"],
     button[kind="secondary"] {
-        display: flex !important; justify-content: center !important; align-items: center !important;
-        margin-top: 1px !important; padding: 6px 10px !important; width: 100% !important;
+        display: inline-flex !important; justify-content: center !important; align-items: center !important;
+        margin-top: 1px !important; padding: 6px 16px !important;
+        min-width: 80px !important; max-width: 100% !important;
         border-radius: 8px !important; font-weight: 600 !important;
         white-space: nowrap !important; overflow: hidden !important;
         text-overflow: ellipsis !important; transition: all 0.2s ease !important;
@@ -1911,10 +1932,13 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     _hist_cnt = len(f_df)
     with st.expander(f"📋 {curr_g} {curr_l} 이력" + (f"  ·  {_hist_cnt}건" if _hist_cnt else "  ·  없음"), expanded=True):
         if not f_df.empty:
+            _hs1, _hs2 = st.columns([2, 4])
+            _sn_search_qp = _hs1.text_input("🔍 시리얼 검색", placeholder="S/N 일부 입력...", key=f"sn_search_{curr_g}_{curr_l}")
+            f_df_view = f_df[f_df['시리얼'].str.contains(_sn_search_qp.strip(), case=False, na=False)] if _sn_search_qp.strip() else f_df
             h = st.columns([2.2, 2.0, 1.5, 1.8, 2.2])
             for col, txt in zip(h, ["기록 시간","모델","품목","시리얼","제어"]):
                 col.write(f"**{txt}**")
-            for idx, row in f_df.sort_values('시간', ascending=False).iterrows():
+            for idx, row in f_df_view.sort_values('시간', ascending=False).iterrows():
                 r = st.columns([2.2, 2.0, 1.5, 1.8, 2.2])
                 r[0].write(row['시간']); r[1].write(row['모델'])
                 r[2].write(row['품목코드']); r[3].write(f"`{row['시리얼']}`")
@@ -3241,13 +3265,14 @@ elif curr_l == "OQC 라인":
         else:
             st.info("등록된 자재 시리얼 없음")
 
-        if st.button("닫기", use_container_width=True, key="oqc_hist_close"):
-            st.session_state.oqc_detail_sn = None
+        if st.button("✖ 닫기", use_container_width=True, key="oqc_hist_close"):
+            st.session_state["oqc_detail_sn"] = None
             st.rerun()
 
     # 이력 팝업 트리거
-    if st.session_state.get("oqc_detail_sn"):
-        oqc_history_dialog(st.session_state.oqc_detail_sn)
+    _oqc_sn_to_show = st.session_state.get("oqc_detail_sn")
+    if _oqc_sn_to_show:
+        oqc_history_dialog(_oqc_sn_to_show)
 
     if not oqc_done.empty:
         oqc_sn_filter = st.text_input("🔍 S/N 검색", key="oqc_sn_filter", placeholder="시리얼 일부 입력")
