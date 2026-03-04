@@ -453,7 +453,13 @@ def insert_row(row: dict) -> bool:
         get_supabase().table("production").insert(row).execute()
         return True
     except Exception as e:
-        st.error(f"등록 실패: {e}"); return False
+        err_str = str(e)
+        if "23505" in err_str or "duplicate key" in err_str or "already exists" in err_str:
+            sn = row.get('시리얼', '')
+            st.error(f"⚠️ 이미 등록된 시리얼입니다: **{sn}**\n\n동일한 S/N이 이미 생산 이력에 존재합니다. 시리얼을 확인해주세요.")
+        else:
+            st.error(f"등록 실패: {e}")
+        return False
 
 def update_row(시리얼: str, data: dict) -> bool:
     try:
