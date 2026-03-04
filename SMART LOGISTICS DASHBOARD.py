@@ -3265,14 +3265,15 @@ elif curr_l == "OQC 라인":
         else:
             st.info("등록된 자재 시리얼 없음")
 
+        # dialog 안 rerun 금지 - 닫기 버튼은 key만 삭제 (X 버튼과 동일 효과)
+        st.divider()
         if st.button("✖ 닫기", use_container_width=True, key="oqc_hist_close"):
-            st.session_state["oqc_detail_sn"] = None
-            st.rerun()
+            if "oqc_detail_sn" in st.session_state:
+                del st.session_state["oqc_detail_sn"]
 
-    # 이력 팝업 트리거
-    _oqc_sn_to_show = st.session_state.get("oqc_detail_sn")
-    if _oqc_sn_to_show:
-        oqc_history_dialog(_oqc_sn_to_show)
+    # 이력 팝업 트리거 - 새로고침마다 재호출 방지
+    if st.session_state.get("oqc_detail_sn"):
+        oqc_history_dialog(st.session_state["oqc_detail_sn"])
 
     if not oqc_done.empty:
         oqc_sn_filter = st.text_input("🔍 S/N 검색", key="oqc_sn_filter", placeholder="시리얼 일부 입력")
