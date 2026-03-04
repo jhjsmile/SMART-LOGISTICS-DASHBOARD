@@ -427,6 +427,7 @@ keep_supabase_alive()
 def get_now_kst_str() -> str:
     return datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
 
+@st.cache_data(ttl=10)
 def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
     """최근 N개월 데이터만 로드 (기본 3개월, 성능 최적화)"""
     try:
@@ -488,6 +489,7 @@ def load_schedule() -> pd.DataFrame:
         return pd.DataFrame(columns=['id','날짜','반','카테고리','pn','모델명','조립수','출하계획','특이사항','작성자'])
 
 # ── 모델 마스터 DB 함수 ──────────────────────────────────────────
+@st.cache_data(ttl=300)
 def load_model_master() -> pd.DataFrame:
     try:
         res = get_supabase().table("model_master").select("*").execute()
@@ -3353,12 +3355,13 @@ elif curr_l == "OQC 라인":
         else:
             st.info("등록된 자재 시리얼 없음")
 
-        if st.button("닫기", use_container_width=True): st.rerun()
+        if st.button("닫기", use_container_width=True, key="oqc_hist_close"):
+            st.session_state.oqc_detail_sn = None
+            st.rerun()
 
     # 이력 팝업 트리거
     if st.session_state.get("oqc_detail_sn"):
         oqc_history_dialog(st.session_state.oqc_detail_sn)
-        st.session_state.oqc_detail_sn = None
 
     if not oqc_done.empty:
         oqc_sn_filter = st.text_input("🔍 S/N 검색", key="oqc_sn_filter", placeholder="시리얼 일부 입력")
