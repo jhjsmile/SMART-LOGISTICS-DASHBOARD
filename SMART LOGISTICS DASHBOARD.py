@@ -1660,43 +1660,54 @@ elif curr_l == "조립 라인":
     with st.container(border=True):
         st.markdown(f"#### ➕ {curr_g} 신규 생산 등록")
         g_models     = st.session_state.group_master_models.get(curr_g, [])
-        target_model = st.selectbox("투입 모델 선택", ["선택하세요."] + g_models)
-        with st.form("entry_gate_form"):
-            f_c1, f_c2  = st.columns(2)
-            g_items     = st.session_state.group_master_items.get(curr_g, {}).get(target_model, [])
-            target_item = f_c1.selectbox("품목 코드", g_items if target_model != "선택하세요." else ["모델 선택 대기"])
-            target_sn   = f_c2.text_input("제품 시리얼(S/N) 입력")
+        target_model = st.selectbox("투입 모델 선택", ["선택하세요."] + g_models, key=f"model_sel_{curr_g}")
+        g_items      = st.session_state.group_master_items.get(curr_g, {}).get(target_model, [])
 
-            # 자재 시리얼 (가변 개수)
-            st.markdown("<p style='font-size:0.82rem;font-weight:600;color:#5a4f45;margin:6px 0 2px 0;'>🔩 자재 시리얼 (선택, 여러 개 가능)</p>", unsafe_allow_html=True)
-            mat_count = st.number_input("자재 수량", min_value=0, max_value=20, step=1, value=0, key="mat_count_form")
-            mat_inputs = []
-            for mi in range(int(mat_count)):
-                mc1, mc2 = st.columns(2)
-                m_name = mc1.text_input(f"자재명 #{mi+1}", key=f"mat_name_{mi}", placeholder="예: PCB, 배터리")
-                m_sn   = mc2.text_input(f"자재 S/N #{mi+1}", key=f"mat_sn_{mi}", placeholder="자재 시리얼 입력")
-                mat_inputs.append({"자재명": m_name, "자재시리얼": m_sn})
+        ef1, ef2 = st.columns(2)
+        target_item = ef1.selectbox("품목 코드", g_items if target_model != "선택하세요." else ["모델 선택 대기"], key=f"item_sel_{curr_g}")
+        target_sn   = ef2.text_input("제품 시리얼(S/N)", placeholder="메인 시리얼 입력", key=f"sn_input_{curr_g}")
 
-            if st.form_submit_button("▶️ 생산 시작 등록", use_container_width=True, type="primary"):
-                if target_model != "선택하세요." and target_sn.strip():
-                    if insert_row({
-                        '시간': get_now_kst_str(), '반': curr_g, '라인': "조립 라인",
-                        'cell': "", '모델': target_model, '품목코드': target_item,
-                        '시리얼': target_sn.strip(), '상태': '조립중',
-                        '증상': '', '수리': '', '작업자': st.session_state.user_id
-                    }):
-                        # 자재 시리얼 저장
-                        valid_mats = [m for m in mat_inputs if m["자재시리얼"].strip()]
-                        if valid_mats:
-                            insert_material_serials(
-                                메인시리얼=target_sn.strip(), 모델=target_model,
-                                반=curr_g, 자재목록=valid_mats,
-                                작업자=st.session_state.user_id
-                            )
-                        st.session_state.production_db = load_realtime_ledger()
-                        st.rerun()
-                else:
-                    st.warning("모델과 시리얼을 모두 입력해주세요.")
+        # 자재 시리얼 (form 밖 - 즉시 반응)
+        st.markdown("<p style='font-size:0.82rem;font-weight:600;color:#5a4f45;margin:8px 0 4px 0;'>🔩 자재 시리얼 <span style='font-weight:normal;color:#aaa;'>(선택사항 — 수량 설정 후 입력)</span></p>", unsafe_allow_html=True)
+        mat_count_key = f"mat_count_{curr_g}"
+        mc1, mc2, mc3 = st.columns([1, 1, 4])
+        if mc1.button("➕", key=f"mat_plus_{curr_g}", help="자재 추가"):
+            st.session_state[mat_count_key] = st.session_state.get(mat_count_key, 0) + 1
+            st.rerun()
+        if mc2.button("➖", key=f"mat_minus_{curr_g}", help="자재 제거"):
+            st.session_state[mat_count_key] = max(0, st.session_state.get(mat_count_key, 0) - 1)
+            st.rerun()
+        cur_mat_count = st.session_state.get(mat_count_key, 0)
+        mc3.caption(f"자재 {cur_mat_count}개 등록 예정" if cur_mat_count > 0 else "자재 없음 (➕ 버튼으로 추가)")
+
+        mat_inputs = []
+        for mi in range(cur_mat_count):
+            mcc1, mcc2 = st.columns(2)
+            m_name = mcc1.text_input(f"자재명 #{mi+1}", key=f"mat_name_{curr_g}_{mi}", placeholder="예: PCB, 배터리, 모듈")
+            m_sn   = mcc2.text_input(f"자재 S/N #{mi+1}", key=f"mat_sn_{curr_g}_{mi}", placeholder="자재 시리얼 번호")
+            mat_inputs.append({"자재명": m_name, "자재시리얼": m_sn})
+
+        if st.button("▶️ 생산 시작 등록", use_container_width=True, type="primary", key=f"start_btn_{curr_g}"):
+            if target_model != "선택하세요." and target_sn.strip():
+                if insert_row({
+                    '시간': get_now_kst_str(), '반': curr_g, '라인': "조립 라인",
+                    'cell': "", '모델': target_model, '품목코드': target_item,
+                    '시리얼': target_sn.strip(), '상태': '조립중',
+                    '증상': '', '수리': '', '작업자': st.session_state.user_id
+                }):
+                    valid_mats = [m for m in mat_inputs if m["자재시리얼"].strip()]
+                    if valid_mats:
+                        insert_material_serials(
+                            메인시리얼=target_sn.strip(), 모델=target_model,
+                            반=curr_g, 자재목록=valid_mats,
+                            작업자=st.session_state.user_id
+                        )
+                    # 자재 카운트 초기화
+                    st.session_state[mat_count_key] = 0
+                    st.session_state.production_db = load_realtime_ledger()
+                    st.rerun()
+            else:
+                st.warning("모델과 시리얼을 모두 입력해주세요.")
 
     st.divider()
     db_v = st.session_state.production_db
