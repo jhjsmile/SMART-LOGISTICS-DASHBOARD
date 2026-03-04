@@ -1926,7 +1926,7 @@ elif curr_l == "생산 지표 관리":
 
     total_in   = len(db_f) if not db_f.empty else 0
     total_done = len(db_f[(db_f['라인']=='포장 라인') & (db_f['상태']=='완료')]) if not db_f.empty else 0
-    WIP_ALL = ['조립중','검사대기','검사중','포장대기','포장중','수리 완료(재투입)','OQC대기','OQC중']
+    WIP_ALL = ['조립중','검사대기','검사중','포장대기','포장중','수리 완료(재투입)']
     total_wip  = len(db_f[db_f['상태'].isin(WIP_ALL)]) if not db_f.empty else 0
     total_ng   = len(db_f[db_f['상태'].str.contains('불량', na=False)]) if not db_f.empty else 0
     plan_qty   = _qty(sch_f)
@@ -2076,7 +2076,7 @@ elif curr_l == "생산 지표 관리":
         st.markdown("<div class='db-section' style='background:#1e8449;'>⚡ 실시간 진행 중</div>", unsafe_allow_html=True)
         rt_df = st.session_state.production_db.copy()
         if ban_filter != "전체": rt_df = rt_df[rt_df['반'] == ban_filter]
-        WIP_STATES = ['조립중','검사대기','검사중','포장대기','포장중','수리 완료(재투입)','OQC대기','OQC중']
+        WIP_STATES = ['조립중','검사대기','검사중','포장대기','포장중','수리 완료(재투입)']
         rt_wip = rt_df[rt_df['상태'].isin(WIP_STATES)].sort_values('시간', ascending=False) if not rt_df.empty else pd.DataFrame()
 
         if not rt_wip.empty:
@@ -2874,13 +2874,26 @@ elif curr_l == "OQC 라인":
         "기타 (직접 입력)",
     ]
 
-    db_oqc = st.session_state.production_db.copy()
+    db_oqc_all = st.session_state.production_db.copy()
 
-    # ── 요약 KPI ─────────────────────────────────────────────────
+    # ── 반 선택 ──────────────────────────────────────────────────
+    BAN_CLR  = {"제조1반": "#2471a3", "제조2반": "#1e8449", "제조3반": "#6c3483"}
+    BAN_BG   = {"제조1반": "#ddeeff", "제조2반": "#d4f0e2", "제조3반": "#ede0f5"}
+    oqc_ban  = st.radio("반 선택", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="oqc_ban_radio")
+    db_oqc   = db_oqc_all[db_oqc_all['반'] == oqc_ban] if oqc_ban != "전체" else db_oqc_all.copy()
+
+    # ── 요약 KPI (선택 반 기준) ───────────────────────────────────
     oqc_wait  = len(db_oqc[db_oqc['상태'] == 'OQC대기'])
     oqc_ing   = len(db_oqc[db_oqc['상태'] == 'OQC중'])
     oqc_pass  = len(db_oqc[db_oqc['상태'] == '출하승인'])
     oqc_fail  = len(db_oqc[db_oqc['상태'] == '부적합(OQC)'])
+
+    # 반 색상 배지
+    if oqc_ban != "전체":
+        bc = BAN_CLR.get(oqc_ban, "#888"); bb = BAN_BG.get(oqc_ban, "#f0f0f0")
+        st.markdown(f"<span style='background:{bb};color:{bc};padding:3px 12px;border-radius:8px;font-weight:bold;font-size:0.9rem;'>📍 {oqc_ban}</span>", unsafe_allow_html=True)
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+
     ok1,ok2,ok3,ok4 = st.columns(4)
     ok1.metric("📥 OQC 대기", f"{oqc_wait}건")
     ok2.metric("🔍 검사 중",  f"{oqc_ing}건")
@@ -3036,6 +3049,114 @@ elif curr_l == "OQC 라인":
             rr2[5].caption(row.get('수리',''))
     else:
         st.info("OQC 결과 이력이 없습니다.")
+
+
+    st.divider()
+
+    # ── OQC 전용 차트 ─────────────────────────────────────────────
+    st.markdown("<div class='section-title'>📊 OQC 분석 차트</div>", unsafe_allow_html=True)
+
+    db_oqc_chart = db_oqc_all.copy()  # 전체 반 기준
+    oqc_chart_df = db_oqc_chart[db_oqc_chart['상태'].isin(['OQC대기','OQC중','출하승인','부적합(OQC)'])]
+
+    if not oqc_chart_df.empty:
+        import plotly.graph_objects as go
+
+        cc1, cc2, cc3 = st.columns(3)
+
+        # ① 반별 OQC 결과 현황 (누적 막대)
+        with cc1:
+            rows = []
+            for ban in PRODUCTION_GROUPS:
+                bdf = oqc_chart_df[oqc_chart_df['반'] == ban]
+                rows.append({
+                    '반': ban,
+                    '출하승인': len(bdf[bdf['상태']=='출하승인']),
+                    '부적합':   len(bdf[bdf['상태']=='부적합(OQC)']),
+                    'OQC중':    len(bdf[bdf['상태']=='OQC중']),
+                    'OQC대기':  len(bdf[bdf['상태']=='OQC대기']),
+                })
+            import pandas as _pd2
+            ban_df = _pd2.DataFrame(rows)
+            fig1 = go.Figure()
+            CLR_MAP = {'출하승인':'#4da875','부적합':'#e8706a','OQC중':'#7eb8e8','OQC대기':'#f0c878'}
+            for col in ['출하승인','부적합','OQC중','OQC대기']:
+                fig1.add_trace(go.Bar(name=col, x=ban_df['반'], y=ban_df[col],
+                    marker_color=CLR_MAP[col]))
+            fig1.update_layout(
+                title="반별 OQC 결과", barmode='stack',
+                template='plotly_white', height=280,
+                margin=dict(t=40,b=20,l=10,r=10),
+                legend=dict(orientation='h', y=-0.25, font=dict(size=10))
+            )
+            st.plotly_chart(fig1, use_container_width=True)
+
+        # ② 부적합 사유별 건수 (증상 컬럼 기준)
+        with cc2:
+            fail_df = oqc_chart_df[oqc_chart_df['상태']=='부적합(OQC)'].copy()
+            if not fail_df.empty:
+                reason_cnt = (fail_df['증상'].fillna('미기재')
+                               .value_counts().reset_index())
+                reason_cnt.columns = ['사유','건수']
+                fig2 = go.Figure(go.Bar(
+                    x=reason_cnt['건수'], y=reason_cnt['사유'],
+                    orientation='h',
+                    marker_color='#e8706a',
+                    text=reason_cnt['건수'], textposition='outside'
+                ))
+                fig2.update_layout(
+                    title="부적합 사유별 건수",
+                    template='plotly_white', height=280,
+                    margin=dict(t=40,b=20,l=10,r=10),
+                    yaxis=dict(autorange='reversed')
+                )
+                st.plotly_chart(fig2, use_container_width=True)
+            else:
+                st.info("부적합 데이터 없음")
+
+        # ③ 합격률 추이 (월별)
+        with cc3:
+            oqc_done_chart = oqc_chart_df[oqc_chart_df['상태'].isin(['출하승인','부적합(OQC)'])].copy()
+            if not oqc_done_chart.empty and '시간' in oqc_done_chart.columns:
+                oqc_done_chart['월'] = oqc_done_chart['시간'].str[:7]
+                monthly = oqc_done_chart.groupby('월').apply(
+                    lambda x: round(len(x[x['상태']=='출하승인']) / len(x) * 100, 1)
+                    if len(x) > 0 else 0
+                ).reset_index()
+                monthly.columns = ['월','합격률(%)']
+                fig3 = go.Figure(go.Scatter(
+                    x=monthly['월'], y=monthly['합격률(%)'],
+                    mode='lines+markers+text',
+                    line=dict(color='#4da875', width=2),
+                    marker=dict(size=8),
+                    text=monthly['합격률(%)'].apply(lambda v: f"{v}%"),
+                    textposition='top center', textfont=dict(size=10)
+                ))
+                fig3.add_hline(y=100, line_dash="dash", line_color="#e8908a",
+                               annotation_text="목표 100%", annotation_font_size=9)
+                fig3.update_layout(
+                    title="월별 합격률 추이",
+                    template='plotly_white', height=280,
+                    margin=dict(t=40,b=20,l=10,r=10),
+                    yaxis=dict(range=[0,110], title="%")
+                )
+                st.plotly_chart(fig3, use_container_width=True)
+            else:
+                st.info("이력 데이터 없음")
+
+        # ④ 모델별 부적합률 테이블
+        if not oqc_done_chart.empty if 'oqc_done_chart' in dir() else False:
+            model_grp = oqc_done_chart.groupby('모델').apply(
+                lambda x: _pd2.Series({
+                    '전체': len(x),
+                    '출하승인': len(x[x['상태']=='출하승인']),
+                    '부적합':   len(x[x['상태']=='부적합(OQC)']),
+                    '부적합률(%)': round(len(x[x['상태']=='부적합(OQC)'])/len(x)*100,1) if len(x)>0 else 0
+                })
+            ).reset_index().sort_values('부적합률(%)', ascending=False)
+            st.dataframe(model_grp, use_container_width=True, hide_index=True)
+    else:
+        st.info("OQC 데이터가 쌓이면 차트가 표시됩니다.")
 
 
 # ── 불량 공정 ────────────────────────────────────────────────────
