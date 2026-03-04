@@ -1619,6 +1619,7 @@ elif curr_l == "조립 라인":
                 st.rerun()
 
     # 오늘 일정 카드 (expander)
+    # 오늘 일정 카드
     _today_label = f"📋 오늘({today_str}) {curr_g} 작업 일정" + (f"  ·  {len(today_sch)}건" if not today_sch.empty else "  ·  없음")
     with st.expander(_today_label, expanded=True):
         if today_sch.empty:
@@ -1627,7 +1628,6 @@ elif curr_l == "조립 라인":
             th = st.columns([1.2, 2.8, 1.5, 0.8, 1.8, 2.5])
             for col, txt in zip(th, ["유형", "모델명", "P/N", "조립수", "출하계획", "특이사항"]):
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:2px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-
             for _, sr in today_sch.iterrows():
                 cat   = str(sr.get('카테고리', '기타'))
                 color = SCHEDULE_COLORS.get(cat, "#888")
@@ -1640,7 +1640,6 @@ elif curr_l == "조립 라인":
                     qty = 0
                 ship  = str(sr.get('출하계획', ''))
                 note  = str(sr.get('특이사항', ''))
-
                 rc = st.columns([1.2, 2.8, 1.5, 0.8, 1.8, 2.5])
                 rc[0].markdown(f"<span style='background:{color}22;color:{color};border-left:3px solid {color};padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:bold;'>{cat}</span>", unsafe_allow_html=True)
                 rc[1].write(model)
@@ -1649,20 +1648,108 @@ elif curr_l == "조립 라인":
                 rc[4].caption(ship if ship and ship != 'nan' else "-")
                 rc[5].caption(f"⚠️ {note}" if note and note != 'nan' else "-")
 
-        # 이번 달 전체 일정 보기
-        with st.expander(f"📅 {curr_g} 이번 달 전체 일정 보기"):
-            month_sch = sch_all[
-                (sch_all['날짜'].str.startswith(today_str[:7])) &
-                (sch_all['반'] == curr_g)
-            ] if not sch_all.empty else pd.DataFrame()
-            if not month_sch.empty:
-                show_cols = ['날짜','카테고리','모델명','pn','조립수','출하계획','특이사항']
-                show_cols = [c for c in show_cols if c in month_sch.columns]
-                st.dataframe(month_sch[show_cols].sort_values('날짜'), use_container_width=True, hide_index=True)
-            else:
-                st.info("이번 달 등록된 일정이 없습니다.")
+    # 이번 달 전체 일정 (별도 expander - 중첩 방지)
+    with st.expander(f"📅 {curr_g} 이번 달 전체 일정 보기", expanded=False):
+        month_sch = sch_all[
+            (sch_all['날짜'].str.startswith(today_str[:7])) &
+            (sch_all['반'] == curr_g)
+        ] if not sch_all.empty else pd.DataFrame()
+        if not month_sch.empty:
+            show_cols = ['날짜','카테고리','모델명','pn','조립수','출하계획','특이사항']
+            show_cols = [c for c in show_cols if c in month_sch.columns]
+            st.dataframe(month_sch[show_cols].sort_values('날짜'), use_container_width=True, hide_index=True)
+        else:
+            st.info("이번 달 등록된 일정이 없습니다.")
 
     st.divider()
+    db_v = st.session_state.production_db
+    f_df = db_v[(db_v['반'] == curr_g) & (db_v['라인'] == "조립 라인")]
+
+    # ── 모델/품목별 수량 카운트 + 생산 이력 ─────────────────────────
+    if not f_df.empty:
+        with st.expander(f"📊 {curr_g} 조립 라인 수량 현황", expanded=True):
+            # 모델+품목 그룹핑
+            grp = f_df.groupby(['모델','품목코드'])
+            count_rows = []
+            for (model, pn), gdf in grp:
+                total    = len(gdf)
+                done     = len(gdf[gdf['상태'].isin(['검사대기','검사중','포장대기','포장중','완료'])])
+                wip      = len(gdf[gdf['상태'].isin(['조립중','수리 완료(재투입)'])])
+                defect   = len(gdf[gdf['상태'].str.contains('불량', na=False)])
+                count_rows.append((model, pn, total, done, wip, defect))
+
+            # 카드 렌더링 (모델별)
+            for (model, pn, total, done, wip, defect) in count_rows:
+                pct     = int(done / total * 100) if total > 0 else 0
+                with st.container(border=True):
+                    mc1, mc2 = st.columns([3, 1])
+                    mc1.markdown(f"**{model}**" + (f" `{pn}`" if pn else ""))
+                    mc2.markdown(f"완료율 **{pct}%**")
+                    st.progress(min(pct, 100) / 100)
+                    sc1, sc2, sc3, sc4 = st.columns(4)
+                    sc1.metric("전체", total)
+                    sc2.metric("✅ 완료", done)
+                    sc3.metric("🏗️ 작업중", wip)
+                    sc4.metric("🚨 불량", defect, delta=None if defect == 0 else f"{defect}건", delta_color="inverse")
+
+        with st.expander(f"📋 {curr_g} 생산 이력", expanded=True):
+            sc1, sc2 = st.columns([1, 1])
+            sn_search = sc1.text_input("🔍 시리얼 검색", placeholder="S/N 일부 입력...", key=f"sn_search_{curr_g}")
+            f_df_view = f_df[f_df['시리얼'].str.contains(sn_search.strip(), case=False, na=False)] if sn_search.strip() else f_df
+            h = st.columns([2.2, 2.0, 1.5, 1.8, 2.2])
+            for col, txt in zip(h, ["기록 시간","모델","품목","시리얼","현장 제어"]):
+                col.write(f"**{txt}**")
+            for idx, row in f_df_view.sort_values('시간', ascending=False).iterrows():
+                r = st.columns([2.2, 2.0, 1.5, 1.8, 2.2])
+                r[0].write(row['시간']); r[1].write(row['모델'])
+                r[2].write(row['품목코드']); r[3].write(f"`{row['시리얼']}`")
+                with r[4]:
+                    if row['상태'] in ["조립중", "수리 완료(재투입)"]:
+                        ck_ok = f"ck_ok_{idx}"; ck_ng = f"ck_ng_{idx}"
+                        if not st.session_state.get(ck_ok) and not st.session_state.get(ck_ng):
+                            b1, b2 = st.columns(2)
+                            if b1.button("✅ 완료", key=f"ok_{idx}", use_container_width=True):
+                                st.session_state[ck_ok] = True; st.rerun()
+                            if b2.button("🚫 불량", key=f"ng_{idx}", use_container_width=True):
+                                st.session_state[ck_ng] = True; st.rerun()
+                        elif st.session_state.get(ck_ok):
+                            st.caption("✅ 완료 처리?")
+                            y1, y2 = st.columns(2)
+                            if y1.button("확인", key=f"ok_y_{idx}", type="primary", use_container_width=True):
+                                update_row(row['시리얼'], {'상태':'검사대기','시간':get_now_kst_str()})
+                                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                                    이전상태='조립중', 이후상태='검사대기', 작업자=st.session_state.user_id)
+                                st.session_state.production_db = load_realtime_ledger()
+                                st.session_state[ck_ok] = False; st.rerun()
+                            if y2.button("취소", key=f"ok_n_{idx}", use_container_width=True):
+                                st.session_state[ck_ok] = False; st.rerun()
+                        elif st.session_state.get(ck_ng):
+                            st.caption("🚫 불량 처리?")
+                            y1, y2 = st.columns(2)
+                            if y1.button("확인", key=f"ng_y_{idx}", type="primary", use_container_width=True):
+                                update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str()})
+                                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                                    이전상태='조립중', 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
+                                st.session_state.production_db = load_realtime_ledger()
+                                st.session_state[ck_ng] = False; st.rerun()
+                            if y2.button("취소", key=f"ng_n_{idx}", use_container_width=True):
+                                st.session_state[ck_ng] = False; st.rerun()
+                    else:
+                        STATUS_STYLE = {
+                            '검사대기': ('#fff3d4','#7a5c00','#f0c878','🔜'),
+                            '검사중':   ('#ddeeff','#1a4a7a','#7eb8e8','🔍'),
+                            '포장대기': ('#ede0f5','#4a1a7a','#b07ed8','🔜'),
+                            '포장중':   ('#fde8d4','#7a3c1a','#e8a87e','📦'),
+                            '완료':     ('#d4f0e2','#1f6640','#7ec8a0','✅'),
+                        }
+                        s = row['상태']
+                        if "불량" in str(s):
+                            st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:3px 8px;border-radius:6px;text-align:center;font-weight:bold;border:1px solid #e8908a;font-size:0.8rem;'>🚫 {s}</div>", unsafe_allow_html=True)
+                        else:
+                            bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
+                            st.markdown(f"<div style='background:{bg};color:{tc};padding:3px 8px;border-radius:6px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.8rem;display:inline-block;width:100%;'>{ic} {s}</div>", unsafe_allow_html=True)
+    else:
+        st.info("등록된 생산 내역이 없습니다.")
 
     # 자재 목록 마스터 (커스터마이즈 가능)
     MAT_NAME_OPTIONS = ["PCB", "배터리", "메인보드", "디스플레이", "케이블", "모듈", "센서", "커넥터", "기타"]
@@ -1793,95 +1880,6 @@ elif curr_l == "조립 라인":
             else:
                 st.warning("모델과 메인 S/N을 모두 입력해주세요.")
 
-    st.divider()
-    db_v = st.session_state.production_db
-    f_df = db_v[(db_v['반'] == curr_g) & (db_v['라인'] == "조립 라인")]
-
-    # ── 모델/품목별 수량 카운트 + 생산 이력 ─────────────────────────
-    if not f_df.empty:
-        with st.expander(f"📊 {curr_g} 조립 라인 수량 현황", expanded=True):
-            # 모델+품목 그룹핑
-            grp = f_df.groupby(['모델','품목코드'])
-            count_rows = []
-            for (model, pn), gdf in grp:
-                total    = len(gdf)
-                done     = len(gdf[gdf['상태'].isin(['검사대기','검사중','포장대기','포장중','완료'])])
-                wip      = len(gdf[gdf['상태'].isin(['조립중','수리 완료(재투입)'])])
-                defect   = len(gdf[gdf['상태'].str.contains('불량', na=False)])
-                count_rows.append((model, pn, total, done, wip, defect))
-
-            # 카드 렌더링 (모델별)
-            for (model, pn, total, done, wip, defect) in count_rows:
-                pct     = int(done / total * 100) if total > 0 else 0
-                with st.container(border=True):
-                    mc1, mc2 = st.columns([3, 1])
-                    mc1.markdown(f"**{model}**" + (f" `{pn}`" if pn else ""))
-                    mc2.markdown(f"완료율 **{pct}%**")
-                    st.progress(min(pct, 100) / 100)
-                    sc1, sc2, sc3, sc4 = st.columns(4)
-                    sc1.metric("전체", total)
-                    sc2.metric("✅ 완료", done)
-                    sc3.metric("🏗️ 작업중", wip)
-                    sc4.metric("🚨 불량", defect, delta=None if defect == 0 else f"{defect}건", delta_color="inverse")
-
-        with st.expander(f"📋 {curr_g} 생산 이력", expanded=True):
-            sc1, sc2 = st.columns([1, 1])
-            sn_search = sc1.text_input("🔍 시리얼 검색", placeholder="S/N 일부 입력...", key=f"sn_search_{curr_g}")
-            f_df_view = f_df[f_df['시리얼'].str.contains(sn_search.strip(), case=False, na=False)] if sn_search.strip() else f_df
-            h = st.columns([2.2, 2.0, 1.5, 1.8, 2.2])
-            for col, txt in zip(h, ["기록 시간","모델","품목","시리얼","현장 제어"]):
-                col.write(f"**{txt}**")
-            for idx, row in f_df_view.sort_values('시간', ascending=False).iterrows():
-                r = st.columns([2.2, 2.0, 1.5, 1.8, 2.2])
-                r[0].write(row['시간']); r[1].write(row['모델'])
-                r[2].write(row['품목코드']); r[3].write(f"`{row['시리얼']}`")
-                with r[4]:
-                    if row['상태'] in ["조립중", "수리 완료(재투입)"]:
-                        ck_ok = f"ck_ok_{idx}"; ck_ng = f"ck_ng_{idx}"
-                        if not st.session_state.get(ck_ok) and not st.session_state.get(ck_ng):
-                            b1, b2 = st.columns(2)
-                            if b1.button("✅ 완료", key=f"ok_{idx}", use_container_width=True):
-                                st.session_state[ck_ok] = True; st.rerun()
-                            if b2.button("🚫 불량", key=f"ng_{idx}", use_container_width=True):
-                                st.session_state[ck_ng] = True; st.rerun()
-                        elif st.session_state.get(ck_ok):
-                            st.caption("✅ 완료 처리?")
-                            y1, y2 = st.columns(2)
-                            if y1.button("확인", key=f"ok_y_{idx}", type="primary", use_container_width=True):
-                                update_row(row['시리얼'], {'상태':'검사대기','시간':get_now_kst_str()})
-                                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
-                                    이전상태='조립중', 이후상태='검사대기', 작업자=st.session_state.user_id)
-                                st.session_state.production_db = load_realtime_ledger()
-                                st.session_state[ck_ok] = False; st.rerun()
-                            if y2.button("취소", key=f"ok_n_{idx}", use_container_width=True):
-                                st.session_state[ck_ok] = False; st.rerun()
-                        elif st.session_state.get(ck_ng):
-                            st.caption("🚫 불량 처리?")
-                            y1, y2 = st.columns(2)
-                            if y1.button("확인", key=f"ng_y_{idx}", type="primary", use_container_width=True):
-                                update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str()})
-                                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
-                                    이전상태='조립중', 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
-                                st.session_state.production_db = load_realtime_ledger()
-                                st.session_state[ck_ng] = False; st.rerun()
-                            if y2.button("취소", key=f"ng_n_{idx}", use_container_width=True):
-                                st.session_state[ck_ng] = False; st.rerun()
-                    else:
-                        STATUS_STYLE = {
-                            '검사대기': ('#fff3d4','#7a5c00','#f0c878','🔜'),
-                            '검사중':   ('#ddeeff','#1a4a7a','#7eb8e8','🔍'),
-                            '포장대기': ('#ede0f5','#4a1a7a','#b07ed8','🔜'),
-                            '포장중':   ('#fde8d4','#7a3c1a','#e8a87e','📦'),
-                            '완료':     ('#d4f0e2','#1f6640','#7ec8a0','✅'),
-                        }
-                        s = row['상태']
-                        if "불량" in str(s):
-                            st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:3px 8px;border-radius:6px;text-align:center;font-weight:bold;border:1px solid #e8908a;font-size:0.8rem;'>🚫 {s}</div>", unsafe_allow_html=True)
-                        else:
-                            bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
-                            st.markdown(f"<div style='background:{bg};color:{tc};padding:3px 8px;border-radius:6px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.8rem;display:inline-block;width:100%;'>{ic} {s}</div>", unsafe_allow_html=True)
-    else:
-        st.info("등록된 생산 내역이 없습니다.")
 
 # ── 검사 / 포장 라인 ─────────────────────────────────────────────
 elif curr_l in ["검사 라인", "포장 라인"]:
@@ -2543,114 +2541,6 @@ elif curr_l == "생산 지표 관리":
                 tr2[8].caption(row.get('작업자',''))
         else:
             st.info("일정 수정 이력이 없습니다. 캘린더에서 일정 수정 시 자동 기록됩니다.")
-
-
-    # ── 자재 시리얼 관리 ─────────────────────────────────────────
-    st.divider()
-    st.markdown("<div class='db-section' style='background:#7a5c3a;'>🔩 자재 시리얼 관리</div>", unsafe_allow_html=True)
-
-    mat_tab1, mat_tab2, mat_tab3 = st.tabs(["🔍 자재 S/N 검색 (역추적)", "➕ 자재 S/N 등록", "📂 엑셀 업로드"])
-
-    with mat_tab1:
-        st.caption("자재 S/N으로 어떤 제품(메인 S/N)에 사용됐는지 역추적합니다.")
-        ms_input = st.text_input("자재 시리얼 입력", placeholder="자재 S/N 일부 입력", key="mat_search_input")
-        if ms_input.strip():
-            found = search_material_by_sn(ms_input.strip())
-            if not found.empty:
-                st.success(f"✅ {len(found)}건 검색됨")
-                mh = st.columns([1.8, 2, 1.5, 2, 2, 1.5])
-                for col, txt in zip(mh, ["등록시간","메인 S/N","반","모델","자재명","작업자"]):
-                    col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-                for _, mr in found.iterrows():
-                    mc = st.columns([1.8, 2, 1.5, 2, 2, 1.5])
-                    mc[0].caption(str(mr.get('시간',''))[:16])
-                    mc[1].markdown(f"**`{mr.get('메인시리얼','')}`**")
-                    mc[2].write(mr.get('반',''))
-                    mc[3].write(mr.get('모델',''))
-                    mc[4].write(mr.get('자재명',''))
-                    mc[5].caption(mr.get('작업자',''))
-            else:
-                st.warning("검색 결과 없음")
-
-    with mat_tab2:
-        st.caption("메인 S/N에 자재 S/N을 수동으로 추가 등록합니다.")
-        db_now = st.session_state.production_db
-        sn_list = db_now['시리얼'].dropna().unique().tolist() if not db_now.empty else []
-        mt1, mt2 = st.columns(2)
-        main_sn_sel = mt1.selectbox("메인 S/N 선택", ["직접 입력"] + sn_list, key="mat_reg_sn_sel")
-        if main_sn_sel == "직접 입력":
-            main_sn_val = mt2.text_input("메인 S/N 직접 입력", key="mat_reg_sn_txt")
-        else:
-            main_sn_val = main_sn_sel
-            # 모델/반 자동 표시
-            row_info = db_now[db_now['시리얼']==main_sn_sel]
-            if not row_info.empty:
-                ri = row_info.iloc[0]
-                mt2.caption(f"모델: {ri.get('모델','')} / 반: {ri.get('반','')}")
-
-        mat_add_count = st.number_input("추가할 자재 수", min_value=1, max_value=20, step=1, value=1, key="mat_add_count")
-        mat_add_list = []
-        for mi in range(int(mat_add_count)):
-            ac1, ac2 = st.columns(2)
-            an = ac1.text_input(f"자재명 #{mi+1}", key=f"mat_add_name_{mi}", placeholder="예: PCB")
-            as_ = ac2.text_input(f"자재 S/N #{mi+1}", key=f"mat_add_sn_{mi}", placeholder="자재 시리얼")
-            mat_add_list.append({"자재명": an, "자재시리얼": as_})
-
-        if st.button("💾 자재 S/N 저장", type="primary", key="mat_save_btn"):
-            sn_final = main_sn_val.strip() if main_sn_sel == "직접 입력" else main_sn_sel
-            valid = [m for m in mat_add_list if m["자재시리얼"].strip()]
-            if sn_final and valid:
-                row_m = db_now[db_now['시리얼']==sn_final]
-                m_model = row_m.iloc[0]['모델'] if not row_m.empty else ""
-                m_ban   = row_m.iloc[0]['반']   if not row_m.empty else ""
-                if insert_material_serials(sn_final, m_model, m_ban, valid, st.session_state.user_id):
-                    st.cache_data.clear()
-                    st.success(f"✅ {sn_final} → {len(valid)}개 자재 S/N 저장 완료")
-            else:
-                st.warning("메인 S/N과 자재 S/N을 입력해주세요.")
-
-    with mat_tab3:
-        st.caption("엑셀 파일로 자재 시리얼을 일괄 등록합니다.")
-        # 양식 다운로드
-        try:
-            import openpyxl as _xl2; import io as _io2
-            def _mat_template():
-                wb = _xl2.Workbook(); ws = wb.active; ws.title = "자재시리얼"
-                headers = ["메인시리얼","모델","반","자재명","자재시리얼"]
-                for ci, h in enumerate(headers, 1):
-                    ws.cell(1, ci, h)
-                ws.append(["MAIN-001","G3014 KBD","제조1반","PCB","PCB-2024-001"])
-                ws.append(["MAIN-001","G3014 KBD","제조1반","배터리","BAT-2024-001"])
-                buf = _io2.BytesIO(); wb.save(buf); buf.seek(0); return buf
-            st.download_button("📥 양식 다운로드", data=_mat_template(),
-                               file_name="자재시리얼_양식.xlsx",
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                               key="mat_tmpl_dl")
-        except: st.caption("양식 다운로드 기능 준비 중")
-
-        mat_file = st.file_uploader("자재 시리얼 엑셀 업로드", type=["xlsx","xls"], key="mat_xl_upload")
-        if mat_file:
-            try:
-                import openpyxl as _xl3
-                wb2 = _xl3.load_workbook(mat_file)
-                ws2 = wb2.active
-                rows2 = list(ws2.iter_rows(min_row=2, values_only=True))
-                ok_cnt = 0; err_cnt = 0
-                for r2 in rows2:
-                    if len(r2) >= 5 and r2[0] and r2[4]:
-                        res2 = insert_material_serials(
-                            메인시리얼=str(r2[0]).strip(),
-                            모델=str(r2[1] or "").strip(),
-                            반=str(r2[2] or "").strip(),
-                            자재목록=[{"자재명": str(r2[3] or "").strip(), "자재시리얼": str(r2[4]).strip()}],
-                            작업자=st.session_state.user_id
-                        )
-                        if res2: ok_cnt += 1
-                        else:    err_cnt += 1
-                st.cache_data.clear()
-                st.success(f"✅ 업로드 완료: {ok_cnt}건 성공 / {err_cnt}건 실패")
-            except Exception as e:
-                st.error(f"파일 처리 오류: {e}")
 
     # ══════════════════════════════════════════════════════════════
     # [G] 생산 일정 관리
@@ -3492,6 +3382,114 @@ elif curr_l == "OQC 라인":
             st.dataframe(model_grp, use_container_width=True, hide_index=True)
     else:
         st.info("OQC 데이터가 쌓이면 차트가 표시됩니다.")
+
+    st.divider()
+    st.divider()
+    st.markdown("<div class='db-section' style='background:#7a5c3a;'>🔩 자재 시리얼 관리</div>", unsafe_allow_html=True)
+
+    mat_tab1, mat_tab2, mat_tab3 = st.tabs(["🔍 자재 S/N 검색 (역추적)", "➕ 자재 S/N 등록", "📂 엑셀 업로드"])
+
+    with mat_tab1:
+        st.caption("자재 S/N으로 어떤 제품(메인 S/N)에 사용됐는지 역추적합니다.")
+        ms_input = st.text_input("자재 시리얼 입력", placeholder="자재 S/N 일부 입력", key="mat_search_input")
+        if ms_input.strip():
+            found = search_material_by_sn(ms_input.strip())
+            if not found.empty:
+                st.success(f"✅ {len(found)}건 검색됨")
+                mh = st.columns([1.8, 2, 1.5, 2, 2, 1.5])
+                for col, txt in zip(mh, ["등록시간","메인 S/N","반","모델","자재명","작업자"]):
+                    col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                for _, mr in found.iterrows():
+                    mc = st.columns([1.8, 2, 1.5, 2, 2, 1.5])
+                    mc[0].caption(str(mr.get('시간',''))[:16])
+                    mc[1].markdown(f"**`{mr.get('메인시리얼','')}`**")
+                    mc[2].write(mr.get('반',''))
+                    mc[3].write(mr.get('모델',''))
+                    mc[4].write(mr.get('자재명',''))
+                    mc[5].caption(mr.get('작업자',''))
+            else:
+                st.warning("검색 결과 없음")
+
+    with mat_tab2:
+        st.caption("메인 S/N에 자재 S/N을 수동으로 추가 등록합니다.")
+        db_now = st.session_state.production_db
+        sn_list = db_now['시리얼'].dropna().unique().tolist() if not db_now.empty else []
+        mt1, mt2 = st.columns(2)
+        main_sn_sel = mt1.selectbox("메인 S/N 선택", ["직접 입력"] + sn_list, key="mat_reg_sn_sel")
+        if main_sn_sel == "직접 입력":
+            main_sn_val = mt2.text_input("메인 S/N 직접 입력", key="mat_reg_sn_txt")
+        else:
+            main_sn_val = main_sn_sel
+            # 모델/반 자동 표시
+            row_info = db_now[db_now['시리얼']==main_sn_sel]
+            if not row_info.empty:
+                ri = row_info.iloc[0]
+                mt2.caption(f"모델: {ri.get('모델','')} / 반: {ri.get('반','')}")
+
+        mat_add_count = st.number_input("추가할 자재 수", min_value=1, max_value=20, step=1, value=1, key="mat_add_count")
+        mat_add_list = []
+        for mi in range(int(mat_add_count)):
+            ac1, ac2 = st.columns(2)
+            an = ac1.text_input(f"자재명 #{mi+1}", key=f"mat_add_name_{mi}", placeholder="예: PCB")
+            as_ = ac2.text_input(f"자재 S/N #{mi+1}", key=f"mat_add_sn_{mi}", placeholder="자재 시리얼")
+            mat_add_list.append({"자재명": an, "자재시리얼": as_})
+
+        if st.button("💾 자재 S/N 저장", type="primary", key="mat_save_btn"):
+            sn_final = main_sn_val.strip() if main_sn_sel == "직접 입력" else main_sn_sel
+            valid = [m for m in mat_add_list if m["자재시리얼"].strip()]
+            if sn_final and valid:
+                row_m = db_now[db_now['시리얼']==sn_final]
+                m_model = row_m.iloc[0]['모델'] if not row_m.empty else ""
+                m_ban   = row_m.iloc[0]['반']   if not row_m.empty else ""
+                if insert_material_serials(sn_final, m_model, m_ban, valid, st.session_state.user_id):
+                    st.cache_data.clear()
+                    st.success(f"✅ {sn_final} → {len(valid)}개 자재 S/N 저장 완료")
+            else:
+                st.warning("메인 S/N과 자재 S/N을 입력해주세요.")
+
+    with mat_tab3:
+        st.caption("엑셀 파일로 자재 시리얼을 일괄 등록합니다.")
+        # 양식 다운로드
+        try:
+            import openpyxl as _xl2; import io as _io2
+            def _mat_template():
+                wb = _xl2.Workbook(); ws = wb.active; ws.title = "자재시리얼"
+                headers = ["메인시리얼","모델","반","자재명","자재시리얼"]
+                for ci, h in enumerate(headers, 1):
+                    ws.cell(1, ci, h)
+                ws.append(["MAIN-001","G3014 KBD","제조1반","PCB","PCB-2024-001"])
+                ws.append(["MAIN-001","G3014 KBD","제조1반","배터리","BAT-2024-001"])
+                buf = _io2.BytesIO(); wb.save(buf); buf.seek(0); return buf
+            st.download_button("📥 양식 다운로드", data=_mat_template(),
+                               file_name="자재시리얼_양식.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               key="mat_tmpl_dl")
+        except: st.caption("양식 다운로드 기능 준비 중")
+
+        mat_file = st.file_uploader("자재 시리얼 엑셀 업로드", type=["xlsx","xls"], key="mat_xl_upload")
+        if mat_file:
+            try:
+                import openpyxl as _xl3
+                wb2 = _xl3.load_workbook(mat_file)
+                ws2 = wb2.active
+                rows2 = list(ws2.iter_rows(min_row=2, values_only=True))
+                ok_cnt = 0; err_cnt = 0
+                for r2 in rows2:
+                    if len(r2) >= 5 and r2[0] and r2[4]:
+                        res2 = insert_material_serials(
+                            메인시리얼=str(r2[0]).strip(),
+                            모델=str(r2[1] or "").strip(),
+                            반=str(r2[2] or "").strip(),
+                            자재목록=[{"자재명": str(r2[3] or "").strip(), "자재시리얼": str(r2[4]).strip()}],
+                            작업자=st.session_state.user_id
+                        )
+                        if res2: ok_cnt += 1
+                        else:    err_cnt += 1
+                st.cache_data.clear()
+                st.success(f"✅ 업로드 완료: {ok_cnt}건 성공 / {err_cnt}건 실패")
+            except Exception as e:
+                st.error(f"파일 처리 오류: {e}")
+
 
 
 # ── 불량 공정 ────────────────────────────────────────────────────
