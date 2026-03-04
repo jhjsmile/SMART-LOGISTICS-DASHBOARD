@@ -1698,15 +1698,21 @@ elif curr_l == "조립 라인":
 
         sc1, sc2, sc3 = st.columns([2, 3, 1])
         sel_mat_name = sc1.selectbox("자재명 선택", MAT_NAME_OPTIONS, key=_mat_name_key)
-        scan_input   = sc2.text_input(
+
+        # 스캔 필드는 카운터 suffix로 key를 바꿔서 초기화 (session_state 직접 수정 금지)
+        _scan_counter_key = f"scan_cnt_{curr_g}"
+        if _scan_counter_key not in st.session_state:
+            st.session_state[_scan_counter_key] = 0
+        _scan_field_key = f"{_scan_sn_key}_{st.session_state[_scan_counter_key]}"
+
+        scan_input = sc2.text_input(
             "자재 S/N 스캔",
             placeholder="바코드 스캔 → 자동 추가 (Enter)",
-            key=_scan_sn_key,
-            label_visibility="collapsed" if False else "visible"
+            key=_scan_field_key,
         )
         sc2.caption("💡 스캐너로 스캔하면 Enter가 자동 입력됩니다")
 
-        # 스캔값이 있으면 즉시 목록에 추가
+        # 스캔값이 있으면 즉시 목록에 추가 후 카운터 증가로 필드 초기화
         if scan_input.strip():
             already = any(m["자재시리얼"] == scan_input.strip()
                          for m in st.session_state[_mat_list_key])
@@ -1715,8 +1721,10 @@ elif curr_l == "조립 라인":
                     "자재명": sel_mat_name,
                     "자재시리얼": scan_input.strip()
                 })
-            # 입력 필드 초기화
-            st.session_state[_scan_sn_key] = ""
+            else:
+                st.toast(f"⚠️ 이미 추가된 자재 S/N: {scan_input.strip()}", icon="⚠️")
+            # 카운터 증가 → 새 key로 빈 필드 생성
+            st.session_state[_scan_counter_key] += 1
             st.rerun()
 
         # 수동 추가 버튼
@@ -1778,6 +1786,7 @@ elif curr_l == "조립 라인":
                             작업자=st.session_state.user_id
                         )
                     st.session_state[_mat_list_key] = []  # 자재 목록 초기화
+                    st.session_state[f"scan_cnt_{curr_g}"] = 0  # 스캔 필드 초기화
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
             else:
