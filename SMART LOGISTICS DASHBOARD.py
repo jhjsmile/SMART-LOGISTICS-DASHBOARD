@@ -1717,38 +1717,48 @@ elif curr_l == "조립 라인":
             for idx, row in f_df_view.sort_values('시간', ascending=False).iterrows():
                 is_actionable = row['상태'] in ["조립중", "수리 완료(재투입)"]
                 r = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 2.0])
-                # 체크박스
+
+                # ── 버튼 먼저 처리 ────────────────────────────────────
+                if is_actionable:
+                    with r[5]:
+                        b1, b2 = st.columns(2)
+                        if b1.button("✅ 완료", key=f"ok_{idx}",
+                                     use_container_width=True, type="primary"):
+                            st.cache_data.clear()
+                            update_row(row['시리얼'], {'상태':'검사대기','시간':get_now_kst_str()})
+                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                                이전상태=row['상태'], 이후상태='검사대기',
+                                작업자=st.session_state.user_id)
+                            st.session_state[_asm_chk_key].pop(str(idx), None)
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.rerun()
+                        if b2.button("🚫 불량", key=f"ng_{idx}", use_container_width=True):
+                            st.cache_data.clear()
+                            update_row(row['시리얼'], {'상태':'불량 처리 중',
+                                '시간':get_now_kst_str(),
+                                '증상': f'불량입고출처: 조립 라인'})
+                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                                이전상태=row['상태'], 이후상태='불량 처리 중',
+                                작업자=st.session_state.user_id)
+                            st.session_state[_asm_chk_key].pop(str(idx), None)
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.rerun()
+                else:
+                    s = row['상태']
+                    with r[5]:
+                        if "불량" in str(s):
+                            st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s}</div>", unsafe_allow_html=True)
+                        else:
+                            bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
+                            st.markdown(f"<div style='background:{bg};color:{tc};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.75rem;'>{ic} {s}</div>", unsafe_allow_html=True)
+
+                # ── 체크박스는 버튼 처리 후 저장 ─────────────────────
                 _ck = r[0].checkbox("", key=f"asm_cb_{curr_g}_{idx}",
                     value=st.session_state[_asm_chk_key].get(str(idx), False),
                     disabled=not is_actionable, label_visibility="collapsed")
                 st.session_state[_asm_chk_key][str(idx)] = _ck
                 r[1].caption(str(row['시간'])[:16]); r[2].caption(row['모델'])
                 r[3].caption(row['품목코드']); r[4].caption(f"`{row['시리얼']}`")
-                with r[5]:
-                    if is_actionable:
-                        b1, b2 = st.columns(2)
-                        if b1.button("✅", key=f"ok_{idx}", use_container_width=True, help="완료"):
-                            update_row(row['시리얼'], {'상태':'검사대기','시간':get_now_kst_str()})
-                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
-                                이전상태=row['상태'], 이후상태='검사대기', 작업자=st.session_state.user_id)
-                            st.session_state[_asm_chk_key].pop(str(idx), None)
-                            st.session_state.production_db = load_realtime_ledger()
-                            st.rerun()
-                        if b2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량"):
-                            update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                '증상': f'불량입고출처: 조립 라인'})
-                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
-                                이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
-                            st.session_state[_asm_chk_key].pop(str(idx), None)
-                            st.session_state.production_db = load_realtime_ledger()
-                            st.rerun()
-                    else:
-                        s = row['상태']
-                        if "불량" in str(s):
-                            st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s}</div>", unsafe_allow_html=True)
-                        else:
-                            bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
-                            st.markdown(f"<div style='background:{bg};color:{tc};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.75rem;'>{ic} {s}</div>", unsafe_allow_html=True)
     else:
         st.info("등록된 생산 내역이 없습니다.")
 
@@ -2088,9 +2098,48 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;'>{txt}</p>",
                              unsafe_allow_html=True)
 
+            btn_lbl = "검사완료" if curr_l == "검사 라인" else "포장완료"
+            _ok_s   = 'OQC대기' if curr_l == '검사 라인' else '완료'
+
             for idx, row in f_df_view.sort_values('시간', ascending=False).iterrows():
                 is_act = row['상태'] in ["검사중","포장중","수리 완료(재투입)"]
                 r = st.columns([0.4, 1.8, 1.8, 1.3, 1.6, 2.2])
+
+                # ── 버튼 먼저 처리 (체크박스 저장보다 앞에) ──────────
+                if is_act:
+                    with r[5]:
+                        c1, c2 = st.columns(2)
+                        if c1.button(f"✅ {btn_lbl}", key=f"ok_{idx}",
+                                     use_container_width=True, type="primary"):
+                            st.cache_data.clear()
+                            update_row(row['시리얼'], {'상태': _ok_s, '시간': get_now_kst_str()})
+                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                                이전상태=row['상태'], 이후상태=_ok_s,
+                                작업자=st.session_state.user_id)
+                            st.session_state[_hck_key].pop(str(idx), None)
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.rerun()
+                        if c2.button("🚫 불량", key=f"ng_{idx}", use_container_width=True):
+                            st.cache_data.clear()
+                            update_row(row['시리얼'], {'상태': '불량 처리 중',
+                                '시간': get_now_kst_str(),
+                                '증상': f'불량입고출처: {curr_l}'})
+                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                                이전상태=row['상태'], 이후상태='불량 처리 중',
+                                작업자=st.session_state.user_id)
+                            st.session_state[_hck_key].pop(str(idx), None)
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.rerun()
+                else:
+                    s2 = row['상태']
+                    with r[5]:
+                        if "불량" in str(s2):
+                            st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s2}</div>", unsafe_allow_html=True)
+                        else:
+                            bg2,tc2,bc2,ic2 = STATUS_STYLE2.get(s2, ('#f5f2ec','#5a5048','#c8b89a','•'))
+                            st.markdown(f"<div style='background:{bg2};color:{tc2};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc2};font-size:0.75rem;'>{ic2} {s2}</div>", unsafe_allow_html=True)
+
+                # ── 체크박스는 버튼 처리 이후에 저장 ─────────────────
                 _hck = r[0].checkbox("", key=f"hck_{curr_g}_{curr_l}_{idx}",
                     value=st.session_state[_hck_key].get(str(idx), False),
                     disabled=not is_act, label_visibility="collapsed")
@@ -2099,35 +2148,6 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 r[2].caption(row['모델'])
                 r[3].caption(row['품목코드'])
                 r[4].caption(f"`{row['시리얼']}`")
-                with r[5]:
-                    if is_act:
-                        btn_lbl = "검사 합격" if curr_l == "검사 라인" else "포장 완료"
-                        c1, c2 = st.columns(2)
-                        if c1.button("✅", key=f"ok_{idx}", use_container_width=True, help=btn_lbl):
-                            st.cache_data.clear()
-                            _ok_s  = 'OQC대기' if curr_l == '검사 라인' else '완료'
-                            _prv_s = '검사중'  if curr_l == '검사 라인' else '포장중'
-                            update_row(row['시리얼'], {'상태':_ok_s,'시간':get_now_kst_str()})
-                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
-                                이전상태=row['상태'], 이후상태=_ok_s, 작업자=st.session_state.user_id)
-                            st.session_state[_hck_key].pop(str(idx), None)
-                            st.session_state.production_db = load_realtime_ledger()
-                            st.rerun()
-                        if c2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량"):
-                            update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                '증상': f'불량입고출처: {curr_l}'})
-                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
-                                이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
-                            st.session_state[_hck_key].pop(str(idx), None)
-                            st.session_state.production_db = load_realtime_ledger()
-                            st.rerun()
-                    else:
-                        s2 = row['상태']
-                        if "불량" in str(s2):
-                            st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s2}</div>", unsafe_allow_html=True)
-                        else:
-                            bg2,tc2,bc2,ic2 = STATUS_STYLE2.get(s2, ('#f5f2ec','#5a5048','#c8b89a','•'))
-                            st.markdown(f"<div style='background:{bg2};color:{tc2};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc2};font-size:0.75rem;'>{ic2} {s2}</div>", unsafe_allow_html=True)
         else:
             st.info("해당 공정 내역이 없습니다.")
 
