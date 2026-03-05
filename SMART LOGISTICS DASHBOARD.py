@@ -3252,6 +3252,7 @@ elif curr_l == "OQC 라인":
             rr[2].write(row.get('반',''))
             rr[3].markdown(f"`{row.get('시리얼','')}`")
             if rr[4].button("▶ OQC 시작", key=f"oqc_in_{idx}", use_container_width=True, type="primary"):
+                st.cache_data.clear()
                 update_row(row['시리얼'], {'상태': 'OQC중', '시간': get_now_kst_str(), '라인': 'OQC 라인'})
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                     이전상태='OQC대기', 이후상태='OQC중', 작업자=st.session_state.user_id)
@@ -3298,51 +3299,35 @@ elif curr_l == "OQC 라인":
                             defect_txt = defect_sel
 
                     btn1, btn2 = st.columns(2)
-                    # 합격
-                    ck_pass = f"oqc_pass_ck_{idx}"
-                    ck_fail = f"oqc_fail_ck_{idx}"
-                    if not st.session_state.get(ck_pass) and not st.session_state.get(ck_fail):
-                        if btn1.button("✅ 합격 (출하 승인)", key=f"oqc_ok_{idx}", use_container_width=True, type="primary"):
-                            st.session_state[ck_pass] = True; st.rerun()
-                        if btn2.button("🚫 부적합", key=f"oqc_ng_{idx}", use_container_width=True):
-                            st.session_state[ck_fail] = True; st.rerun()
-                    elif st.session_state.get(ck_pass):
-                        st.caption("✅ 출하 승인 처리하시겠습니까?")
-                        cy1, cy2 = st.columns(2)
-                        if cy1.button("확인", key=f"oqc_ok_y_{idx}", type="primary", use_container_width=True):
-                            비고 = f"샘플:{sample_qty} 부적합수:{defect_qty}"
+                    # 합격 / 부적합 즉시 처리 (확인 팝업 없음)
+                    if btn1.button("✅ 합격 (출하 승인)", key=f"oqc_ok_{idx}",
+                                   use_container_width=True, type="primary"):
+                        st.cache_data.clear()
+                        비고 = f"샘플:{sample_qty} 부적합수:{defect_qty}"
+                        update_row(row['시리얼'], {
+                            '상태': '출하승인', '시간': get_now_kst_str(),
+                            '증상': f"OQC합격 샘플:{sample_qty}", '수리': 비고
+                        })
+                        insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                            이전상태='OQC중', 이후상태='출하승인',
+                            작업자=st.session_state.user_id, 비고=비고)
+                        st.session_state.production_db = load_realtime_ledger()
+                        st.rerun()
+                    if btn2.button("🚫 부적합", key=f"oqc_ng_{idx}", use_container_width=True):
+                        if not defect_txt:
+                            st.warning("⚠️ 부적합 사유를 먼저 선택해주세요.")
+                        else:
+                            st.cache_data.clear()
+                            비고 = f"사유:{defect_txt} 샘플:{sample_qty} 부적합수:{defect_qty}"
                             update_row(row['시리얼'], {
-                                '상태': '출하승인', '시간': get_now_kst_str(),
-                                '증상': f"OQC합격 샘플:{sample_qty}", '수리': 비고
+                                '상태': '부적합(OQC)', '시간': get_now_kst_str(),
+                                '증상': defect_txt, '수리': 비고
                             })
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
-                                이전상태='OQC중', 이후상태='출하승인',
+                                이전상태='OQC중', 이후상태='부적합(OQC)',
                                 작업자=st.session_state.user_id, 비고=비고)
-                            st.session_state[ck_pass] = False
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
-                        if cy2.button("취소", key=f"oqc_ok_n_{idx}", use_container_width=True):
-                            st.session_state[ck_pass] = False; st.rerun()
-                    elif st.session_state.get(ck_fail):
-                        st.caption("🚫 부적합 처리하시겠습니까?")
-                        if not defect_txt:
-                            st.warning("부적합 사유를 선택해주세요.")
-                        cy1, cy2 = st.columns(2)
-                        if cy1.button("확인", key=f"oqc_ng_y_{idx}", type="primary", use_container_width=True):
-                            if defect_txt:
-                                비고 = f"사유:{defect_txt} 샘플:{sample_qty} 부적합수:{defect_qty}"
-                                update_row(row['시리얼'], {
-                                    '상태': '부적합(OQC)', '시간': get_now_kst_str(),
-                                    '증상': defect_txt, '수리': 비고
-                                })
-                                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
-                                    이전상태='OQC중', 이후상태='부적합(OQC)',
-                                    작업자=st.session_state.user_id, 비고=비고)
-                                st.session_state[ck_fail] = False
-                                st.session_state.production_db = load_realtime_ledger()
-                                st.rerun()
-                        if cy2.button("취소", key=f"oqc_ng_n_{idx}", use_container_width=True):
-                            st.session_state[ck_fail] = False; st.rerun()
     else:
         st.info("OQC 검사 대기 중인 제품이 없습니다.")
 
