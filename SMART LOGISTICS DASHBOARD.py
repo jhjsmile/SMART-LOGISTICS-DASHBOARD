@@ -2927,45 +2927,56 @@ elif curr_l == "생산 지표 관리":
                     st.rerun()
             else:
                 st.error("⛔ 등록된 일정 **전체**를 삭제합니다. 되돌릴 수 없습니다.")
-                ac1, ac2, ac3 = st.columns([2,1,1])
+                ac1, ac2, ac3 = st.columns([2, 1, 1])
                 ac1.markdown("<p style='color:#c8605a; font-weight:bold; margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
                 if ac2.button("✅ 예, 전체 삭제", type="primary", use_container_width=True, key="sch_all_del_yes"):
                     for _, row in sch_list.iterrows():
                         delete_schedule(int(row['id']))
+                    st.cache_data.clear()                          # ← 캐시 초기화
                     st.session_state.schedule_db = load_schedule()
                     st.session_state[all_del_key] = False
-                    st.success("전체 일정이 삭제되었습니다.")
                     st.rerun()
                 if ac3.button("취소", use_container_width=True, key="sch_all_del_no"):
                     st.session_state[all_del_key] = False
                     st.rerun()
             st.divider()
+
+            # ── 헤더 행 ──
+            hh = st.columns([1.0, 0.8, 1.2, 1.5, 2.2, 0.8, 1.8, 0.5])
+            for col, txt in zip(hh, ["유형","반","날짜","P/N","모델명","수량","특이사항",""]):
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+
             for _, row in sch_list.sort_values('날짜').iterrows():
-                cat   = row.get('카테고리','기타')
-                color = SCHEDULE_COLORS.get(cat, "#888")
-                r1,r2,r3,r4,r5,r6,r7,r8 = st.columns([1.0,0.8,1.2,1.5,2,0.8,2,0.8])
-                r1.markdown(f"<span style='background:{color}22; border-left:3px solid {color}; padding:3px 6px; border-radius:4px; font-size:0.8rem;'>{cat}</span>", unsafe_allow_html=True)
-                r2.write(row.get('반',''))
-                r3.write(row.get('날짜',''))
-                r4.write(row.get('pn',''))
-                r5.write(row.get('모델명',''))
-                r6.write(f"{row.get('조립수',0)}대")
-                r7.write(row.get('특이사항',''))
+                cat    = row.get('카테고리', '기타')
+                color  = SCHEDULE_COLORS.get(cat, "#888")
                 row_id = row['id']
                 del_ck = f"sch_del_ck_{row_id}"
-                if not st.session_state.get(del_ck, False):
-                    if r8.button("🗑️", key=f"del_sch_{row_id}", help="삭제"):
-                        st.session_state[del_ck] = True
-                        st.rerun()
-                else:
-                    with r8:
-                        st.warning("삭제?")
-                        if st.button("✅", key=f"del_sch_yes_{row_id}"):
+
+                # ── 데이터 행 ──
+                c1,c2,c3,c4,c5,c6,c7,c8 = st.columns([1.0, 0.8, 1.2, 1.5, 2.2, 0.8, 1.8, 0.5])
+                c1.markdown(f"<span style='background:{color}22;border-left:3px solid {color};padding:2px 5px;border-radius:4px;font-size:0.78rem;'>{cat}</span>", unsafe_allow_html=True)
+                c2.caption(row.get('반',''))
+                c3.caption(row.get('날짜',''))
+                c4.caption(row.get('pn',''))
+                c5.caption(row.get('모델명',''))
+                c6.caption(f"{row.get('조립수',0)}대")
+                c7.caption(row.get('특이사항',''))
+                if c8.button("🗑️", key=f"del_sch_{row_id}", help="삭제"):
+                    st.session_state[del_ck] = True
+                    st.rerun()
+
+                # ── 확인 팝업: 행 아래에 별도 표시 ──
+                if st.session_state.get(del_ck, False):
+                    with st.container():
+                        cf1, cf2, cf3 = st.columns([3, 1, 1])
+                        cf1.warning(f"**[{row.get('날짜','')} / {row.get('모델명','')}]** 일정을 삭제하시겠습니까?")
+                        if cf2.button("✅ 삭제", key=f"del_sch_yes_{row_id}", type="primary", use_container_width=True):
                             delete_schedule(int(row_id))
+                            st.cache_data.clear()                  # ← 캐시 초기화
                             st.session_state.schedule_db = load_schedule()
                             st.session_state[del_ck] = False
                             st.rerun()
-                        if st.button("✗", key=f"del_sch_no_{row_id}"):
+                        if cf3.button("취소", key=f"del_sch_no_{row_id}", use_container_width=True):
                             st.session_state[del_ck] = False
                             st.rerun()
         else:
