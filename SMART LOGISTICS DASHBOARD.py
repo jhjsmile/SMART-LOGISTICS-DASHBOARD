@@ -1224,9 +1224,7 @@ def _do_batch_entry(sn_list, curr_line):
             이전상태=_prev_status, 이후상태=_next_status, 작업자=st.session_state.user_id)
     st.session_state.production_db = load_realtime_ledger()
 
-# 캘린더 인라인 패널
-if st.session_state.get("cal_action") in ("view_day", "add", "edit"):
-    show_inline_day_panel()
+# 캘린더 인라인 패널 → 캘린더 렌더링 직후에 호출 (아래 메인 현황판 섹션 참조)
 
 # =================================================================
 # 9. 캘린더 렌더링
@@ -1524,6 +1522,10 @@ if curr_l == "현황판":
         st.caption("👁️ 조회만 가능합니다.")
     render_calendar_weekly()
     render_calendar_monthly()
+
+    # ── 일정 상세 인라인 패널 (날짜 클릭 시 캘린더 바로 아래 표시) ──
+    if st.session_state.get("cal_action") in ("view_day", "add", "edit"):
+        show_inline_day_panel()
 
 # ── 조립 라인 ────────────────────────────────────────────────────
 elif curr_l == "조립 라인":
