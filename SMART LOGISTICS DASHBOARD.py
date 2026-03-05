@@ -631,6 +631,18 @@ def delete_schedule(row_id: int) -> bool:
         st.error(f"일정 삭제 실패: {e}"); return False
 
 
+# ── 감사 로그 ────────────────────────────────────────────────────
+@st.cache_data(ttl=30)
+def load_audit_log(limit: int = 200) -> pd.DataFrame:
+    try:
+        sb  = get_supabase()
+        res = sb.table("audit_log").select("*").order("시간", desc=True).limit(limit).execute()
+        if res.data:
+            return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
+        return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+    except:
+        return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+
 # ── 생산 계획 수량 (대시보드용) ──────────────────────────────────
 @st.cache_data(ttl=300)
 def load_production_plan() -> dict:
@@ -3792,17 +3804,6 @@ elif curr_l == "수리 현황 리포트":
     # ── 감사 로그 조회 ────────────────────────────────────────────
     st.divider()
     st.markdown("<div class='section-title'>🔍 감사 로그 (상태 변경 이력)</div>", unsafe_allow_html=True)
-
-    @st.cache_data(ttl=30)
-    def load_audit_log(limit: int = 200) -> pd.DataFrame:
-        try:
-            sb  = get_supabase()
-            res = sb.table("audit_log").select("*").order("시간", desc=True).limit(limit).execute()
-            if res.data:
-                return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
-            return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
-        except:
-            return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
 
     # 필터
     af1, af2, af3, af4 = st.columns([1.5, 1.5, 2, 1])
