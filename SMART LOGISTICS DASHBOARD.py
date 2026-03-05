@@ -1218,7 +1218,7 @@ def trigger_entry_dialog():
     c_ok, c_no = st.columns(2)
     if c_ok.button("✅ 입고 승인", type="primary", use_container_width=True):
         _next_status = '검사중' if st.session_state.current_line == '검사 라인' else '포장중'
-        _prev_status = '검사대기' if st.session_state.current_line == '검사 라인' else '포장대기'
+        _prev_status = '검사대기' if st.session_state.current_line == '검사 라인' else '출하승인'
         _sn_row = st.session_state.production_db[st.session_state.production_db['시리얼']==target_sn]
         _sn_model = _sn_row.iloc[0]['모델'] if not _sn_row.empty else ''
         _sn_ban   = _sn_row.iloc[0]['반']   if not _sn_row.empty else ''
@@ -1501,7 +1501,7 @@ if curr_l == "현황판":
     for g in PRODUCTION_GROUPS:
         gdf  = db_all[db_all['반'] == g]
         완료 = len(gdf[(gdf['라인']=='포장 라인')&(gdf['상태']=='완료')])
-        재공 = len(gdf[gdf['상태'].isin(['조립중','검사대기','검사중','포장대기','포장중'])])
+        재공 = len(gdf[gdf['상태'].isin(['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중'])])
         불량 = len(gdf[gdf['상태'].str.contains('불량',na=False)])
         투입 = len(gdf)
         cards_html += (
@@ -1629,7 +1629,7 @@ elif curr_l == "조립 라인":
             count_rows = []
             for (model, pn), gdf in grp:
                 total    = len(gdf)
-                done     = len(gdf[gdf['상태'].isin(['검사대기','검사중','포장대기','포장중','완료'])])
+                done     = len(gdf[gdf['상태'].isin(['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료'])])
                 wip      = len(gdf[gdf['상태'].isin(['조립중','수리 완료(재투입)'])])
                 defect   = len(gdf[gdf['상태'].str.contains('불량', na=False)])
                 count_rows.append((model, pn, total, done, wip, defect))
@@ -1840,10 +1840,10 @@ elif curr_l == "조립 라인":
 # ── 검사 / 포장 라인 ─────────────────────────────────────────────
 elif curr_l in ["검사 라인", "포장 라인"]:
     st.markdown(f"<h2 class='centered-title'>🔍 {curr_g} {curr_l} 현황</h2>", unsafe_allow_html=True)
-    prev = "조립 라인" if curr_l == "검사 라인" else "검사 라인"
+    prev = "조립 라인" if curr_l == "검사 라인" else "OQC 라인"
 
     db_s = st.session_state.production_db
-    wait_status = "검사대기" if curr_l == "검사 라인" else "포장대기"
+    wait_status = "검사대기" if curr_l == "검사 라인" else "출하승인"
     wait_list = db_s[(db_s['반']==curr_g)&(db_s['상태']==wait_status)]
     _wait_cnt = len(wait_list)
     with st.expander(f"📥 이전 공정({prev}) 완료 — 입고 대기" + (f"  ·  {_wait_cnt}건" if _wait_cnt else "  ·  없음"), expanded=True):
@@ -1891,7 +1891,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             st.caption(f"✅ {btn_lbl}?")
                             y1, y2 = st.columns(2)
                             if y1.button("확인", key=f"qok_y_{idx}", type="primary", use_container_width=True):
-                                _ok_status = '포장대기' if curr_l == '검사 라인' else '완료'
+                                _ok_status = 'OQC대기' if curr_l == '검사 라인' else '완료'
                                 _prev_status = '검사중' if curr_l == '검사 라인' else '포장중'
                                 update_row(row['시리얼'], {'상태':_ok_status,'시간':get_now_kst_str()})
                                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
@@ -2045,7 +2045,7 @@ elif curr_l == "생산 지표 관리":
 
     total_in   = len(db_f) if not db_f.empty else 0
     total_done = len(db_f[(db_f['라인']=='포장 라인') & (db_f['상태']=='완료')]) if not db_f.empty else 0
-    WIP_ALL = ['조립중','검사대기','검사중','포장대기','포장중','수리 완료(재투입)']
+    WIP_ALL = ['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)']
     total_wip  = len(db_f[db_f['상태'].isin(WIP_ALL)]) if not db_f.empty else 0
     total_ng   = len(db_f[db_f['상태'].str.contains('불량', na=False)]) if not db_f.empty else 0
     plan_qty   = _qty(sch_f)
@@ -2195,7 +2195,7 @@ elif curr_l == "생산 지표 관리":
         st.markdown("<div class='db-section' style='background:#1e8449;'>⚡ 실시간 진행 중</div>", unsafe_allow_html=True)
         rt_df = st.session_state.production_db.copy()
         if ban_filter != "전체": rt_df = rt_df[rt_df['반'] == ban_filter]
-        WIP_STATES = ['조립중','검사대기','검사중','포장대기','포장중','수리 완료(재투입)']
+        WIP_STATES = ['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)']
         rt_wip = rt_df[rt_df['상태'].isin(WIP_STATES)].sort_values('시간', ascending=False) if not rt_df.empty else pd.DataFrame()
 
         if not rt_wip.empty:
@@ -3032,14 +3032,14 @@ elif curr_l == "OQC 라인":
     st.divider()
 
     # ── 입고 대기 목록 (포장 완료 → OQC 대기 전환) ───────────────
-    st.markdown("<div class='section-title'>📥 입고 대기 (포장 완료 제품)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>📥 입고 대기 (검사 합격 제품)</div>", unsafe_allow_html=True)
     packing_done = db_oqc[
-        (db_oqc['상태'] == '완료') & (db_oqc['라인'] == '포장 라인')
+        db_oqc['상태'] == 'OQC대기'
     ].sort_values('시간', ascending=False)
 
     if not packing_done.empty:
         hh = st.columns([2, 2, 1.5, 2, 1.5])
-        for col, txt in zip(hh, ["시간", "모델", "반", "시리얼", "OQC 투입"]):
+        for col, txt in zip(hh, ["시간", "모델", "반", "시리얼", "OQC 시작"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
         for idx, row in packing_done.iterrows():
             rr = st.columns([2, 2, 1.5, 2, 1.5])
@@ -3047,20 +3047,20 @@ elif curr_l == "OQC 라인":
             rr[1].write(row.get('모델',''))
             rr[2].write(row.get('반',''))
             rr[3].markdown(f"`{row.get('시리얼','')}`")
-            if rr[4].button("▶ OQC 투입", key=f"oqc_in_{idx}", use_container_width=True, type="primary"):
-                update_row(row['시리얼'], {'상태': 'OQC대기', '시간': get_now_kst_str(), '라인': 'OQC 라인'})
+            if rr[4].button("▶ OQC 시작", key=f"oqc_in_{idx}", use_container_width=True, type="primary"):
+                update_row(row['시리얼'], {'상태': 'OQC중', '시간': get_now_kst_str(), '라인': 'OQC 라인'})
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
-                    이전상태='완료', 이후상태='OQC대기', 작업자=st.session_state.user_id)
+                    이전상태='OQC대기', 이후상태='OQC중', 작업자=st.session_state.user_id)
                 st.session_state.production_db = load_realtime_ledger()
                 st.rerun()
     else:
-        st.info("포장 완료된 제품이 없습니다.")
+        st.info("OQC 대기 중인 제품이 없습니다.")
 
     st.divider()
 
     # ── OQC 대기 → 검사 시작 ─────────────────────────────────────
     st.markdown("<div class='section-title'>🔍 OQC 검사 진행</div>", unsafe_allow_html=True)
-    oqc_wait_list = db_oqc[db_oqc['상태'].isin(['OQC대기', 'OQC중'])].sort_values('시간', ascending=False)
+    oqc_wait_list = db_oqc[db_oqc['상태'] == 'OQC중'].sort_values('시간', ascending=False)
 
     if not oqc_wait_list.empty:
         for idx, row in oqc_wait_list.iterrows():
@@ -3074,15 +3074,6 @@ elif curr_l == "OQC 라인":
                 s_clr = '#fff3d4' if s_now == 'OQC대기' else '#ddeeff'
                 s_txt = '#7a5c00' if s_now == 'OQC대기' else '#1a4a7a'
                 ic4.markdown(f"<span style='background:{s_clr};color:{s_txt};padding:2px 8px;border-radius:6px;font-size:0.8rem;font-weight:bold;'>{'⏳ OQC대기' if s_now=='OQC대기' else '🔍 검사중'}</span>", unsafe_allow_html=True)
-
-                # OQC 대기 → 검사 시작 버튼
-                if s_now == 'OQC대기':
-                    if st.button("🔍 검사 시작", key=f"oqc_start_{idx}", type="secondary"):
-                        update_row(row['시리얼'], {'상태': 'OQC중', '시간': get_now_kst_str()})
-                        insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
-                            이전상태='OQC대기', 이후상태='OQC중', 작업자=st.session_state.user_id)
-                        st.session_state.production_db = load_realtime_ledger()
-                        st.rerun()
 
                 # OQC 중 → 판정
                 if s_now == 'OQC중':
