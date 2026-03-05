@@ -1649,59 +1649,18 @@ elif curr_l == "조립 라인":
                     sc4.metric("🚨 불량", defect, delta=None if defect == 0 else f"{defect}건", delta_color="inverse")
 
         with st.expander(f"📋 {curr_g} 생산 이력", expanded=True):
-            _asm_chk_key = f"asm_checked_{curr_g}"
-            if _asm_chk_key not in st.session_state:
-                st.session_state[_asm_chk_key] = {}
-
-            # 시리얼 검색 (스캔 후 자동 초기화)
-            _asm_search_cnt = f"asm_search_cnt_{curr_g}"
-            if _asm_search_cnt not in st.session_state:
-                st.session_state[_asm_search_cnt] = 0
-            _asm_search_key = f"sn_search_{curr_g}_{st.session_state[_asm_search_cnt]}"
-            sc1, sc2 = st.columns([2, 2])
-            sn_search = sc1.text_input("🔍 시리얼 검색", placeholder="S/N 스캔 또는 입력...",
-                key=_asm_search_key)
+            # 시리얼 검색 (단순 필터, rerun/session_state 충돌 없음)
+            sn_search = st.text_input("🔍 시리얼 검색",
+                placeholder="S/N 입력하면 해당 항목만 표시",
+                key=f"asm_srch_{curr_g}")
             if sn_search.strip():
-                f_df_view = f_df[f_df['시리얼'].str.contains(sn_search.strip(), case=False, na=False)]
+                f_df_view = f_df[f_df['시리얼'].str.contains(
+                    sn_search.strip(), case=False, na=False)]
                 if f_df_view.empty:
-                    st.warning(f"🔍 **'{sn_search.strip()}'** 에 해당하는 시리얼이 없습니다.")
-                # 검색어가 있으면 체크박스 자동 선택 후 필드 초기화
-                for _si, _sr in f_df_view.iterrows():
-                    if _sr['상태'] in ["조립중", "수리 완료(재투입)"]:
-                        st.session_state[_asm_chk_key][str(_si)] = True
-                st.session_state[_asm_search_cnt] += 1
-                st.rerun()
+                    st.warning(f"**'{sn_search.strip()}'** — 해당 시리얼이 없습니다.")
+                    f_df_view = f_df
             else:
                 f_df_view = f_df
-
-            # 일괄 처리 버튼
-            checked_idxs = [k for k,v in st.session_state[_asm_chk_key].items() if v]
-            if checked_idxs:
-                ba1, ba2, ba3 = st.columns([2, 1, 1])
-                ba1.markdown(f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(checked_idxs)}개 선택됨</span>", unsafe_allow_html=True)
-                if ba2.button("✅ 일괄 완료", key=f"bulk_ok_{curr_g}", type="primary", use_container_width=True):
-                    for ci in checked_idxs:
-                        ci_int = int(ci)
-                        if ci_int in f_df.index:
-                            _r = f_df.loc[ci_int]
-                            update_row(_r['시리얼'], {'상태':'검사대기','시간':get_now_kst_str()})
-                            insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
-                                이전상태=_r['상태'], 이후상태='검사대기', 작업자=st.session_state.user_id)
-                    st.session_state[_asm_chk_key] = {}
-                    st.session_state.production_db = load_realtime_ledger()
-                    st.rerun()
-                if ba3.button("🚫 일괄 불량", key=f"bulk_ng_{curr_g}", use_container_width=True):
-                    for ci in checked_idxs:
-                        ci_int = int(ci)
-                        if ci_int in f_df.index:
-                            _r = f_df.loc[ci_int]
-                            update_row(_r['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                '증상': f'불량입고출처: 조립 라인'})
-                            insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
-                                이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
-                    st.session_state[_asm_chk_key] = {}
-                    st.session_state.production_db = load_realtime_ledger()
-                    st.rerun()
 
             STATUS_STYLE = {
                 '검사대기': ('#fff3d4','#7a5c00','#f0c878','🔜'),
@@ -1710,17 +1669,29 @@ elif curr_l == "조립 라인":
                 '포장중':   ('#fde8d4','#7a3c1a','#e8a87e','📦'),
                 '완료':     ('#d4f0e2','#1f6640','#7ec8a0','✅'),
             }
+
+            sorted_df     = f_df_view.sort_values('시간', ascending=False)
+            actionable_idxs = [i for i, rw in sorted_df.iterrows()
+                               if rw['상태'] in ["조립중","수리 완료(재투입)"]]
+
             h = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 2.0])
             for col, txt in zip(h, ["☑","기록 시간","모델","품목","시리얼","현장 제어"]):
-                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;'>{txt}</p>", unsafe_allow_html=True)
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;'>{txt}</p>",
+                             unsafe_allow_html=True)
 
-            for idx, row in f_df_view.sort_values('시간', ascending=False).iterrows():
-                is_actionable = row['상태'] in ["조립중", "수리 완료(재투입)"]
+            for idx, row in sorted_df.iterrows():
+                is_actionable = row['상태'] in ["조립중","수리 완료(재투입)"]
+                _cb_key = f"asm_cb_{curr_g}_{idx}"
                 r = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 2.0])
-
-                # ── 버튼 먼저 처리 ────────────────────────────────────
-                if is_actionable:
-                    with r[5]:
+                # 체크박스: value 없이 key만 — Streamlit이 자체 관리
+                r[0].checkbox("", key=_cb_key, disabled=not is_actionable,
+                              label_visibility="collapsed")
+                r[1].caption(str(row['시간'])[:16])
+                r[2].caption(row['모델'])
+                r[3].caption(row['품목코드'])
+                r[4].caption(f"`{row['시리얼']}`")
+                with r[5]:
+                    if is_actionable:
                         b1, b2 = st.columns(2)
                         if b1.button("✅ 완료", key=f"ok_{idx}",
                                      use_container_width=True, type="primary"):
@@ -1729,7 +1700,6 @@ elif curr_l == "조립 라인":
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태='검사대기',
                                 작업자=st.session_state.user_id)
-                            st.session_state[_asm_chk_key].pop(str(idx), None)
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
                         if b2.button("🚫 불량", key=f"ng_{idx}", use_container_width=True):
@@ -1740,25 +1710,50 @@ elif curr_l == "조립 라인":
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태='불량 처리 중',
                                 작업자=st.session_state.user_id)
-                            st.session_state[_asm_chk_key].pop(str(idx), None)
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
-                else:
-                    s = row['상태']
-                    with r[5]:
+                    else:
+                        s = row['상태']
                         if "불량" in str(s):
                             st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s}</div>", unsafe_allow_html=True)
                         else:
                             bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
                             st.markdown(f"<div style='background:{bg};color:{tc};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.75rem;'>{ic} {s}</div>", unsafe_allow_html=True)
 
-                # ── 체크박스는 버튼 처리 후 저장 ─────────────────────
-                _ck = r[0].checkbox("", key=f"asm_cb_{curr_g}_{idx}",
-                    value=st.session_state[_asm_chk_key].get(str(idx), False),
-                    disabled=not is_actionable, label_visibility="collapsed")
-                st.session_state[_asm_chk_key][str(idx)] = _ck
-                r[1].caption(str(row['시간'])[:16]); r[2].caption(row['모델'])
-                r[3].caption(row['품목코드']); r[4].caption(f"`{row['시리얼']}`")
+            # ── 일괄 처리: 위젯 key에서 직접 체크 상태 읽기 ──────────
+            checked_idxs = [i for i in actionable_idxs
+                            if st.session_state.get(f"asm_cb_{curr_g}_{i}", False)]
+            if checked_idxs:
+                st.markdown("<hr style='margin:8px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
+                ba1, ba2, ba3 = st.columns([2, 1, 1])
+                ba1.markdown(
+                    f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(checked_idxs)}개 선택됨</span>",
+                    unsafe_allow_html=True)
+                if ba2.button("✅ 일괄 완료", key=f"bulk_ok_{curr_g}",
+                              type="primary", use_container_width=True):
+                    st.cache_data.clear()
+                    for ci in checked_idxs:
+                        _r = f_df.loc[ci]
+                        update_row(_r['시리얼'], {'상태':'검사대기','시간':get_now_kst_str()})
+                        insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
+                            이전상태=_r['상태'], 이후상태='검사대기',
+                            작업자=st.session_state.user_id)
+                        st.session_state[f"asm_cb_{curr_g}_{ci}"] = False
+                    st.session_state.production_db = load_realtime_ledger()
+                    st.rerun()
+                if ba3.button("🚫 일괄 불량", key=f"bulk_ng_{curr_g}",
+                              use_container_width=True):
+                    st.cache_data.clear()
+                    for ci in checked_idxs:
+                        _r = f_df.loc[ci]
+                        update_row(_r['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str(),
+                            '증상': f'불량입고출처: 조립 라인'})
+                        insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
+                            이전상태=_r['상태'], 이후상태='불량 처리 중',
+                            작업자=st.session_state.user_id)
+                        st.session_state[f"asm_cb_{curr_g}_{ci}"] = False
+                    st.session_state.production_db = load_realtime_ledger()
+                    st.rerun()
     else:
         st.info("등록된 생산 내역이 없습니다.")
 
