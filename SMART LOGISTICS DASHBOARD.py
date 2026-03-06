@@ -4754,22 +4754,45 @@ elif curr_l == "사용 설명서":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # PDF 인라인 뷰어 (iframe embed)
+    # PDF 인라인 뷰어 (Blob URL 방식 - Chrome data: URI 차단 우회)
     pdf_b64_str = _MANUAL_PDF_B64
     pdf_viewer_html = f"""
-    <div style="border:1px solid #ddd5c0; border-radius:10px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+    <div id="pdf-viewer-wrap" style="border:1px solid #ddd5c0; border-radius:10px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.08); background:#f9f6f0;">
         <iframe
-            src="data:application/pdf;base64,{pdf_b64_str}"
+            id="pdf-frame"
             width="100%"
             height="900px"
             style="border:none; display:block;"
-            type="application/pdf"
-        >
-            <p style="padding:20px;text-align:center;">
-                이 브라우저는 PDF 인라인 보기를 지원하지 않습니다.<br>
-                위의 <strong>PDF 다운로드</strong> 버튼을 이용해 주세요.
-            </p>
-        </iframe>
+        ></iframe>
+        <p id="pdf-fallback" style="display:none; padding:30px; text-align:center; color:#888;">
+            PDF를 불러오는 중 오류가 발생했습니다.<br>
+            위의 <strong>⬇️ PDF 다운로드</strong> 버튼을 이용해 주세요.
+        </p>
     </div>
+    <script>
+    (function() {{
+        try {{
+            var b64 = "{pdf_b64_str}";
+            var binary = atob(b64);
+            var len = binary.length;
+            var bytes = new Uint8Array(len);
+            for (var i = 0; i < len; i++) {{
+                bytes[i] = binary.charCodeAt(i);
+            }}
+            var blob = new Blob([bytes], {{ type: 'application/pdf' }});
+            var url = URL.createObjectURL(blob);
+            var frame = document.getElementById('pdf-frame');
+            if (frame) {{
+                frame.src = url;
+            }}
+        }} catch(e) {{
+            var wrap = document.getElementById('pdf-viewer-wrap');
+            var frame = document.getElementById('pdf-frame');
+            var fallback = document.getElementById('pdf-fallback');
+            if (frame) frame.style.display = 'none';
+            if (fallback) fallback.style.display = 'block';
+        }}
+    }})();
+    </script>
     """
     st.markdown(pdf_viewer_html, unsafe_allow_html=True)
