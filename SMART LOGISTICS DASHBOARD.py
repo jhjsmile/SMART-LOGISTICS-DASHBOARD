@@ -644,7 +644,7 @@ def get_now_kst_str() -> str:
 @st.cache_data(ttl=10)
 def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
     """최근 N개월 데이터만 로드 (기본 3개월, 성능 최적화)"""
-    _EMPTY_COLS = ['시간','반','라인','cell','모델','품목코드','시리얼','상태','증상','수리','작업자']
+    _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','작업자']
     try:
         sb = get_supabase()
         from datetime import date, timedelta
@@ -656,14 +656,14 @@ def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
                      .select("*")
                      .gte("시간", cutoff)
                      .is_("deleted_at", "null")
-                     .order("created_at", desc=False)
+                     .order("시간", desc=False)
                      .execute())
         except Exception:
             # deleted_at 컬럼이 없는 경우 필터 없이 조회 (하위 호환)
             res = (sb.table("production")
                      .select("*")
                      .gte("시간", cutoff)
-                     .order("created_at", desc=False)
+                     .order("시간", desc=False)
                      .execute())
         if res.data:
             df = pd.DataFrame(res.data)
@@ -671,7 +671,9 @@ def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
             return df.fillna("")
         return pd.DataFrame(columns=_EMPTY_COLS)
     except Exception as e:
-        st.warning(f"데이터 로드 실패: {e}")
+        # 로그인 후에만 오류 표시 (로그인 화면에서 노출 방지)
+        if st.session_state.get('login_status', False):
+            st.warning(f"데이터 로드 실패: {e}")
         return pd.DataFrame(columns=_EMPTY_COLS)
 
 def insert_row(row: dict) -> bool:
@@ -1406,7 +1408,7 @@ def show_inline_day_panel():
 
 if 'schedule_db'     not in st.session_state: st.session_state.schedule_db     = load_schedule()
 if 'production_plan' not in st.session_state: st.session_state.production_plan = load_production_plan()
-if 'production_db'   not in st.session_state: st.session_state.production_db   = load_realtime_ledger()
+if 'production_db'   not in st.session_state: st.session_state.production_db   = pd.DataFrame()
 if 'cal_year'         not in st.session_state: st.session_state.cal_year         = datetime.now(KST).year
 if 'cal_month'        not in st.session_state: st.session_state.cal_month        = datetime.now(KST).month
 if 'cal_month_year'   not in st.session_state: st.session_state.cal_month_year   = datetime.now(KST).year
@@ -2317,7 +2319,7 @@ elif curr_l == "조립 라인":
         def _do_register_sn(sn_val):
             if insert_row({
                 '시간': get_now_kst_str(), '반': curr_g, '라인': "조립 라인",
-                'cell': "", '모델': target_model, '품목코드': target_item,
+                '모델': target_model, '품목코드': target_item,
                 '시리얼': sn_val, '상태': '조립중',
                 '증상': '', '수리': '', '작업자': st.session_state.user_id
             }):
@@ -2583,7 +2585,6 @@ elif curr_l == "생산 현황 리포트":
         model_sel = fc2.selectbox("모델 *", ["(선택)"] + models_for_group)
         auto_pn   = items_for_group.get(model_sel, "") if model_sel != "(선택)" else ""
         pn_input  = fc3.text_input("품목코드", value=auto_pn)
-        cell_input = st.text_input("Cell / 작업대", placeholder="예: A1")
         submitted  = st.form_submit_button("✅ 등록", use_container_width=True, type="primary")
 
     if submitted:
@@ -2595,7 +2596,7 @@ elif curr_l == "생산 현황 리포트":
         else:
             new_row = {
                 "시간": get_now_kst_str(), "반": curr_g, "라인": "조립 라인",
-                "cell": cell_input.strip(), "모델": model_sel,
+                "모델": model_sel,
                 "품목코드": pn_input.strip(), "시리얼": sn_clean,
                 "상태": "조립중", "증상": "", "수리": "",
                 "작업자": st.session_state.user_id
@@ -2614,16 +2615,15 @@ elif curr_l == "생산 현황 리포트":
     ing_df = db_g[db_g['상태'] == '조립중'].sort_values('시간', ascending=False)
 
     if not ing_df.empty:
-        hh = st.columns([2, 2, 1.5, 2, 1.5])
-        for col, txt in zip(hh, ["등록 시간", "모델", "Cell", "시리얼", "조립 완료"]):
+        hh = st.columns([2, 2, 2, 1.5])
+        for col, txt in zip(hh, ["등록 시간", "모델", "시리얼", "조립 완료"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
         for idx, row in ing_df.iterrows():
-            rr = st.columns([2, 2, 1.5, 2, 1.5])
+            rr = st.columns([2, 2, 2, 1.5])
             rr[0].caption(str(row.get('시간', ''))[:16])
             rr[1].write(row.get('모델', ''))
-            rr[2].write(row.get('cell', ''))
-            rr[3].markdown(f"`{row.get('시리얼', '')}`")
-            if rr[4].button("✔ 조립 완료", key=f"asm_done_{idx}", use_container_width=True, type="primary"):
+            rr[2].markdown(f"`{row.get('시리얼', '')}`")
+            if rr[3].button("✔ 조립 완료", key=f"asm_done_{idx}", use_container_width=True, type="primary"):
                 st.cache_data.clear()
                 update_row(row['시리얼'], {'상태': '검사대기', '시간': get_now_kst_str()})
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
@@ -2669,16 +2669,15 @@ elif curr_l == "검사 라인":
     wait_df = db_qc[db_qc['상태'] == '검사대기'].sort_values('시간', ascending=False)
 
     if not wait_df.empty:
-        hh = st.columns([2, 2, 1.5, 2, 1.5])
-        for col, txt in zip(hh, ["시간", "모델", "Cell", "시리얼", "검사 시작"]):
+        hh = st.columns([2, 2, 2, 1.5])
+        for col, txt in zip(hh, ["시간", "모델", "시리얼", "검사 시작"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
         for idx, row in wait_df.iterrows():
-            rr = st.columns([2, 2, 1.5, 2, 1.5])
+            rr = st.columns([2, 2, 2, 1.5])
             rr[0].caption(str(row.get('시간', ''))[:16])
             rr[1].write(row.get('모델', ''))
-            rr[2].write(row.get('cell', ''))
-            rr[3].markdown(f"`{row.get('시리얼', '')}`")
-            if rr[4].button("▶ 검사 시작", key=f"qc_in_{idx}", use_container_width=True, type="primary"):
+            rr[2].markdown(f"`{row.get('시리얼', '')}`")
+            if rr[3].button("▶ 검사 시작", key=f"qc_in_{idx}", use_container_width=True, type="primary"):
                 st.cache_data.clear()
                 update_row(row['시리얼'], {'상태': '검사중', '시간': get_now_kst_str(),
                     '라인': '검사 라인', '작업자': st.session_state.user_id})
@@ -2698,11 +2697,10 @@ elif curr_l == "검사 라인":
     if not qc_ing_df.empty:
         for idx, row in qc_ing_df.iterrows():
             with st.container(border=True):
-                ic1, ic2, ic3, ic4 = st.columns([2, 1.5, 1.5, 1.5])
+                ic1, ic2, ic3 = st.columns([2, 2, 1.5])
                 ic1.markdown(f"**{row.get('모델', '')}**")
                 ic2.markdown(f"`{row.get('시리얼', '')}`")
-                ic3.write(row.get('cell', ''))
-                ic4.markdown("<span style='background:#ddeeff;color:#1a4a7a;padding:2px 8px;"
+                ic3.markdown("<span style='background:#ddeeff;color:#1a4a7a;padding:2px 8px;"
                              "border-radius:6px;font-size:0.8rem;font-weight:bold;'>🔍 검사중</span>",
                              unsafe_allow_html=True)
 
@@ -2776,16 +2774,15 @@ elif curr_l == "포장 라인":
     pk_wait_df = db_pk[db_pk['상태'] == '출하승인'].sort_values('시간', ascending=False)
 
     if not pk_wait_df.empty:
-        hh = st.columns([2, 2, 1.5, 2, 1.5])
-        for col, txt in zip(hh, ["시간", "모델", "Cell", "시리얼", "포장 시작"]):
+        hh = st.columns([2, 2, 2, 1.5])
+        for col, txt in zip(hh, ["시간", "모델", "시리얼", "포장 시작"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
         for idx, row in pk_wait_df.iterrows():
-            rr = st.columns([2, 2, 1.5, 2, 1.5])
+            rr = st.columns([2, 2, 2, 1.5])
             rr[0].caption(str(row.get('시간', ''))[:16])
             rr[1].write(row.get('모델', ''))
-            rr[2].write(row.get('cell', ''))
-            rr[3].markdown(f"`{row.get('시리얼', '')}`")
-            if rr[4].button("▶ 포장 시작", key=f"pk_in_{idx}", use_container_width=True, type="primary"):
+            rr[2].markdown(f"`{row.get('시리얼', '')}`")
+            if rr[3].button("▶ 포장 시작", key=f"pk_in_{idx}", use_container_width=True, type="primary"):
                 st.cache_data.clear()
                 update_row(row['시리얼'], {'상태': '포장중', '시간': get_now_kst_str(),
                     '라인': '포장 라인', '작업자': st.session_state.user_id})
@@ -2803,16 +2800,15 @@ elif curr_l == "포장 라인":
     pk_ing_df = db_pk[db_pk['상태'] == '포장중'].sort_values('시간', ascending=False)
 
     if not pk_ing_df.empty:
-        hh = st.columns([2, 2, 1.5, 2, 1.5])
-        for col, txt in zip(hh, ["시간", "모델", "Cell", "시리얼", "포장 완료"]):
+        hh = st.columns([2, 2, 2, 1.5])
+        for col, txt in zip(hh, ["시간", "모델", "시리얼", "포장 완료"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
         for idx, row in pk_ing_df.iterrows():
-            rr = st.columns([2, 2, 1.5, 2, 1.5])
+            rr = st.columns([2, 2, 2, 1.5])
             rr[0].caption(str(row.get('시간', ''))[:16])
             rr[1].write(row.get('모델', ''))
-            rr[2].write(row.get('cell', ''))
-            rr[3].markdown(f"`{row.get('시리얼', '')}`")
-            if rr[4].button("✔ 포장 완료", key=f"pk_done_{idx}", use_container_width=True, type="primary"):
+            rr[2].markdown(f"`{row.get('시리얼', '')}`")
+            if rr[3].button("✔ 포장 완료", key=f"pk_done_{idx}", use_container_width=True, type="primary"):
                 st.cache_data.clear()
                 update_row(row['시리얼'], {'상태': '완료', '시간': get_now_kst_str()})
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
@@ -5460,7 +5456,7 @@ elif curr_l == "작업자 매뉴얼":
         </ul>
         <b>② 신규 제품 등록</b>
         <ul style='margin:4px 0 10px;padding-left:1.4em;'>
-          <li>모델명·품목코드·Cell(작업대)·시리얼 번호 입력</li>
+          <li>모델명·품목코드·시리얼 번호 입력</li>
           <li>바코드 스캐너 연동 가능 — 스캔 후 자동 입력됩니다.</li>
           <li>자재 시리얼(부품 S/N)은 별도 항목에 추가 등록 가능</li>
         </ul>
@@ -5763,7 +5759,7 @@ elif curr_l == "관리자 매뉴얼":
           </tr>
           <tr style='background:#f0f4f8;'>
             <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>production</td>
-            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>시간·반·라인·cell·모델·품목코드·시리얼·상태·deleted_at</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>시간·반·라인·모델·품목코드·시리얼·상태·deleted_at</td>
             <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>생산 이력 메인 테이블</td>
           </tr>
           <tr>
