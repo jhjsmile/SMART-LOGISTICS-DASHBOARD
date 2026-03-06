@@ -11,6 +11,32 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
+
+# =================================================================
+# 상수 정의
+# =================================================================
+# 성능 설정
+AUTO_REFRESH_INTERVAL_MS = 30000  # 30초 자동 새로고침
+MAX_FUNCTION_LINES = 200  # 함수 최대 라인 수 가이드
+
+# UI 설정
+PDF_VIEWER_HEIGHT_PX = 900
+IFRAME_BORDER_RADIUS_PX = 10
+
+# 데이터베이스
+DEFAULT_PAGE_SIZE = 100
+MAX_QUERY_RESULTS = 1000
+
+# 파일 업로드
+MAX_UPLOAD_SIZE_MB = 200
+ALLOWED_FILE_EXTENSIONS = ['.xlsx', '.xls', '.csv']
+
+# 색상 설정
+COLOR_SUCCESS = "#28a745"
+COLOR_ERROR = "#dc3545"
+COLOR_WARNING = "#ffc107"
+COLOR_INFO = "#17a2b8"
+
 # =================================================================
 # 1. 시스템 전역 설정 (v22.3 - 반응형)
 # =================================================================
@@ -21,7 +47,7 @@ st.set_page_config(
 )
 
 KST = timezone(timedelta(hours=9))
-_refresh_count = st_autorefresh(interval=30000, key="pms_auto_refresh")
+_refresh_count = st_autorefresh(interval=AUTO_REFRESH_INTERVAL_MS, key="pms_auto_refresh")
 # autorefresh 카운터만 기록 - 팝업은 사용자가 직접 닫을 때까지 유지
 if _refresh_count:
     st.session_state["_last_refresh_count"] = _refresh_count
@@ -454,6 +480,16 @@ def hash_pw(password: str) -> str:
 def verify_pw(plain: str, hashed: str) -> bool:
     return hash_pw(plain) == hashed
 
+
+# =================================================================
+# 에러 핸들링 베스트 프랙티스
+# =================================================================
+# 1. 구체적인 예외 타입 사용 (Exception보다 ValueError, KeyError 등)
+# 2. 에러 로깅 추가 (st.error()와 함께 로그 기록)
+# 3. 사용자 친화적 메시지 제공
+# 4. 복구 가능한 에러는 graceful degradation
+# =================================================================
+
 def get_master_pw_hash() -> str | None:
     try:
         return st.secrets["connections"]["gsheets"]["master_admin_pw_hash"]
@@ -672,6 +708,7 @@ def sync_master_to_session():
         return
     models_map = {g: [] for g in PRODUCTION_GROUPS}
     items_map  = {g: {} for g in PRODUCTION_GROUPS}
+    # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
     for _, r in df.iterrows():
         g  = str(r['반'])
         m  = str(r['모델명'])
@@ -887,7 +924,9 @@ def search_material_by_sn(자재시리얼: str) -> pd.DataFrame:
     """자재 S/N으로 메인 S/N 역추적"""
     try:
         sb  = get_supabase()
-        res = sb.table("material_serial").select("*").ilike("자재시리얼", f"%{자재시리얼}%").execute()
+        자재시리얼_cleaned = re.sub(r'[^\w가-힣-]', '', 자재시리얼) if 자재시리얼 else ""
+        # SQL Injection 방지: 입력값 검증
+        res = sb.table("material_serial").select("*").ilike("자재시리얼", f"%{자재시리얼_cleaned}%").execute()
         if res.data:
             return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
         return pd.DataFrame()
@@ -948,6 +987,17 @@ def insert_schedule_change_log(sch_id: int, 날짜: str, 반: str, 모델명: st
         return True
     except:
         return False
+
+
+# =================================================================
+# st.rerun() 사용 가이드
+# =================================================================
+# ⚠️ st.rerun()은 전체 스크립트를 재실행하므로 성능에 영향을 줍니다.
+# 권장 패턴:
+#   1. st.session_state 업데이트 후 자연스러운 리렌더링 활용
+#   2. 조건문으로 불필요한 rerun 방지
+#   3. 연속된 rerun() 호출 금지
+# =================================================================
 
 def show_inline_day_panel():
     """캘린더 날짜 클릭 시 인라인으로 일정 표시 (dialog 대신)"""
@@ -1116,6 +1166,7 @@ def show_inline_day_panel():
                         f"<p style='color:#8a7f72;font-size:0.72rem;font-weight:bold;margin:0 0 2px;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{hl}</p>",
                         unsafe_allow_html=True
                     )
+                # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                 for _, r in ban_rows.sort_values('카테고리').iterrows():
                     row_id  = r.get('id', None)
                     cat_v   = str(r.get('카테고리', '기타'))
@@ -1427,6 +1478,7 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                 cat_counts = {}
                 event_count = 0
                 if not day_data.empty:
+                    # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                     for _, r in day_data.iterrows():
                         cat = str(r.get("카테고리","기타")) if r.get("카테고리") else "기타"
                         cat_counts[cat] = cat_counts.get(cat, 0) + 1
@@ -1546,7 +1598,13 @@ def render_calendar_weekly():
                           [cal_weeks[week_idx]], today, can_edit, "wk")
 
 # ── 월별 캘린더
-def render_calendar_monthly():
+def render_calendar_monthly(
+    # ⚠️ 리팩토링 권장: 이 함수는 390+ 라인으로 다음과 같이 분리 권장:
+    # - render_calendar_header(): 헤더 렌더링
+    # - render_calendar_cells(): 셀 렌더링
+    # - handle_calendar_events(): 이벤트 처리
+    # - save_calendar_changes(): 변경사항 저장
+    ):
     sch_df    = st.session_state.schedule_db
     cal_year  = st.session_state.cal_month_year  if 'cal_month_year'  in st.session_state else st.session_state.cal_year
     cal_month = st.session_state.cal_month_month if 'cal_month_month' in st.session_state else st.session_state.cal_month
@@ -1739,6 +1797,7 @@ elif curr_l == "조립 라인":
             th = st.columns([1.2, 2.8, 1.5, 0.8, 1.8, 2.5])
             for col, txt in zip(th, ["유형", "모델명", "P/N", "조립수", "출하계획", "특이사항"]):
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:2px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+            # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
             for _, sr in today_sch.iterrows():
                 cat   = str(sr.get('카테고리', '기타'))
                 color = SCHEDULE_COLORS.get(cat, "#888")
@@ -1826,6 +1885,7 @@ elif curr_l == "조립 라인":
             }
 
             sorted_df     = f_df_view.sort_values('시간', ascending=False)
+            # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
             actionable_idxs = [i for i, rw in sorted_df.iterrows()
                                if rw['상태'] in ["조립중","수리 완료(재투입)"]]
 
@@ -1834,6 +1894,7 @@ elif curr_l == "조립 라인":
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;'>{txt}</p>",
                              unsafe_allow_html=True)
 
+            # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
             for idx, row in sorted_df.iterrows():
                 is_actionable = row['상태'] in ["조립중","수리 완료(재투입)"]
                 _cb_key = f"asm_cb_{curr_g}_{idx}"
@@ -2133,6 +2194,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     wc1.markdown(f"**{w_model}**" + (f"  `{w_pn}`" if w_pn else ""))
                     wc2.caption(f"{len(w_gdf)}대")
                     # 시리얼 행: 체크박스 + 개별 입고 버튼
+                    # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                     for wi, (widx, wrow) in enumerate(w_gdf.iterrows()):
                         wr1, wr2, wr3 = st.columns([0.5, 3, 1.2])
                         _wck = wr1.checkbox("", key=f"wck_{curr_g}_{curr_l}_{widx}",
@@ -2196,6 +2258,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
 
             sorted_df = f_df_view.sort_values('시간', ascending=False)
             # 처리 가능 행 인덱스 (위젯 key로 체크 상태 읽기용)
+            # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
             act_idxs = [i for i, rw in sorted_df.iterrows()
                         if rw['상태'] in _act_states]
 
@@ -2204,6 +2267,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;'>{txt}</p>",
                              unsafe_allow_html=True)
 
+            # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
             for idx, row in sorted_df.iterrows():
                 is_act  = row['상태'] in _act_states
                 _cb_key = f"qp_cb_{curr_g}_{curr_l}_{idx}"
@@ -2534,6 +2598,7 @@ elif curr_l == "생산 지표 관리":
             if not ng_df.empty:
                 max_pct = ng_df['불량률'].max() or 1
                 ng_html = ""
+                # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                 for _, row in ng_df.iterrows():
                     bar_w = int(row['불량률'] / max_pct * 100)
                     bar_c = "#c0392b" if row['불량률'] > 10 else "#d68910" if row['불량률'] > 5 else "#e8c97a"
@@ -2562,6 +2627,7 @@ elif curr_l == "생산 지표 관리":
             BAN_CL = {"제조1반":"#2471a3","제조2반":"#1e8449","제조3반":"#6c3483"}
             LINE_BG = {"조립 라인":"#fff3d4","검사 라인":"#d4f0e2","포장 라인":"#fde8d4"}
             rt_html = "<div style='font-size:0.7rem;font-weight:600;color:#aaa;display:flex;gap:0;padding:0 0 4px 0;border-bottom:2px solid #e8e2d8;margin-bottom:2px;'><span style='flex:1.2;'>반</span><span style='flex:1.5;'>라인</span><span style='flex:2.5;'>모델</span><span style='flex:2;'>시리얼</span><span style='flex:1.8;'>시작</span></div>"
+            # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
             for _, row in rt_wip.iterrows():
                 ban_v  = row.get('반','')
                 line_v = row.get('라인','')
@@ -2793,6 +2859,7 @@ elif curr_l == "생산 지표 관리":
             th = st.columns([1.8, 1.0, 1.0, 1.0, 1.0, 0.9, 2.5, 2.0, 1.2])
             for col, txt in zip(th, ["시간","반","월","이전","변경","증감","변경 사유","상세 내용","작업자"]):
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+            # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
             for _, row in plog_df.iterrows():
                 tr = st.columns([1.8, 1.0, 1.0, 1.0, 1.0, 0.9, 2.5, 2.0, 1.2])
                 tr[0].caption(str(row.get('시간',''))[:16])
@@ -2844,6 +2911,7 @@ elif curr_l == "생산 지표 관리":
             th2 = st.columns([1.6, 1.0, 1.0, 1.2, 2.0, 2.0, 2.2, 1.8, 1.2])
             for col, txt in zip(th2, ["수정 시간","날짜","반","모델","이전 내용","변경 내용","변경 사유","상세","작업자"]):
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+            # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
             for _, row in slog_df.iterrows():
                 tr2 = st.columns([1.6, 1.0, 1.0, 1.2, 2.0, 2.0, 2.2, 1.8, 1.2])
                 tr2[0].caption(str(row.get('시간',''))[:16])
@@ -3289,6 +3357,7 @@ elif curr_l == "생산 지표 관리":
                 ac1, ac2, ac3 = st.columns([2, 1, 1])
                 ac1.markdown("<p style='color:#c8605a; font-weight:bold; margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
                 if ac2.button("✅ 예, 전체 삭제", type="primary", use_container_width=True, key="sch_all_del_yes"):
+                    # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                     for _, row in sch_list.iterrows():
                         delete_schedule(int(row['id']))
                     st.cache_data.clear()                          # ← 캐시 초기화
@@ -3305,6 +3374,7 @@ elif curr_l == "생산 지표 관리":
             for col, txt in zip(hh, ["유형","반","날짜","P/N","모델명","수량","특이사항",""]):
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
 
+            # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
             for _, row in sch_list.sort_values('날짜').iterrows():
                 cat    = row.get('카테고리', '기타')
                 color  = SCHEDULE_COLORS.get(cat, "#888")
@@ -3389,6 +3459,7 @@ elif curr_l == "OQC 라인":
         hh = st.columns([2, 2, 1.5, 2, 1.5])
         for col, txt in zip(hh, ["시간", "모델", "반", "시리얼", "OQC 시작"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+        # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
         for idx, row in packing_done.iterrows():
             rr = st.columns([2, 2, 1.5, 2, 1.5])
             rr[0].caption(str(row.get('시간',''))[:16])
@@ -3412,6 +3483,7 @@ elif curr_l == "OQC 라인":
     oqc_wait_list = db_oqc[db_oqc['상태'] == 'OQC중'].sort_values('시간', ascending=False)
 
     if not oqc_wait_list.empty:
+        # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
         for idx, row in oqc_wait_list.iterrows():
             with st.container(border=True):
                 ic1, ic2, ic3, ic4 = st.columns([2, 1.5, 1.5, 1.5])
@@ -3494,6 +3566,7 @@ elif curr_l == "OQC 라인":
         for col, txt in zip(rh, ["시간", "모델", "반", "시리얼", "결과", "비고", "이력"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
 
+        # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
         for idx2, row in oqc_done.iterrows():
             rr2 = st.columns([1.8, 2, 1.5, 2.2, 1.5, 2.5, 1])
             rr2[0].caption(str(row.get('시간',''))[:16])
@@ -3537,6 +3610,7 @@ elif curr_l == "OQC 라인":
                             ah = st.columns([1.8, 1.5, 1.5, 1.2, 3])
                             for col, txt in zip(ah, ["시간","이전상태","이후상태","작업자","비고"]):
                                 col.markdown(f"<p style='font-size:0.7rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                            # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                             for _, ar in aud_df.iterrows():
                                 ac = st.columns([1.8, 1.5, 1.5, 1.2, 3])
                                 ac[0].caption(str(ar.get('시간',''))[:16])
@@ -3556,6 +3630,7 @@ elif curr_l == "OQC 라인":
                     st.markdown("**🔩 연결된 자재 시리얼**")
                     mat_df = load_material_serials(sn)
                     if not mat_df.empty:
+                        # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                         for _, mr in mat_df.iterrows():
                             st.markdown(f"- **{mr.get('자재명','')}** : `{mr.get('자재시리얼','')}`　<span style='color:#aaa;font-size:0.75rem;'>{mr.get('작업자','')}</span>", unsafe_allow_html=True)
                     else:
@@ -3687,6 +3762,7 @@ elif curr_l == "OQC 라인":
                 mh = st.columns([1.8, 2, 1.5, 2, 2, 1.5])
                 for col, txt in zip(mh, ["등록시간","메인 S/N","반","모델","자재명","작업자"]):
                     col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                 for _, mr in found.iterrows():
                     mc = st.columns([1.8, 2, 1.5, 2, 2, 1.5])
                     mc[0].caption(str(mr.get('시간',''))[:16])
@@ -3826,6 +3902,7 @@ elif curr_l == "불량 공정":
         if wait.empty: continue
         has_any = True
         st.markdown(f"#### 📍 {g} 불량 처리 대기")
+        # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
         for idx, row in wait.iterrows():
             with st.container(border=True):
                 # 발생 정보
@@ -3957,6 +4034,7 @@ elif curr_l == "수리 현황 리포트":
         for col, txt in zip(th, ["시간", "시리얼", "모델", "반", "이전 상태", "이후 상태", "작업자", "비고"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
 
+        # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
         for _, row in audit_df.iterrows():
             tr = st.columns([1.8, 1.5, 2.2, 1.2, 1.5, 1.5, 1.2, 2.5])
             tr[0].caption(str(row.get('시간',''))[:16])
@@ -4285,6 +4363,7 @@ elif curr_l == "마스터 관리":
                 ph = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
                 for c, t in zip(ph, ["시간","반","라인","시리얼","상태","삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                 for i, (idx, row) in enumerate(prod_df.sort_values('시간', ascending=False).head(200).iterrows()):
                     pr = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
                     pr[0].caption(str(row.get('시간',''))[:16])
@@ -4351,6 +4430,7 @@ elif curr_l == "마스터 관리":
                 ah = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
                 for c, t in zip(ah, ["시간","반","시리얼","모델","이전상태","이후상태","삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                 for idx, row in adf.iterrows():
                     ar = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
                     ar[0].caption(str(row.get('시간',''))[:16])
@@ -4416,6 +4496,7 @@ elif curr_l == "마스터 관리":
                 mh = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
                 for c, t in zip(mh, ["시간","메인S/N","모델","자재명","자재S/N","삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                 for idx, row in mdf.iterrows():
                     mr = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
                     mr[0].caption(str(row.get('시간',''))[:16])
@@ -4470,6 +4551,7 @@ elif curr_l == "마스터 관리":
                 sh = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
                 for c, t in zip(sh, ["날짜","반","카테고리","모델명","조립수","출하계획","삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                 for idx, row in sdf.sort_values('날짜', ascending=False).iterrows():
                     sr = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
                     sr[0].caption(str(row.get('날짜',''))[:10])
@@ -4534,6 +4616,7 @@ elif curr_l == "마스터 관리":
                 plh = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
                 for c, t in zip(plh, ["시간","반","월","이전수량","변경수량","증감","변경사유","삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                 for idx, row in pldf.iterrows():
                     plr = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
                     plr[0].caption(str(row.get('시간',''))[:16])
@@ -4599,6 +4682,7 @@ elif curr_l == "마스터 관리":
                 slh = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
                 for c, t in zip(slh, ["시간","반","날짜","모델명","변경사유","작업자","삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                 for idx, row in sldf.iterrows():
                     slr = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
                     slr[0].caption(str(row.get('시간',''))[:16])
@@ -4664,6 +4748,7 @@ elif curr_l == "마스터 관리":
                 for c, t in zip(pph, ["반", "월", "계획 수량", "삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>",
                                unsafe_allow_html=True)
+                # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
                 for idx, row in ppdf.iterrows():
                     ppr = st.columns([2, 2, 2, 1])
                     ppr[0].write(row.get('반', ''))
@@ -4754,45 +4839,22 @@ elif curr_l == "사용 설명서":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # PDF 인라인 뷰어 (Blob URL 방식 - Chrome data: URI 차단 우회)
+    # PDF 인라인 뷰어 (iframe embed)
     pdf_b64_str = _MANUAL_PDF_B64
     pdf_viewer_html = f"""
-    <div id="pdf-viewer-wrap" style="border:1px solid #ddd5c0; border-radius:10px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.08); background:#f9f6f0;">
+    <div style="border:1px solid #ddd5c0; border-radius:10px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.08);">
         <iframe
-            id="pdf-frame"
+            src="data:application/pdf;base64,{pdf_b64_str}"
             width="100%"
-            height="900px"
+            height=f"{PDF_VIEWER_HEIGHT_PX}px"
             style="border:none; display:block;"
-        ></iframe>
-        <p id="pdf-fallback" style="display:none; padding:30px; text-align:center; color:#888;">
-            PDF를 불러오는 중 오류가 발생했습니다.<br>
-            위의 <strong>⬇️ PDF 다운로드</strong> 버튼을 이용해 주세요.
-        </p>
+            type="application/pdf"
+        >
+            <p style="padding:20px;text-align:center;">
+                이 브라우저는 PDF 인라인 보기를 지원하지 않습니다.<br>
+                위의 <strong>PDF 다운로드</strong> 버튼을 이용해 주세요.
+            </p>
+        </iframe>
     </div>
-    <script>
-    (function() {{
-        try {{
-            var b64 = "{pdf_b64_str}";
-            var binary = atob(b64);
-            var len = binary.length;
-            var bytes = new Uint8Array(len);
-            for (var i = 0; i < len; i++) {{
-                bytes[i] = binary.charCodeAt(i);
-            }}
-            var blob = new Blob([bytes], {{ type: 'application/pdf' }});
-            var url = URL.createObjectURL(blob);
-            var frame = document.getElementById('pdf-frame');
-            if (frame) {{
-                frame.src = url;
-            }}
-        }} catch(e) {{
-            var wrap = document.getElementById('pdf-viewer-wrap');
-            var frame = document.getElementById('pdf-frame');
-            var fallback = document.getElementById('pdf-fallback');
-            if (frame) frame.style.display = 'none';
-            if (fallback) fallback.style.display = 'block';
-        }}
-    }})();
-    </script>
     """
     st.markdown(pdf_viewer_html, unsafe_allow_html=True)
