@@ -542,6 +542,34 @@ def delete_all_production_schedule() -> bool:
     except Exception as e:
         st.error(f"생산일정 삭제 실패: {e}"); return False
 
+def delete_all_plan_change_log() -> bool:
+    try:
+        get_supabase().table("plan_change_log").delete().neq("작업자", "IMPOSSIBLE_XYZ").execute()
+        return True
+    except Exception as e:
+        st.error(f"계획변경이력 삭제 실패: {e}"); return False
+
+def delete_plan_change_log_row(row_id) -> bool:
+    try:
+        get_supabase().table("plan_change_log").delete().eq("id", row_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"계획변경이력 행 삭제 실패: {e}"); return False
+
+def delete_all_schedule_change_log() -> bool:
+    try:
+        get_supabase().table("schedule_change_log").delete().neq("작업자", "IMPOSSIBLE_XYZ").execute()
+        return True
+    except Exception as e:
+        st.error(f"일정변경이력 삭제 실패: {e}"); return False
+
+def delete_schedule_change_log_row(row_id) -> bool:
+    try:
+        get_supabase().table("schedule_change_log").delete().eq("id", row_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"일정변경이력 행 삭제 실패: {e}"); return False
+
 
 
 @st.cache_data(ttl=60)
@@ -1108,6 +1136,40 @@ if 'cal_month_year'   not in st.session_state: st.session_state.cal_month_year  
 if 'cal_month_month'  not in st.session_state: st.session_state.cal_month_month  = datetime.now(KST).month
 if 'cal_view'        not in st.session_state: st.session_state.cal_view        = "주별"
 if 'cal_week_idx'    not in st.session_state: st.session_state.cal_week_idx    = 0
+# ── 드롭박스 옵션 기본값 ──────────────────────────────────────────
+if 'dropdown_oqc_defect' not in st.session_state:
+    st.session_state.dropdown_oqc_defect = [
+        "(선택)",
+        "외관 불량 (스크래치/변형)", "기능 불량 (동작 이상)",
+        "라벨 / 刻印 오류", "포장 불량", "치수 불량",
+        "이물질 혼입", "수량 부족", "서류 오류",
+        "기타 (직접 입력)",
+    ]
+if 'dropdown_defect_cause' not in st.session_state:
+    st.session_state.dropdown_defect_cause = [
+        "(선택)",
+        "납땜 불량", "부품 미삽", "부품 오삽", "부품 불량",
+        "기구 파손", "기구 간섭", "나사 체결 불량",
+        "소프트웨어 오류", "펌웨어 오류", "설정 오류",
+        "외관 불량 (스크래치)", "외관 불량 (변형)",
+        "통신 불량", "전원 불량", "센서 불량",
+        "기타 (직접 입력)",
+    ]
+if 'dropdown_repair_action' not in st.session_state:
+    st.session_state.dropdown_repair_action = [
+        "(선택)",
+        "재납땜", "부품 교체", "부품 재삽입",
+        "기구 교체", "나사 재체결",
+        "펌웨어 재설치", "소프트웨어 초기화", "설정 재조정",
+        "외관 교체", "세척 후 재검사",
+        "재검사 후 양품 확인", "폐기 처리",
+        "기타 (직접 입력)",
+    ]
+if 'dropdown_mat_name' not in st.session_state:
+    st.session_state.dropdown_mat_name = [
+        "PCB", "배터리", "메인보드", "디스플레이",
+        "케이블", "모듈", "센서", "커넥터", "기타",
+    ]
 if 'cal_action'      not in st.session_state: st.session_state.cal_action      = None
 if 'cal_action_data' not in st.session_state: st.session_state.cal_action_data = None
 if 'cal_action_sub'      not in st.session_state: st.session_state.cal_action_sub      = None
@@ -1802,7 +1864,7 @@ elif curr_l == "조립 라인":
         st.info("등록된 생산 내역이 없습니다.")
 
     # 자재 목록 마스터 (커스터마이즈 가능)
-    MAT_NAME_OPTIONS = ["PCB", "배터리", "메인보드", "디스플레이", "케이블", "모듈", "센서", "커넥터", "기타"]
+    MAT_NAME_OPTIONS = st.session_state.get('dropdown_mat_name', ['기타'])
 
     # session_state 키 정의
     _mat_list_key  = f"mat_list_{curr_g}"   # 스캔된 자재 목록 [{"자재명":..,"자재시리얼":..}]
@@ -3239,18 +3301,7 @@ elif curr_l == "OQC 라인":
     st.markdown("<h2 class='centered-title'>🏅 OQC 출하 품질 검사</h2>", unsafe_allow_html=True)
 
     # 부적합 사유 선택지
-    OQC_DEFECT_REASONS = [
-        "(선택)",
-        "외관 불량 (스크래치/변형)",
-        "기능 불량 (동작 이상)",
-        "라벨 / 刻印 오류",
-        "포장 불량",
-        "치수 불량",
-        "이물질 혼입",
-        "수량 부족",
-        "서류 오류",
-        "기타 (직접 입력)",
-    ]
+    OQC_DEFECT_REASONS = st.session_state.get('dropdown_oqc_defect', ['(선택)', '기타 (직접 입력)'])
 
     db_oqc_all = st.session_state.production_db.copy()
 
@@ -3326,50 +3377,46 @@ elif curr_l == "OQC 라인":
 
                 # OQC 중 → 판정
                 if s_now == 'OQC중':
-                    oq1, oq2 = st.columns(2)
-                    # 샘플/검사 수량
+                    oq1, oq2 = st.columns([2, 1])
                     with oq1:
-                        with st.container():
-                            oqs1, oqs2 = st.columns(2)
-                            sample_qty = oqs1.number_input("샘플 수량", min_value=0, step=1, key=f"oqc_sample_{idx}")
-                            defect_qty = oqs2.number_input("부적합 수량", min_value=0, step=1, key=f"oqc_defect_qty_{idx}")
-                    with oq2:
-                        defect_sel = st.selectbox("부적합 사유", OQC_DEFECT_REASONS, key=f"oqc_reason_{idx}")
+                        defect_sel = st.selectbox("부적합 사유 (부적합 처리 시 선택)",
+                            st.session_state.get("dropdown_oqc_defect", OQC_DEFECT_REASONS),
+                            key=f"oqc_reason_{idx}")
                         if defect_sel == "기타 (직접 입력)":
-                            defect_txt = st.text_input("직접 입력", key=f"oqc_reason_txt_{idx}", placeholder="부적합 사유 입력")
+                            defect_txt = st.text_input("직접 입력", key=f"oqc_reason_txt_{idx}",
+                                placeholder="부적합 사유 입력")
                         elif defect_sel == "(선택)":
                             defect_txt = ""
                         else:
                             defect_txt = defect_sel
-
-                    btn1, btn2 = st.columns(2)
-                    # 합격 / 부적합 즉시 처리 (확인 팝업 없음)
-                    if btn1.button("✅ 합격 (출하 승인)", key=f"oqc_ok_{idx}",
-                                   use_container_width=True, type="primary"):
+                    with oq2:
+                        btn1 = st.button("✅ 합격 (출하 승인)", key=f"oqc_ok_{idx}",
+                                         use_container_width=True, type="primary")
+                        btn2 = st.button("🚫 부적합", key=f"oqc_ng_{idx}",
+                                         use_container_width=True)
+                    if btn1:
                         st.cache_data.clear()
-                        비고 = f"샘플:{sample_qty} 부적합수:{defect_qty}"
                         update_row(row['시리얼'], {
                             '상태': '출하승인', '시간': get_now_kst_str(),
-                            '증상': f"OQC합격 샘플:{sample_qty}", '수리': 비고
+                            '증상': 'OQC합격', '수리': 'OQC합격'
                         })
                         insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                             이전상태='OQC중', 이후상태='출하승인',
-                            작업자=st.session_state.user_id, 비고=비고)
+                            작업자=st.session_state.user_id)
                         st.session_state.production_db = load_realtime_ledger()
                         st.rerun()
-                    if btn2.button("🚫 부적합", key=f"oqc_ng_{idx}", use_container_width=True):
+                    if btn2:
                         if not defect_txt:
                             st.warning("⚠️ 부적합 사유를 먼저 선택해주세요.")
                         else:
                             st.cache_data.clear()
-                            비고 = f"사유:{defect_txt} 샘플:{sample_qty} 부적합수:{defect_qty}"
                             update_row(row['시리얼'], {
                                 '상태': '부적합(OQC)', '시간': get_now_kst_str(),
-                                '증상': defect_txt, '수리': 비고
+                                '증상': defect_txt, '수리': f"사유:{defect_txt}"
                             })
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                                 이전상태='OQC중', 이후상태='부적합(OQC)',
-                                작업자=st.session_state.user_id, 비고=비고)
+                                작업자=st.session_state.user_id, 비고=f"사유:{defect_txt}")
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
     else:
@@ -3720,24 +3767,8 @@ elif curr_l == "불량 공정":
     st.divider()
 
     # 불량 원인 / 수리 조치 선택지
-    DEFECT_CAUSES = [
-        "(선택)",
-        "납땜 불량", "부품 미삽", "부품 오삽", "부품 불량",
-        "기구 파손", "기구 간섭", "나사 체결 불량",
-        "소프트웨어 오류", "펌웨어 오류", "설정 오류",
-        "외관 불량 (스크래치)", "외관 불량 (변형)",
-        "통신 불량", "전원 불량", "센서 불량",
-        "기타 (직접 입력)",
-    ]
-    REPAIR_ACTIONS = [
-        "(선택)",
-        "재납땜", "부품 교체", "부품 재삽입",
-        "기구 교체", "나사 재체결",
-        "펌웨어 재설치", "소프트웨어 초기화", "설정 재조정",
-        "외관 교체", "세척 후 재검사",
-        "재검사 후 양품 확인", "폐기 처리",
-        "기타 (직접 입력)",
-    ]
+    DEFECT_CAUSES = st.session_state.get('dropdown_defect_cause', ['(선택)', '기타 (직접 입력)'])
+    REPAIR_ACTIONS = st.session_state.get('dropdown_repair_action', ['(선택)', '기타 (직접 입력)'])
 
     # 처리 대기 목록
     has_any = False
@@ -4104,10 +4135,85 @@ elif curr_l == "마스터 관리":
         st.divider()
 
         # ── 데이터 삭제 관리 ──────────────────────────────────────
+        # ── 드롭박스 편집 ──────────────────────────────────────────
+        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin:16px 0 10px 0;'>📝 드롭박스 옵션 편집</h4>", unsafe_allow_html=True)
+        st.caption("각 항목을 한 줄에 하나씩 입력하세요. '(선택)'과 '기타 (직접 입력)'은 자동 유지됩니다.")
+
+        dd_tab1, dd_tab2, dd_tab3, dd_tab4 = st.tabs([
+            "🔍 OQC 부적합 사유", "⚠️ 불량 원인", "🔧 수리 조치", "🔩 자재명"])
+
+        def _render_dropdown_editor(ss_key: str, label: str, tab_key: str):
+            """드롭박스 편집 공통 렌더러"""
+            current = st.session_state.get(ss_key, [])
+            # (선택), 기타(직접 입력) 제외한 편집 가능 항목
+            editable = [x for x in current if x not in ["(선택)", "기타 (직접 입력)"]]
+            current_text = "\n".join(editable)
+            new_text = st.text_area(
+                f"{label} 목록 (한 줄에 하나씩)",
+                value=current_text, height=200,
+                key=f"dd_edit_{tab_key}",
+                placeholder="항목1\n항목2\n항목3"
+            )
+            ec1, ec2 = st.columns([1, 1])
+            if ec1.button(f"💾 저장", key=f"dd_save_{tab_key}", use_container_width=True, type="primary"):
+                new_items = [x.strip() for x in new_text.strip().splitlines() if x.strip()]
+                # 중복 제거 후 고정 항목 앞뒤 추가
+                seen = set()
+                deduped = []
+                for item in new_items:
+                    if item not in seen and item not in ["(선택)", "기타 (직접 입력)"]:
+                        seen.add(item); deduped.append(item)
+                final = ["(선택)"] + deduped + ["기타 (직접 입력)"]
+                st.session_state[ss_key] = final
+                st.success(f"✅ {label} 저장 완료 ({len(deduped)}개 항목)")
+                st.rerun()
+            if ec2.button(f"↩️ 기본값 복원", key=f"dd_reset_{tab_key}", use_container_width=True):
+                st.session_state.pop(ss_key, None)
+                st.success("기본값으로 복원됩니다.")
+                st.rerun()
+            st.caption(f"현재 {len(editable)}개 항목 등록됨 (선택·직접입력 제외)")
+
+        def _render_mat_name_editor():
+            """자재명은 (선택)/기타 없는 단순 목록"""
+            current = st.session_state.get("dropdown_mat_name", [])
+            current_text = "\n".join(current)
+            new_text = st.text_area(
+                "자재명 목록 (한 줄에 하나씩)",
+                value=current_text, height=180,
+                key="dd_edit_mat",
+                placeholder="PCB\n배터리\n메인보드"
+            )
+            mc1, mc2 = st.columns([1, 1])
+            if mc1.button("💾 저장", key="dd_save_mat", use_container_width=True, type="primary"):
+                items = [x.strip() for x in new_text.strip().splitlines() if x.strip()]
+                seen = set(); deduped = []
+                for item in items:
+                    if item not in seen: seen.add(item); deduped.append(item)
+                st.session_state["dropdown_mat_name"] = deduped
+                st.success(f"✅ 자재명 저장 완료 ({len(deduped)}개)")
+                st.rerun()
+            if mc2.button("↩️ 기본값 복원", key="dd_reset_mat", use_container_width=True):
+                st.session_state.pop("dropdown_mat_name", None)
+                st.success("기본값으로 복원됩니다."); st.rerun()
+            st.caption(f"현재 {len(current)}개 항목 등록됨")
+
+        with dd_tab1:
+            _render_dropdown_editor("dropdown_oqc_defect", "OQC 부적합 사유", "oqc")
+        with dd_tab2:
+            _render_dropdown_editor("dropdown_defect_cause", "불량 원인", "defect")
+        with dd_tab3:
+            _render_dropdown_editor("dropdown_repair_action", "수리 조치", "repair")
+        with dd_tab4:
+            _render_mat_name_editor()
+
+        st.divider()
+
         st.markdown("<h4 style='color:#c8605a; font-weight:bold; margin:16px 0 10px 0;'>🗑️ 데이터 삭제 관리</h4>", unsafe_allow_html=True)
         st.caption("생산 이력, 감사 로그, 자재 시리얼, 생산 일정을 개별 또는 전체 삭제합니다.")
 
-        del_tab1, del_tab2, del_tab3, del_tab4 = st.tabs(["📦 생산 이력", "🔍 감사 로그", "🔩 자재 시리얼", "📅 생산 일정"])
+        del_tab1, del_tab2, del_tab3, del_tab4, del_tab5, del_tab6 = st.tabs([
+            "📦 생산 이력", "🔍 감사 로그", "🔩 자재 시리얼",
+            "📅 생산 일정", "📊 계획 변경 이력", "🗓️ 일정 변경 이력"])
 
         # ─── 탭1: 생산 이력 ───────────────────────────────────────
         with del_tab1:
@@ -4349,6 +4455,133 @@ elif curr_l == "마스터 관리":
                         st.success("생산 일정 전체 삭제 완료"); st.rerun()
                 if _sa3.button("취소", key="del_sch_all_no", use_container_width=True):
                     st.session_state[_ck_sch_all] = False; st.rerun()
+
+        # ─── 탭5: 계획 변경 이력 ─────────────────────────────────
+        with del_tab5:
+            @st.cache_data(ttl=15)
+            def _load_plan_log_all():
+                try:
+                    res = get_supabase().table("plan_change_log").select("*").order("시간", desc=True).limit(500).execute()
+                    return pd.DataFrame(res.data) if res.data else pd.DataFrame(
+                        columns=['id','시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
+                except:
+                    return pd.DataFrame(columns=['id','시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
+
+            plog = _load_plan_log_all()
+            st.caption(f"현재 **{len(plog)}건** (최대 500건 표시)")
+            if st.button("🔄 새로고침", key="plog_del_refresh"):
+                st.cache_data.clear(); st.rerun()
+
+            pl1, pl2 = st.columns([1.5, 2])
+            _pl_grp = pl1.selectbox("반", ["전체"] + PRODUCTION_GROUPS, key="d_plog_grp")
+            _pl_kw  = pl2.text_input("월 검색", key="d_plog_kw", placeholder="예: 2026-03")
+            pldf = plog.copy()
+            if _pl_grp != "전체": pldf = pldf[pldf['반'] == _pl_grp]
+            if _pl_kw.strip():   pldf = pldf[pldf['월'].astype(str).str.contains(_pl_kw.strip(), na=False)]
+
+            if not pldf.empty:
+                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
+                plh = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
+                for c, t in zip(plh, ["시간","반","월","이전수량","변경수량","증감","변경사유","삭제"]):
+                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                for idx, row in pldf.iterrows():
+                    plr = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
+                    plr[0].caption(str(row.get('시간',''))[:16])
+                    plr[1].caption(row.get('반',''))
+                    plr[2].caption(str(row.get('월','')))
+                    plr[3].caption(str(row.get('이전수량','')))
+                    plr[4].caption(str(row.get('변경수량','')))
+                    _inc = row.get('증감', 0)
+                    _inc_color = "#1f6640" if _inc >= 0 else "#c8605a"
+                    plr[5].markdown(f"<span style='color:{_inc_color};font-weight:bold;font-size:0.8rem;'>{'+' if _inc>0 else ''}{_inc}</span>", unsafe_allow_html=True)
+                    plr[6].caption(row.get('변경사유',''))
+                    _plid = row.get('id')
+                    if _plid and plr[7].button("🗑️", key=f"del_plog_{_plid}", help="이 행 삭제"):
+                        if delete_plan_change_log_row(_plid):
+                            st.cache_data.clear()
+                            st.success("삭제 완료"); st.rerun()
+            else:
+                st.info("조건에 맞는 계획 변경 이력이 없습니다.")
+
+            st.markdown("<hr style='margin:12px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
+            _ck_plog_all = "del_plog_all_ck"
+            if not st.session_state.get(_ck_plog_all):
+                if st.button("⛔ 계획 변경 이력 전체 삭제", key="del_plog_all_btn",
+                             type="secondary", use_container_width=False):
+                    st.session_state[_ck_plog_all] = True; st.rerun()
+            else:
+                st.error("⛔ 계획 변경 이력 **전체**를 삭제합니다. 되돌릴 수 없습니다.")
+                _pla1, _pla2, _pla3 = st.columns([2,1,1])
+                _pla1.markdown("<p style='color:#c8605a;font-weight:bold;margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
+                if _pla2.button("✅ 예, 전체 삭제", key="del_plog_all_yes", type="primary", use_container_width=True):
+                    if delete_all_plan_change_log():
+                        st.cache_data.clear()
+                        st.session_state[_ck_plog_all] = False
+                        st.success("계획 변경 이력 전체 삭제 완료"); st.rerun()
+                if _pla3.button("취소", key="del_plog_all_no", use_container_width=True):
+                    st.session_state[_ck_plog_all] = False; st.rerun()
+
+        # ─── 탭6: 일정 변경 이력 ─────────────────────────────────
+        with del_tab6:
+            @st.cache_data(ttl=15)
+            def _load_sch_log_all():
+                try:
+                    res = get_supabase().table("schedule_change_log").select("*").order("시간", desc=True).limit(500).execute()
+                    return pd.DataFrame(res.data) if res.data else pd.DataFrame(
+                        columns=['id','시간','일정id','날짜','반','모델명','이전내용','변경내용','변경사유','사유상세','작업자'])
+                except:
+                    return pd.DataFrame(columns=['id','시간','일정id','날짜','반','모델명','이전내용','변경내용','변경사유','사유상세','작업자'])
+
+            slog = _load_sch_log_all()
+            st.caption(f"현재 **{len(slog)}건** (최대 500건 표시)")
+            if st.button("🔄 새로고침", key="slog_del_refresh"):
+                st.cache_data.clear(); st.rerun()
+
+            sl1, sl2 = st.columns([1.5, 2])
+            _sl_grp = sl1.selectbox("반", ["전체"] + PRODUCTION_GROUPS, key="d_slog_grp")
+            _sl_kw  = sl2.text_input("모델명 검색", key="d_slog_kw", placeholder="모델명 일부 입력")
+            sldf = slog.copy()
+            if _sl_grp != "전체": sldf = sldf[sldf['반'] == _sl_grp]
+            if _sl_kw.strip():   sldf = sldf[sldf['모델명'].astype(str).str.contains(_sl_kw.strip(), case=False, na=False)]
+
+            if not sldf.empty:
+                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
+                slh = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
+                for c, t in zip(slh, ["시간","반","날짜","모델명","변경사유","작업자","삭제"]):
+                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                for idx, row in sldf.iterrows():
+                    slr = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
+                    slr[0].caption(str(row.get('시간',''))[:16])
+                    slr[1].caption(row.get('반',''))
+                    slr[2].caption(str(row.get('날짜',''))[:10])
+                    slr[3].caption(row.get('모델명',''))
+                    slr[4].caption(row.get('변경사유',''))
+                    slr[5].caption(row.get('작업자',''))
+                    _slid = row.get('id')
+                    if _slid and slr[6].button("🗑️", key=f"del_slog_{_slid}", help="이 행 삭제"):
+                        if delete_schedule_change_log_row(_slid):
+                            st.cache_data.clear()
+                            st.success("삭제 완료"); st.rerun()
+            else:
+                st.info("조건에 맞는 일정 변경 이력이 없습니다.")
+
+            st.markdown("<hr style='margin:12px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
+            _ck_slog_all = "del_slog_all_ck"
+            if not st.session_state.get(_ck_slog_all):
+                if st.button("⛔ 일정 변경 이력 전체 삭제", key="del_slog_all_btn",
+                             type="secondary", use_container_width=False):
+                    st.session_state[_ck_slog_all] = True; st.rerun()
+            else:
+                st.error("⛔ 일정 변경 이력 **전체**를 삭제합니다. 되돌릴 수 없습니다.")
+                _sla1, _sla2, _sla3 = st.columns([2,1,1])
+                _sla1.markdown("<p style='color:#c8605a;font-weight:bold;margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
+                if _sla2.button("✅ 예, 전체 삭제", key="del_slog_all_yes", type="primary", use_container_width=True):
+                    if delete_all_schedule_change_log():
+                        st.cache_data.clear()
+                        st.session_state[_ck_slog_all] = False
+                        st.success("일정 변경 이력 전체 삭제 완료"); st.rerun()
+                if _sla3.button("취소", key="del_slog_all_no", use_container_width=True):
+                    st.session_state[_ck_slog_all] = False; st.rerun()
 
         st.divider()
 
