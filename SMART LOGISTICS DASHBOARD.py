@@ -605,8 +605,9 @@ def get_master_pw_hash() -> str | None:
     except Exception:
         pass
 
-    # 4순위: 기본 폴백 (master8371 SHA-256)
-    return "2f4ff906544400016f18e4eaad872b2849a5d488e7f0ace2225144497db601e3"
+    # 4순위: 설정 없음 → None (호출 측에서 처리)
+    # 보안: 하드코딩 해시 제거 - Supabase system_config 또는 secrets.toml에 master_admin_pw_hash 설정 필요
+    return None
 
 # =================================================================
 # 3. Supabase 연결 및 DB 함수
@@ -1472,11 +1473,20 @@ if 'user_db' not in st.session_state:
             }
     except Exception as e:
         # Supabase 연결 실패 시 임시 계정 (경고 표시)
+        # 보안: 평문 비밀번호 하드코딩 제거 → secrets.toml 또는 환경변수에서 해시 로드
         st.sidebar.warning("⚠️ Supabase 연결 실패: 로컬 임시 계정으로 실행 중입니다.")
-        st.session_state.user_db = {
-            "master": {"pw_hash": hash_pw("master1234"), "role": "master"},
-            "admin":  {"pw_hash": hash_pw("admin1234"),  "role": "admin"},
-        }
+        _fb_users = {}
+        try:
+            _fb_cfg = st.secrets.get("fallback_users", {})
+            if _fb_cfg.get("master_hash"):
+                _fb_users["master"] = {"pw_hash": _fb_cfg["master_hash"], "role": "master"}
+            if _fb_cfg.get("admin_hash"):
+                _fb_users["admin"] = {"pw_hash": _fb_cfg["admin_hash"], "role": "admin"}
+        except Exception:
+            pass
+        if not _fb_users:
+            st.sidebar.error("❌ Supabase 미연결 & 임시 계정 미설정: secrets.toml에 [fallback_users] 섹션을 추가하세요.")
+        st.session_state.user_db = _fb_users
 
 if 'group_master_models' not in st.session_state:
     st.session_state.group_master_models = {"제조1반": [], "제조2반": [], "제조3반": []}
@@ -1523,9 +1533,14 @@ if not st.session_state.login_status:
                             ).eq("username", in_id).execute()
                         except Exception:
                             pass  # 업그레이드 실패해도 로그인은 허용
+                    # 역할 유효성 검사 (허용되지 않은 role이면 로그인 차단)
+                    _role = user_info.get("role", "")
+                    if _role not in ROLES:
+                        st.error(f"❌ 허용되지 않은 계정 권한입니다. (role={_role})")
+                        st.stop()
                     st.session_state.login_status  = True
                     st.session_state.user_id       = in_id
-                    st.session_state.user_role     = user_info["role"]
+                    st.session_state.user_role     = _role
                     # ✨ 커스텀 권한 적용
                     st.session_state.user_custom_permissions = user_info.get("custom_permissions", None)
                     st.session_state.production_db = load_realtime_ledger()
@@ -3272,7 +3287,7 @@ elif curr_l == "생산 지표 관리":
                 height=320,
                 margin=dict(t=40, b=40, l=20, r=20),
                 legend=dict(orientation='h', y=-0.2, font=dict(size=10)),
-                yaxis=dict(title="달성률 (%)", range=[0, max(120, chart_df['달성률(%)'].max() + 10)])
+                yaxis=dict(title="달성률 (%)", range=[0, max(120, (chart_df['달성률(%)'].max() + 10) if not chart_df.empty else 0)])
             )
             st.plotly_chart(fig_pct, use_container_width=True)
 
