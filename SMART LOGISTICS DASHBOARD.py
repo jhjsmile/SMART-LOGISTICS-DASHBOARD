@@ -1377,6 +1377,8 @@ if not st.session_state.login_status:
                     st.session_state.login_status  = True
                     st.session_state.user_id       = in_id
                     st.session_state.user_role     = user_info["role"]
+                    # ✨ 커스텀 권한 적용
+                    st.session_state.user_custom_permissions = user_info.get("custom_permissions", None)
                     st.session_state.production_db = load_realtime_ledger()
                     st.session_state.schedule_db   = load_schedule()
                     # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
@@ -1398,7 +1400,10 @@ st.sidebar.markdown(f"**{ROLE_LABELS.get(st.session_state.user_role, '')}**")
 st.sidebar.caption(f"ID: {st.session_state.user_id}")
 st.sidebar.divider()
 
-allowed_nav = ROLES.get(st.session_state.user_role, [])
+# ✨ 커스텀 권한이 있으면 우선 적용, 없으면 기본 역할 권한
+allowed_nav = st.session_state.get("user_custom_permissions", None)
+if allowed_nav is None:
+    allowed_nav = ROLES.get(st.session_state.user_role, [])
 
 if st.sidebar.button("🏠 메인 현황판", use_container_width=True,
     type="primary" if st.session_state.current_line == "현황판" else "secondary"):
@@ -1845,6 +1850,67 @@ if curr_l == "현황판":
 # ── 조립 라인 ────────────────────────────────────────────────────
 elif curr_l == "조립 라인":
     st.markdown(f"<h2 class='centered-title'>📦 {curr_g} 신규 조립 현황</h2>", unsafe_allow_html=True)
+
+    # ✨ 개선: 탭 추가 - 신규 등록 / 자재 시리얼 검색
+    asm_tab1, asm_tab2 = st.tabs(["📦 신규 등록", "🔍 시리얼 검색"])
+    
+    with asm_tab2:
+        st.markdown("### 🔍 시리얼 넘버 통합 검색")
+        st.caption("메인 시리얼 또는 자재 시리얼로 제품을 검색합니다.")
+        
+        search_col1, search_col2 = st.columns(2)
+        
+        with search_col1:
+            st.markdown("#### 📦 메인 시리얼 검색")
+            main_sn_search = st.text_input("메인 S/N 입력", key="main_sn_search", placeholder="예: EPS-2024-001")
+            
+            if main_sn_search.strip():
+                # 생산 DB에서 검색
+                prod_df = st.session_state.production_db
+                result = prod_df[prod_df['시리얼'].str.contains(main_sn_search.strip(), case=False, na=False)]
+                
+                if not result.empty:
+                    st.success(f"✅ {len(result)}건 발견")
+                    st.dataframe(result[['시간','반','라인','시리얼','모델','품목코드','상태']], 
+                               use_container_width=True, hide_index=True)
+                    
+                    # 자재 시리얼 정보도 함께 표시
+                    for _, row in result.iterrows():
+                        mat_df = load_material_serials(row['시리얼'])
+                        if not mat_df.empty:
+                            with st.expander(f"🔩 [{row['시리얼']}] 자재 시리얼 정보"):
+                                st.dataframe(mat_df[['자재명','자재시리얼','시간','작업자']], 
+                                           use_container_width=True, hide_index=True)
+                else:
+                    st.info("검색 결과가 없습니다.")
+        
+        with search_col2:
+            st.markdown("#### 🔩 자재 시리얼 검색")
+            mat_sn_search = st.text_input("자재 S/N 입력", key="mat_sn_search", placeholder="예: MAT-12345")
+            
+            if mat_sn_search.strip():
+                # 자재 시리얼에서 역추적
+                mat_result = search_material_by_sn(mat_sn_search.strip())
+                
+                if not mat_result.empty:
+                    st.success(f"✅ {len(mat_result)}건 발견")
+                    st.dataframe(mat_result[['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자']], 
+                               use_container_width=True, hide_index=True)
+                    
+                    # 해당 메인 시리얼의 현재 상태 표시
+                    unique_mains = mat_result['메인시리얼'].unique()
+                    for main_sn in unique_mains:
+                        prod_df = st.session_state.production_db
+                        prod_info = prod_df[prod_df['시리얼'] == main_sn]
+                        if not prod_info.empty:
+                            with st.expander(f"📦 [{main_sn}] 현재 상태"):
+                                st.dataframe(prod_info[['시간','반','라인','상태','모델','품목코드']], 
+                                           use_container_width=True, hide_index=True)
+                else:
+                    st.info("검색 결과가 없습니다.")
+    
+    with asm_tab1:
+        # 기존 코드 유지 (들여쓰기 조정)
 
     # ── 오늘 일정 알림 & 팝업 ─────────────────────────────────
     today_str   = datetime.now(KST).strftime('%Y-%m-%d')
@@ -3385,7 +3451,18 @@ elif curr_l == "생산 지표 관리":
                             existing = st.session_state.schedule_db
                             success_cnt = skip_cnt = fail_cnt = 0
                             fail_rows = []
-                            for row in filtered:
+                            
+                            # ✨ 진행률 표시 추가
+                            progress_bar = st.progress(0)
+                            status_text = st.empty()
+                            total = len(filtered)
+                            
+                            for idx, row in enumerate(filtered, 1):
+                                # 진행률 업데이트
+                                progress = idx / total
+                                progress_bar.progress(progress)
+                                status_text.text(f"📤 등록 중... {idx}/{total} ({int(progress*100)}%)")
+                                
                                 # 반 강제 지정
                                 if upload_ban:
                                     row['반'] = upload_ban
@@ -3409,6 +3486,11 @@ elif curr_l == "생산 지표 관리":
                                 else:
                                     fail_cnt += 1
                                     fail_rows.append(f"{row.get('날짜','')} / {row.get('모델명','')}")
+                            
+                            # 완료 표시
+                            progress_bar.progress(1.0)
+                            status_text.text(f"✅ 등록 완료!")
+                            
                             st.session_state.schedule_db = load_schedule()
                             if success_cnt > 0:
                                 st.success(f"✅ 등록 완료: {success_cnt}건  |  건너뜀(중복): {skip_cnt}건" + (f"  |  실패: {fail_cnt}건" if fail_cnt else ""))
@@ -4343,16 +4425,65 @@ elif curr_l == "마스터 관리":
         ac1, ac2 = st.columns(2)
 
         with ac1:
-            with st.form("user_mgmt"):
-                st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>👤 사용자 계정 생성/업데이트</p>", unsafe_allow_html=True)
-                nu  = st.text_input("ID")
-                np_ = st.text_input("PW", type="password")
-                nr  = st.selectbox("Role", ["admin","master","control_tower","assembly_team","qc_team","packing_team","schedule_manager","oqc_team"])
-                if st.form_submit_button("사용자 저장"):
-                    if nu and np_:
-                        st.session_state.user_db[nu] = {"pw_hash": hash_pw(np_), "role": nr}
-                        st.success(f"계정 [{nu}] 저장 완료")
-                    else: st.warning("ID와 PW를 모두 입력해주세요.")
+            # ✨ 개선: 탭으로 기본 생성과 개별 권한 관리 분리
+            user_tab1, user_tab2 = st.tabs(["➕ 계정 생성", "🔑 개별 권한 관리"])
+            
+            with user_tab1:
+                with st.form("user_mgmt"):
+                    st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>👤 사용자 계정 생성/업데이트</p>", unsafe_allow_html=True)
+                    nu  = st.text_input("ID")
+                    np_ = st.text_input("PW", type="password")
+                    nr  = st.selectbox("Role", ["admin","master","control_tower","assembly_team","qc_team","packing_team","schedule_manager","oqc_team"])
+                    if st.form_submit_button("사용자 저장"):
+                        if nu and np_:
+                            st.session_state.user_db[nu] = {"pw_hash": hash_pw(np_), "role": nr}
+                            st.success(f"계정 [{nu}] 저장 완료")
+                        else: st.warning("ID와 PW를 모두 입력해주세요.")
+            
+            with user_tab2:
+                st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>🔑 사용자별 개별 권한 부여</p>", unsafe_allow_html=True)
+                
+                # 등록된 사용자 목록
+                user_list = list(st.session_state.user_db.keys())
+                if user_list:
+                    selected_user = st.selectbox("사용자 선택", user_list, key="perm_user_select")
+                    current_role = st.session_state.user_db[selected_user].get("role", "assembly_team")
+                    
+                    st.caption(f"현재 역할: **{current_role}**")
+                    st.caption("체크된 메뉴에만 접근 가능합니다.")
+                    
+                    # 현재 사용자의 커스텀 권한 가져오기 (없으면 기본 역할 권한)
+                    current_perms = st.session_state.user_db[selected_user].get("custom_permissions", None)
+                    if current_perms is None:
+                        current_perms = ROLES.get(current_role, [])
+                    
+                    # 모든 가능한 메뉴 목록
+                    all_menus = ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", 
+                                "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리", "사용 설명서"]
+                    
+                    st.markdown("**접근 가능 메뉴:**")
+                    
+                    # 체크박스로 권한 선택
+                    selected_perms = []
+                    cols = st.columns(2)
+                    for idx, menu in enumerate(all_menus):
+                        col = cols[idx % 2]
+                        if col.checkbox(menu, value=(menu in current_perms), key=f"perm_{selected_user}_{menu}"):
+                            selected_perms.append(menu)
+                    
+                    perm_col1, perm_col2 = st.columns(2)
+                    if perm_col1.button("💾 권한 저장", key="save_custom_perm", use_container_width=True, type="primary"):
+                        st.session_state.user_db[selected_user]["custom_permissions"] = selected_perms
+                        st.success(f"✅ [{selected_user}] 권한 업데이트 완료 ({len(selected_perms)}개 메뉴)")
+                        st.rerun()
+                    
+                    if perm_col2.button("↩️ 기본 권한 복원", key="reset_custom_perm", use_container_width=True):
+                        if "custom_permissions" in st.session_state.user_db[selected_user]:
+                            del st.session_state.user_db[selected_user]["custom_permissions"]
+                        st.success(f"✅ [{selected_user}] 역할 기본 권한으로 복원됨")
+                        st.rerun()
+                else:
+                    st.info("등록된 사용자가 없습니다. 먼저 계정을 생성해주세요.")
 
         with ac2:
             st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>🗄️ 시스템 데이터 관리</p>", unsafe_allow_html=True)
