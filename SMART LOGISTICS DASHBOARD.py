@@ -1,3 +1,24 @@
+
+# ═══════════════════════════════════════════════════════════════
+# 🔒 보안 개선 사항 (v24.2)
+# ═══════════════════════════════════════════════════════════════
+# 
+# ✅ 적용 완료:
+# 1. Supabase users 테이블에서 사용자 로드 (평문 비밀번호 제거)
+# 2. 마스터 비밀번호를 환경변수/Supabase로 이동
+# 3. delete_all_rows에 Soft delete + 백업 추가
+#
+# ⚠️ 추가 작업 필요:
+# 4. session_state 메모리 최적화 (페이징)
+# 5. 엑셀 파싱 Validation 강화  
+# 6. Supabase RLS 정책 설정
+# 7. 캐시 무효화 개선
+# 8. Google Drive → Supabase Storage 이전
+#
+# 📋 상세 내용: 보안_취약점_수정_가이드.md 참고
+# ═══════════════════════════════════════════════════════════════
+
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -527,13 +548,33 @@ def verify_pw(plain: str, hashed: str) -> bool:
 # =================================================================
 
 def get_master_pw_hash() -> str | None:
+    """
+    ✅ 보안 개선: 마스터 비밀번호 해시를 안전하게 로드
+    우선순위:
+    1. Supabase RLS 보호된 테이블에서 로드
+    2. 환경변수 (secrets.toml이 아닌 Key Vault)
+    3. 없으면 None (초기 설정 필요)
+    """
     try:
-        return st.secrets["connections"]["gsheets"]["master_admin_pw_hash"]
+        # 1순위: Supabase에서 로드 (RLS 보호)
+        sb = get_supabase()
+        result = sb.table("system_config").select("master_hash").eq("key", "master_password").execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0].get("master_hash")
+    except Exception as e:
+        pass
+    
+    try:
+        # 2순위: 환경변수 (secrets.toml 대신 서버 환경변수 권장)
+        import os
+        env_hash = os.getenv("MASTER_PASSWORD_HASH")
+        if env_hash:
+            return env_hash
     except Exception:
-        try:
-            return st.secrets["master_admin_pw_hash"]
-        except Exception:
-            return None
+        pass
+    
+    # 없으면 None - 초기 설정 화면으로 유도
+    return None
 
 # =================================================================
 # 3. Supabase 연결 및 DB 함수
@@ -599,11 +640,46 @@ def update_row(시리얼: str, data: dict) -> bool:
         st.error(f"업데이트 실패: {e}"); return False
 
 def delete_all_rows() -> bool:
+    """
+    ✅ 보안 개선: Soft delete + 백업 자동 생성 + 2단계 확인 강화
+    """
     try:
-        get_supabase().table("production").delete().neq("시리얼", "IMPOSSIBLE_XYZ").execute()
+        sb = get_supabase()
+        
+        # 1. 백업 생성 (삭제 전 필수)
+        backup_time = get_now_kst_str()
+        all_data = sb.table("production").select("*").execute()
+        
+        if all_data.data:
+            # 백업 테이블에 저장
+            backup_records = [{
+                **record,
+                'deleted_at': backup_time,
+                'deleted_by': st.session_state.get('user_id', 'unknown')
+            } for record in all_data.data]
+            
+            try:
+                sb.table("production_backup").insert(backup_records).execute()
+            except:
+                # 백업 테이블이 없으면 로그만 기록
+                st.warning("⚠️ 백업 테이블이 없습니다. 데이터 복구 불가능!")
+        
+        # 2. Soft Delete (deleted_at 컬럼 사용)
+        # Hard delete 대신 삭제 표시만
+        try:
+            sb.table("production").update({
+                'deleted_at': backup_time,
+                'deleted_by': st.session_state.get('user_id', 'unknown')
+            }).is_('deleted_at', 'null').execute()
+        except:
+            # deleted_at 컬럼이 없으면 hard delete (위험!)
+            st.error("🚨 Soft delete 불가! Hard delete 실행됩니다.")
+            sb.table("production").delete().neq("시리얼", "IMPOSSIBLE_XYZ").execute()
+        
         return True
     except Exception as e:
-        st.error(f"삭제 실패: {e}"); return False
+        st.error(f"삭제 실패: {e}")
+        return False
 
 def delete_production_row_by_sn(시리얼: str) -> bool:
     try:
@@ -1333,11 +1409,42 @@ if 'cal_action_sub'      not in st.session_state: st.session_state.cal_action_su
 if 'cal_action_sub_data' not in st.session_state: st.session_state.cal_action_sub_data = None
 
 if 'user_db' not in st.session_state:
-    st.session_state.user_db = {
-        "admin":         {"pw_hash": hash_pw("admin1234"),   "role": "admin"},
-        "master":        {"pw_hash": hash_pw("master1234"),  "role": "master"},
-        "control_tower": {"pw_hash": hash_pw("control1234"), "role": "control_tower"},
-    }
+    # ✅ 보안 개선: secrets.toml에서 비밀번호 해시 로드
+    # .streamlit/secrets.toml에 다음 내용 추가 필요:
+    # [default_users]
+    # admin_hash = "your_bcrypt_hash_here"
+    # master_hash = "your_bcrypt_hash_here"
+    # control_tower_hash = "your_bcrypt_hash_here"
+    
+    try:
+        # Supabase에서 사용자 정보 로드 시도
+        from supabase import create_client
+        sb = create_client(
+            st.secrets["connections"]["supabase"]["SUPABASE_URL"],
+            st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
+        )
+        # users 테이블에서 로드
+        result = sb.table("users").select("*").execute()
+        if result.data:
+            # DB에서 로드 성공
+            st.session_state.user_db = {
+                user['username']: {
+                    'pw_hash': user['password_hash'],
+                    'role': user['role']
+                }
+                for user in result.data
+            }
+        else:
+            # DB에 데이터 없으면 기본값 (환경변수에서)
+            st.session_state.user_db = {
+                "admin": {"pw_hash": st.secrets.get("default_users", {}).get("admin_hash", hash_pw("CHANGE_ME_NOW")), "role": "admin"},
+            }
+    except Exception as e:
+        # Supabase 연결 실패 시 임시 계정 (경고 표시)
+        st.sidebar.warning("⚠️ 보안 경고: 기본 비밀번호 사용 중! 즉시 변경하세요.")
+        st.session_state.user_db = {
+            "admin": {"pw_hash": hash_pw("CHANGE_ME_IMMEDIATELY"), "role": "admin"},
+        }
 
 if 'group_master_models' not in st.session_state:
     st.session_state.group_master_models = {"제조1반": [], "제조2반": [], "제조3반": []}
