@@ -773,6 +773,22 @@ def save_production_plan(반: str, 월: str, 계획수량: int) -> bool:
         st.error(f"계획 수량 저장 실패: {e}")
         return False
 
+def delete_production_plan_row(반: str, 월: str) -> bool:
+    """production_plan 특정 반+월 행 삭제"""
+    try:
+        get_supabase().table("production_plan").delete().eq("반", 반).eq("월", 월).execute()
+        return True
+    except Exception as e:
+        st.error(f"계획 수량 삭제 실패: {e}"); return False
+
+def delete_all_production_plan() -> bool:
+    """production_plan 전체 삭제"""
+    try:
+        get_supabase().table("production_plan").delete().neq("반", "IMPOSSIBLE_XYZ").execute()
+        return True
+    except Exception as e:
+        st.error(f"계획 수량 전체 삭제 실패: {e}"); return False
+
 
 # ── 감사 로그 (Audit Log) ────────────────────────────────────────
 def insert_audit_log(시리얼: str, 모델: str, 반: str,
@@ -4244,9 +4260,10 @@ elif curr_l == "마스터 관리":
         st.markdown("<h4 style='color:#c8605a; font-weight:bold; margin:16px 0 10px 0;'>🗑️ 데이터 삭제 관리</h4>", unsafe_allow_html=True)
         st.caption("생산 이력, 감사 로그, 자재 시리얼, 생산 일정을 개별 또는 전체 삭제합니다.")
 
-        del_tab1, del_tab2, del_tab3, del_tab4, del_tab5, del_tab6 = st.tabs([
+        del_tab1, del_tab2, del_tab3, del_tab4, del_tab5, del_tab6, del_tab7 = st.tabs([
             "📦 생산 이력", "🔍 감사 로그", "🔩 자재 시리얼",
-            "📅 생산 일정", "📊 계획 변경 이력", "🗓️ 일정 변경 이력"])
+            "📅 생산 일정", "📊 계획 변경 이력", "🗓️ 일정 변경 이력",
+            "📈 월별 계획 수량"])
 
         # ─── 탭1: 생산 이력 ───────────────────────────────────────
         with del_tab1:
@@ -4615,6 +4632,74 @@ elif curr_l == "마스터 관리":
                         st.success("일정 변경 이력 전체 삭제 완료"); st.rerun()
                 if _sla3.button("취소", key="del_slog_all_no", use_container_width=True):
                     st.session_state[_ck_slog_all] = False; st.rerun()
+
+        # ─── 탭7: 월별 계획 수량 ──────────────────────────────────
+        with del_tab7:
+            @st.cache_data(ttl=15)
+            def _load_plan_all():
+                try:
+                    res = get_supabase().table("production_plan").select("*").order("월", desc=True).execute()
+                    return pd.DataFrame(res.data) if res.data else pd.DataFrame(
+                        columns=['id','반','월','계획수량'])
+                except:
+                    return pd.DataFrame(columns=['id','반','월','계획수량'])
+
+            plan_df = _load_plan_all()
+            st.caption(f"현재 **{len(plan_df)}건** 등록됨")
+            if st.button("🔄 새로고침", key="plan_del_refresh"):
+                st.cache_data.clear(); st.rerun()
+
+            # 필터
+            pp1, pp2 = st.columns([1.5, 2])
+            _pp_grp = pp1.selectbox("반", ["전체"] + PRODUCTION_GROUPS, key="d_plan_grp")
+            _pp_kw  = pp2.text_input("월 검색", key="d_plan_kw", placeholder="예: 2026-03")
+            ppdf = plan_df.copy()
+            if _pp_grp != "전체": ppdf = ppdf[ppdf['반'] == _pp_grp]
+            if _pp_kw.strip():   ppdf = ppdf[ppdf['월'].astype(str).str.contains(_pp_kw.strip(), na=False)]
+            ppdf = ppdf.sort_values('월', ascending=False) if not ppdf.empty else ppdf
+
+            if not ppdf.empty:
+                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
+                pph = st.columns([2, 2, 2, 1])
+                for c, t in zip(pph, ["반", "월", "계획 수량", "삭제"]):
+                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>",
+                               unsafe_allow_html=True)
+                for idx, row in ppdf.iterrows():
+                    ppr = st.columns([2, 2, 2, 1])
+                    ppr[0].write(row.get('반', ''))
+                    ppr[1].write(str(row.get('월', '')))
+                    ppr[2].write(f"{int(row.get('계획수량', 0)):,} EA")
+                    _p_ban = row.get('반', '')
+                    _p_wol = row.get('월', '')
+                    if ppr[3].button("🗑️", key=f"del_plan_{idx}", help="이 행 삭제"):
+                        if delete_production_plan_row(_p_ban, _p_wol):
+                            st.cache_data.clear()
+                            st.session_state.production_plan = load_production_plan()
+                            st.success(f"삭제 완료: {_p_ban} {_p_wol}")
+                            st.rerun()
+            else:
+                st.info("조건에 맞는 계획 수량이 없습니다.")
+
+            st.markdown("<hr style='margin:12px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
+            _ck_plan_all = "del_plan_all_ck"
+            if not st.session_state.get(_ck_plan_all):
+                if st.button("⛔ 월별 계획 수량 전체 삭제", key="del_plan_all_btn",
+                             type="secondary", use_container_width=False):
+                    st.session_state[_ck_plan_all] = True; st.rerun()
+            else:
+                st.error("⛔ 월별 계획 수량 **전체**를 삭제합니다. 되돌릴 수 없습니다.")
+                _ppa1, _ppa2, _ppa3 = st.columns([2, 1, 1])
+                _ppa1.markdown("<p style='color:#c8605a;font-weight:bold;margin-top:8px;'>삭제 후 복구 불가</p>",
+                               unsafe_allow_html=True)
+                if _ppa2.button("✅ 예, 전체 삭제", key="del_plan_all_yes",
+                                type="primary", use_container_width=True):
+                    if delete_all_production_plan():
+                        st.cache_data.clear()
+                        st.session_state.production_plan = load_production_plan()
+                        st.session_state[_ck_plan_all] = False
+                        st.success("월별 계획 수량 전체 삭제 완료"); st.rerun()
+                if _ppa3.button("취소", key="del_plan_all_no", use_container_width=True):
+                    st.session_state[_ck_plan_all] = False; st.rerun()
 
         st.divider()
 
