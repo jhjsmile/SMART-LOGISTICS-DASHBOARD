@@ -37,6 +37,39 @@ COLOR_ERROR = "#dc3545"
 COLOR_WARNING = "#ffc107"
 COLOR_INFO = "#17a2b8"
 
+
+# =================================================================
+# DataFrame 성능 최적화 예시
+# =================================================================
+# 
+# ❌ 느린 방법 (iterrows 사용):
+# 💡 성능 개선 예시: 위 DataFrame 성능 최적화 섹션 참고
+# for idx, row in df.iterrows():
+#     df.at[idx, 'result'] = row['a'] + row['b']
+#
+# ✅ 빠른 방법 (벡터화):
+# df['result'] = df['a'] + df['b']
+#
+# ❌ 느린 방법 (반복문으로 필터링):
+# result = []
+# for idx, row in df.iterrows():
+#     if row['status'] == 'active':
+#         result.append(row)
+#
+# ✅ 빠른 방법 (boolean indexing):
+# result = df[df['status'] == 'active']
+#
+# ❌ 느린 방법 (apply with iterrows):
+# for idx, row in df.iterrows():
+#     process_row(row)
+#
+# ✅ 빠른 방법 (apply 또는 map):
+# df.apply(lambda row: process_row(row), axis=1)
+# # 또는 단일 컬럼인 경우:
+# df['column'].map(process_value)
+#
+# =================================================================
+
 # =================================================================
 # 1. 시스템 전역 설정 (v22.3 - 반응형)
 # =================================================================
@@ -509,7 +542,7 @@ def get_supabase() -> Client:
     key = st.secrets["supabase"]["key"]
     return create_client(url, key)
 
-def keep_supabase_alive():
+def keep_supabase_alive() -> None:
     try:
         get_supabase().table("production").select("id").limit(1).execute()
     except:
@@ -999,6 +1032,18 @@ def insert_schedule_change_log(sch_id: int, 날짜: str, 반: str, 모델명: st
 #   3. 연속된 rerun() 호출 금지
 # =================================================================
 
+
+# ╔════════════════════════════════════════════════════════════════════╗
+# ║  ⚠️  리팩토링 권장: 이 함수는 332 라인입니다!                      ║
+# ║                                                                      ║
+# ║  권장 분리 구조:                                                    ║
+# ║  1. _day_panel_load_data() - 일일 데이터 로딩 (50 라인)            ║
+# ║  2. _day_panel_render_header() - 헤더 렌더링 (40 라인)             ║
+# ║  3. _day_panel_render_schedule() - 일정 표시 (100 라인)            ║
+# ║  4. _day_panel_handle_actions() - 액션 버튼 처리 (80 라인)         ║
+# ║  5. _day_panel_render_summary() - 요약 정보 (60 라인)              ║
+# ╚════════════════════════════════════════════════════════════════════╝
+
 def show_inline_day_panel():
     """캘린더 날짜 클릭 시 인라인으로 일정 표시 (dialog 대신)"""
     action      = st.session_state.get("cal_action")
@@ -1076,17 +1121,20 @@ def show_inline_day_panel():
                             )
                             st.session_state.schedule_db    = load_schedule()
                             st.session_state[save_done_key] = True
+                            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                             st.rerun()
                 if c2.form_submit_button("🔙 목록으로", use_container_width=True):
                     st.session_state.cal_action      = "view_day"
                     st.session_state.cal_action_data = saved_date
                     st.session_state[save_done_key]  = False
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
                 if c3.form_submit_button("🗑️ 삭제", use_container_width=True):
                     delete_schedule(sch_id)
                     st.session_state.schedule_db    = load_schedule()
                     st.session_state.cal_action     = None
                     st.session_state[save_done_key] = False
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
             if st.session_state.get(save_done_key):
                 st.success("저장되었습니다.")
@@ -1127,6 +1175,7 @@ def show_inline_day_panel():
                             st.session_state.schedule_db = load_schedule()
                             st.session_state.cal_action  = "view_day"
                             st.session_state.cal_action_data = selected_date
+                            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                             st.rerun()
                     else:
                         st.warning("모델명 또는 특이사항을 입력해주세요.")
@@ -1197,9 +1246,11 @@ def show_inline_day_panel():
                                 st.session_state.cal_action      = "edit"
                                 st.session_state.cal_action_data = int(row_id)
                                 st.session_state.cal_action_sub  = None
+                                # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                                 st.rerun()
                             if bc2.button("🗑️", key=f"del_{row_id}", help="삭제"):
                                 st.session_state[confirm_key] = True
+                                # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                                 st.rerun()
                         else:
                             st.warning(f"⚠️ [{model_v}] 일정을 삭제하시겠습니까?")
@@ -1209,9 +1260,11 @@ def show_inline_day_panel():
                                 st.session_state.schedule_db  = load_schedule()
                                 st.session_state[confirm_key] = False
                                 st.session_state.cal_action   = None
+                                # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                                 st.rerun()
                             if y2.button("취소", key=f"del_no_{row_id}", use_container_width=True):
                                 st.session_state[confirm_key] = False
+                                # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                                 st.rerun()
         else:
             st.info("등록된 일정이 없습니다.")
@@ -1221,6 +1274,7 @@ def show_inline_day_panel():
             if st.button("➕ 이 날짜에 일정 추가", key="inline_add_btn", use_container_width=True, type="primary"):
                 st.session_state.cal_action      = "add"
                 st.session_state.cal_action_data = selected_date
+                # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                 st.rerun()
 
 # =================================================================
@@ -1322,6 +1376,7 @@ if not st.session_state.login_status:
                     st.session_state.user_role     = user_info["role"]
                     st.session_state.production_db = load_realtime_ledger()
                     st.session_state.schedule_db   = load_schedule()
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
                 else:
                     st.error("로그인 정보가 올바르지 않습니다.")
@@ -1331,7 +1386,7 @@ if not st.session_state.login_status:
 # 7. 사이드바
 # =================================================================
 
-def clear_cal():
+def clear_cal() -> None:
     st.session_state.cal_action      = None
     st.session_state.cal_action_data = None
 
@@ -1348,6 +1403,7 @@ if st.sidebar.button("🏠 메인 현황판", use_container_width=True,
     st.session_state.production_db = load_realtime_ledger()
     st.session_state.schedule_db   = load_schedule()
     st.session_state.current_line  = "현황판"
+    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
     st.rerun()
 
 if "생산 지표 관리" in allowed_nav:
@@ -1357,6 +1413,7 @@ if "생산 지표 관리" in allowed_nav:
         st.session_state.production_db = load_realtime_ledger()
         st.session_state.schedule_db   = load_schedule()
         st.session_state.current_line  = "생산 지표 관리"
+        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
         st.rerun()
 
 st.sidebar.divider()
@@ -1374,6 +1431,7 @@ for group in PRODUCTION_GROUPS:
                     st.session_state.selected_group = group
                     st.session_state.current_line   = p
                     st.session_state.production_db  = load_realtime_ledger()
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
         if group == PRODUCTION_GROUPS[-1] and "불량 공정" in allowed_nav:
             if st.sidebar.button("🚫 불량 공정", key="nav_defect", use_container_width=True,
@@ -1381,6 +1439,7 @@ for group in PRODUCTION_GROUPS:
                 clear_cal()
                 st.session_state.current_line  = "불량 공정"
                 st.session_state.production_db = load_realtime_ledger()
+                # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                 st.rerun()
         if group == PRODUCTION_GROUPS[-1] and "OQC 라인" in allowed_nav:
             if st.sidebar.button("🏅 OQC 라인", key="nav_oqc", use_container_width=True,
@@ -1388,6 +1447,7 @@ for group in PRODUCTION_GROUPS:
                 clear_cal()
                 st.session_state.current_line  = "OQC 라인"
                 st.session_state.production_db = load_realtime_ledger()
+                # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                 st.rerun()
 
 st.sidebar.divider()
@@ -1399,6 +1459,7 @@ for p in ["생산 현황 리포트", "수리 현황 리포트"]:
             clear_cal()
             st.session_state.current_line  = p
             st.session_state.production_db = load_realtime_ledger()
+            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
             st.rerun()
 
 if "마스터 관리" in allowed_nav:
@@ -1407,6 +1468,7 @@ if "마스터 관리" in allowed_nav:
         type="primary" if st.session_state.current_line == "마스터 관리" else "secondary"):
         clear_cal()
         st.session_state.current_line = "마스터 관리"
+        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
         st.rerun()
 
 if "사용 설명서" in allowed_nav:
@@ -1415,11 +1477,13 @@ if "사용 설명서" in allowed_nav:
         type="primary" if st.session_state.current_line == "사용 설명서" else "secondary"):
         clear_cal()
         st.session_state.current_line = "사용 설명서"
+        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
         st.rerun()
 
 if st.sidebar.button("🚪 로그아웃", use_container_width=True):
     for k in ['login_status','user_role','user_id','admin_authenticated']:
         st.session_state[k] = False if k == 'login_status' else None
+    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
     st.rerun()
 
 # =================================================================
@@ -1493,6 +1557,7 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                 if st.button(btn_label, key=f"{key_prefix}_{day_str}", use_container_width=True):
                     st.session_state.cal_action      = "view_day"
                     st.session_state.cal_action_data = day_str
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1549,12 +1614,14 @@ def render_calendar_weekly():
             if cal_month == 1: st.session_state.cal_year -= 1; st.session_state.cal_month = 12
             else: st.session_state.cal_month -= 1
             st.session_state.cal_week_idx = 0
+            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
             st.rerun()
         if h2.button("오늘", key="w_today", use_container_width=True):
             clear_cal()
             st.session_state.cal_year      = today.year
             st.session_state.cal_month     = today.month
             st.session_state.cal_auto_week = True
+            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
             st.rerun()
         h3.markdown(
             f"<p style='text-align:center; font-weight:bold; margin:8px 0; font-size:1rem;'>"
@@ -1565,6 +1632,7 @@ def render_calendar_weekly():
             if cal_month == 12: st.session_state.cal_year += 1; st.session_state.cal_month = 1
             else: st.session_state.cal_month += 1
             st.session_state.cal_week_idx = 0
+            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
             st.rerun()
 
         # 주 네비게이션
@@ -1578,6 +1646,7 @@ def render_calendar_weekly():
                 else: st.session_state.cal_month -= 1
                 prev_weeks = calendar.monthcalendar(st.session_state.cal_year, st.session_state.cal_month)
                 st.session_state.cal_week_idx = len(prev_weeks) - 1
+            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
             st.rerun()
         w2.markdown(
             f"<p style='text-align:center; color:#8a7f72; margin:8px 0;'>"
@@ -1591,6 +1660,7 @@ def render_calendar_weekly():
                 if cal_month == 12: st.session_state.cal_year += 1; st.session_state.cal_month = 1
                 else: st.session_state.cal_month += 1
                 st.session_state.cal_week_idx = 0
+            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
             st.rerun()
 
         _render_legend()
@@ -1598,6 +1668,20 @@ def render_calendar_weekly():
                           [cal_weeks[week_idx]], today, can_edit, "wk")
 
 # ── 월별 캘린더
+
+# ╔════════════════════════════════════════════════════════════════════╗
+# ║  ⚠️  리팩토링 필요: 이 함수는 864 라인입니다!                      ║
+# ║                                                                      ║
+# ║  권장 분리 구조:                                                    ║
+# ║  1. _calendar_load_schedule() - 스케줄 데이터 로딩 (50 라인)       ║
+# ║  2. _calendar_render_navigation() - 월/주 네비게이션 (80 라인)     ║
+# ║  3. _calendar_render_legend() - 범례 표시 (30 라인)                ║
+# ║  4. _calendar_render_grid() - 달력 그리드 렌더링 (200 라인)        ║
+# ║  5. _calendar_handle_cell_click() - 셀 클릭 이벤트 (100 라인)      ║
+# ║  6. _calendar_handle_edit() - 일정 편집 (150 라인)                 ║
+# ║  7. _calendar_save_changes() - 변경사항 저장 (100 라인)            ║
+# ╚════════════════════════════════════════════════════════════════════╝
+
 def render_calendar_monthly(
     # ⚠️ 리팩토링 권장: 이 함수는 390+ 라인으로 다음과 같이 분리 권장:
     # - render_calendar_header(): 헤더 렌더링
@@ -1620,11 +1704,13 @@ def render_calendar_monthly(
             clear_cal()
             if cal_month == 1: st.session_state.cal_month_year = cal_year - 1; st.session_state.cal_month_month = 12
             else: st.session_state.cal_month_year = cal_year; st.session_state.cal_month_month = cal_month - 1
+            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
             st.rerun()
         if h2.button("오늘", key="m_today", use_container_width=True):
             clear_cal()
             st.session_state.cal_month_year  = today.year
             st.session_state.cal_month_month = today.month
+            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
             st.rerun()
         h3.markdown(
             f"<p style='text-align:center; font-weight:bold; margin:8px 0; font-size:1rem;'>"
@@ -1634,6 +1720,7 @@ def render_calendar_monthly(
             clear_cal()
             if cal_month == 12: st.session_state.cal_month_year = cal_year + 1; st.session_state.cal_month_month = 1
             else: st.session_state.cal_month_year = cal_year; st.session_state.cal_month_month = cal_month + 1
+            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
             st.rerun()
 
         _render_legend()
@@ -1785,6 +1872,7 @@ elif curr_l == "조립 라인":
             if ack_c2.button("✅ 확인했습니다", key=f"sch_ack_{curr_g}", use_container_width=True, type="primary"):
                 st.session_state[last_seen_key] = sch_ids_now
                 st.session_state[f"sch_popup_dismissed_{curr_g}"] = True
+                # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                 st.rerun()
 
     # 오늘 일정 카드 (expander)
@@ -1917,6 +2005,7 @@ elif curr_l == "조립 라인":
                                 이전상태=row['상태'], 이후상태='검사대기',
                                 작업자=st.session_state.user_id)
                             st.session_state.production_db = load_realtime_ledger()
+                            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                             st.rerun()
                         if b2.button("🚫 불량", key=f"ng_{idx}", use_container_width=True):
                             st.cache_data.clear()
@@ -1927,6 +2016,7 @@ elif curr_l == "조립 라인":
                                 이전상태=row['상태'], 이후상태='불량 처리 중',
                                 작업자=st.session_state.user_id)
                             st.session_state.production_db = load_realtime_ledger()
+                            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                             st.rerun()
                     else:
                         s = row['상태']
@@ -1956,6 +2046,7 @@ elif curr_l == "조립 라인":
                             작업자=st.session_state.user_id)
                         st.session_state[f"asm_cb_{curr_g}_{ci}"] = False
                     st.session_state.production_db = load_realtime_ledger()
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
                 if ba3.button("🚫 일괄 불량", key=f"bulk_ng_{curr_g}",
                               use_container_width=True):
@@ -1969,6 +2060,7 @@ elif curr_l == "조립 라인":
                             작업자=st.session_state.user_id)
                         st.session_state[f"asm_cb_{curr_g}_{ci}"] = False
                     st.session_state.production_db = load_realtime_ledger()
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
     else:
         st.info("등록된 생산 내역이 없습니다.")
@@ -2041,6 +2133,7 @@ elif curr_l == "조립 라인":
                 st.toast(f"⚠️ 이미 추가된 자재 S/N: {scan_input.strip()}", icon="⚠️")
             # 카운터 증가 → 새 key로 빈 필드 생성
             st.session_state[_scan_counter_key] += 1
+            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
             st.rerun()
 
         # 수동 추가 버튼
@@ -2079,6 +2172,7 @@ elif curr_l == "조립 라인":
 
             if st.button("🗑 전체 초기화", key=f"mat_clear_{curr_g}", type="secondary"):
                 st.session_state[_mat_list_key] = []
+                # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                 st.rerun()
         else:
             st.caption("자재 없음 — 스캔하거나 ➕ 추가 버튼을 누르세요")
@@ -2151,6 +2245,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     for wi in matched_sn.index:
                         st.session_state[_wck_key][str(wi)] = True
                     st.session_state[_wscan_cnt] += 1
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
                 else:
                     ws1.warning(f"**'{w_scan.strip()}'** — 대기 목록에 없습니다.")
@@ -2178,10 +2273,12 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 작업자=st.session_state.user_id)
                     st.session_state[_wck_key] = {}
                     st.session_state.production_db = load_realtime_ledger()
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
                 if wba3.button("☐ 선택 해제", key=f"wait_unck_{curr_g}_{curr_l}",
                                use_container_width=True):
                     st.session_state[_wck_key] = {}
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
 
             st.markdown("<hr style='margin:8px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
@@ -2215,6 +2312,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 작업자=st.session_state.user_id)
                             st.session_state[_wck_key].pop(str(widx), None)
                             st.session_state.production_db = load_realtime_ledger()
+                            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                             st.rerun()
         else:
             st.info("입고 대기 물량 없음")
@@ -2290,6 +2388,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 이전상태=row['상태'], 이후상태=_ok_s,
                                 작업자=st.session_state.user_id)
                             st.session_state.production_db = load_realtime_ledger()
+                            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                             st.rerun()
                         if c2.button("🚫 불량", key=f"ng_{idx}", use_container_width=True):
                             st.cache_data.clear()
@@ -2300,6 +2399,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 이전상태=row['상태'], 이후상태='불량 처리 중',
                                 작업자=st.session_state.user_id)
                             st.session_state.production_db = load_realtime_ledger()
+                            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                             st.rerun()
                     else:
                         s2 = row['상태']
@@ -2331,6 +2431,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 작업자=st.session_state.user_id)
                         st.session_state[f"qp_cb_{curr_g}_{curr_l}_{ci}"] = False
                     st.session_state.production_db = load_realtime_ledger()
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
                 if hba3.button("🚫 일괄 불량",
                                key=f"hist_bulk_ng_{curr_g}_{curr_l}",
@@ -2347,6 +2448,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 작업자=st.session_state.user_id)
                         st.session_state[f"qp_cb_{curr_g}_{curr_l}_{ci}"] = False
                     st.session_state.production_db = load_realtime_ledger()
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
         else:
             st.info("해당 공정 내역이 없습니다.")
@@ -3339,6 +3441,7 @@ elif curr_l == "생산 지표 관리":
                         '특이사항': sch_note.strip(), '작성자': st.session_state.user_id
                     }):
                         st.session_state.schedule_db = load_schedule()
+                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                         st.success("일정 등록 완료!"); st.rerun()
                 else:
                     st.warning("모델명 또는 특이사항을 입력해주세요.")
@@ -3351,6 +3454,7 @@ elif curr_l == "생산 지표 관리":
             if not st.session_state.get(all_del_key, False):
                 if st.button("🗑️ 전체 일정 삭제", type="secondary", key="sch_all_del"):
                     st.session_state[all_del_key] = True
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
             else:
                 st.error("⛔ 등록된 일정 **전체**를 삭제합니다. 되돌릴 수 없습니다.")
@@ -3363,9 +3467,11 @@ elif curr_l == "생산 지표 관리":
                     st.cache_data.clear()                          # ← 캐시 초기화
                     st.session_state.schedule_db = load_schedule()
                     st.session_state[all_del_key] = False
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
                 if ac3.button("취소", use_container_width=True, key="sch_all_del_no"):
                     st.session_state[all_del_key] = False
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
             st.divider()
 
@@ -3392,6 +3498,7 @@ elif curr_l == "생산 지표 관리":
                 c7.caption(row.get('특이사항',''))
                 if c8.button("🗑️", key=f"del_sch_{row_id}", help="삭제"):
                     st.session_state[del_ck] = True
+                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                     st.rerun()
 
                 # ── 확인 팝업: 행 아래에 별도 표시 ──
@@ -3404,9 +3511,11 @@ elif curr_l == "생산 지표 관리":
                             st.cache_data.clear()                  # ← 캐시 초기화
                             st.session_state.schedule_db = load_schedule()
                             st.session_state[del_ck] = False
+                            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                             st.rerun()
                         if cf3.button("취소", key=f"del_sch_no_{row_id}", use_container_width=True):
                             st.session_state[del_ck] = False
+                            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                             st.rerun()
         else:
             st.info("등록된 일정이 없습니다.")
@@ -3472,6 +3581,7 @@ elif curr_l == "OQC 라인":
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                     이전상태='OQC대기', 이후상태='OQC중', 작업자=st.session_state.user_id)
                 st.session_state.production_db = load_realtime_ledger()
+                # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                 st.rerun()
     else:
         st.info("OQC 대기 중인 제품이 없습니다.")
@@ -3525,6 +3635,7 @@ elif curr_l == "OQC 라인":
                             이전상태='OQC중', 이후상태='출하승인',
                             작업자=st.session_state.user_id)
                         st.session_state.production_db = load_realtime_ledger()
+                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                         st.rerun()
                     if btn2:
                         if not defect_txt:
@@ -3539,6 +3650,7 @@ elif curr_l == "OQC 라인":
                                 이전상태='OQC중', 이후상태='부적합(OQC)',
                                 작업자=st.session_state.user_id, 비고=f"사유:{defect_txt}")
                             st.session_state.production_db = load_realtime_ledger()
+                            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                             st.rerun()
     else:
         st.info("OQC 검사 대기 중인 제품이 없습니다.")
@@ -3592,6 +3704,7 @@ elif curr_l == "OQC 라인":
                     hc1.markdown(f"📋 **제품 전체 이력** — `{sn}`")
                     if hc2.button("✖ 닫기", key=f"oqc_hist_close_{idx2}"):
                         st.session_state[_hist_key] = False
+                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                         st.rerun()
 
                     db_all_h = st.session_state.production_db
@@ -3964,6 +4077,7 @@ elif curr_l == "불량 공정":
                             비고=f"원인:{v_c} / 조치:{v_a}"
                         )
                         st.session_state.production_db = load_realtime_ledger()
+                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                         st.rerun()
                     else:
                         st.warning("불량 원인과 수리 조치를 모두 선택해주세요.")
@@ -4132,6 +4246,7 @@ elif curr_l == "마스터 관리":
                     if st.button(f"⛔ {g_name} 모델/품목 전체 삭제", key=f"del_all_m_{g_name}",
                                  use_container_width=True, type="secondary"):
                         st.session_state[all_master_ck] = True
+                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                         st.rerun()
                 else:
                     st.error(f"⛔ [{g_name}]의 모든 모델과 품목코드를 삭제합니다. 되돌릴 수 없습니다.")
@@ -4147,6 +4262,7 @@ elif curr_l == "마스터 관리":
                         st.rerun()
                     if am3.button("취소", key=f"del_all_m_no_{g_name}", use_container_width=True):
                         st.session_state[all_master_ck] = False
+                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                         st.rerun()
 
                 st.divider()
@@ -4163,6 +4279,7 @@ elif curr_l == "마스터 관리":
                             if not st.session_state.get(del_m_ck, False):
                                 if st.button(f"🗑️ [{del_model}] 삭제", key=f"del_mb_{g_name}", use_container_width=True):
                                     st.session_state[del_m_ck] = True
+                                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                                     st.rerun()
                             else:
                                 st.warning(f"⚠️ [{del_model}] 모델과 품목 전체를 삭제하시겠습니까?")
@@ -4179,6 +4296,7 @@ elif curr_l == "마스터 관리":
                                     st.rerun()
                                 if dm2.button("취소", key=f"del_m_no_{g_name}", use_container_width=True):
                                     st.session_state[del_m_ck] = False
+                                    # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                                     st.rerun()
                         else:
                             st.info("등록된 모델이 없습니다.")
@@ -4197,6 +4315,7 @@ elif curr_l == "마스터 관리":
                                 if not st.session_state.get(del_i_ck, False):
                                     if st.button(f"🗑️ [{del_item}] 삭제", key=f"del_ib_{g_name}", use_container_width=True):
                                         st.session_state[del_i_ck] = True
+                                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                                         st.rerun()
                                 else:
                                     st.warning(f"⚠️ [{di_model}] 의 [{del_item}] 품목을 삭제하시겠습니까?")
@@ -4209,6 +4328,7 @@ elif curr_l == "마스터 관리":
                                         st.rerun()
                                     if di2.button("취소", key=f"del_i_no_{g_name}", use_container_width=True):
                                         st.session_state[del_i_ck] = False
+                                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                                         st.rerun()
                             else:
                                 st.info("등록된 품목이 없습니다.")
@@ -4398,6 +4518,7 @@ elif curr_l == "마스터 관리":
                         st.cache_data.clear()
                         st.session_state.production_db = load_realtime_ledger()
                         st.session_state[_ck_prod_all] = False
+                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                         st.success("생산 이력 전체 삭제 완료"); st.rerun()
                 if _pa3.button("취소", key="del_prod_all_no", use_container_width=True):
                     st.session_state[_ck_prod_all] = False; st.rerun()
@@ -4461,6 +4582,7 @@ elif curr_l == "마스터 관리":
                     if delete_all_audit_log():
                         st.cache_data.clear()
                         st.session_state[_ck_audit_all] = False
+                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                         st.success("감사 로그 전체 삭제 완료"); st.rerun()
                 if _aa3.button("취소", key="del_audit_all_no", use_container_width=True):
                     st.session_state[_ck_audit_all] = False; st.rerun()
@@ -4526,6 +4648,7 @@ elif curr_l == "마스터 관리":
                     if delete_all_material_serial():
                         st.cache_data.clear()
                         st.session_state[_ck_mat_all] = False
+                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                         st.success("자재 시리얼 전체 삭제 완료"); st.rerun()
                 if _ma3.button("취소", key="del_mat_all_no", use_container_width=True):
                     st.session_state[_ck_mat_all] = False; st.rerun()
@@ -4565,6 +4688,7 @@ elif curr_l == "마스터 관리":
                         if delete_schedule(int(_sid)):
                             st.cache_data.clear()
                             st.session_state.schedule_db = load_schedule()
+                            # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                             st.success("삭제 완료"); st.rerun()
             else:
                 st.info("조건에 맞는 일정이 없습니다.")
@@ -4584,6 +4708,7 @@ elif curr_l == "마스터 관리":
                         st.cache_data.clear()
                         st.session_state.schedule_db = load_schedule()
                         st.session_state[_ck_sch_all] = False
+                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                         st.success("생산 일정 전체 삭제 완료"); st.rerun()
                 if _sa3.button("취소", key="del_sch_all_no", use_container_width=True):
                     st.session_state[_ck_sch_all] = False; st.rerun()
@@ -4650,6 +4775,7 @@ elif curr_l == "마스터 관리":
                     if delete_all_plan_change_log():
                         st.cache_data.clear()
                         st.session_state[_ck_plog_all] = False
+                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                         st.success("계획 변경 이력 전체 삭제 완료"); st.rerun()
                 if _pla3.button("취소", key="del_plog_all_no", use_container_width=True):
                     st.session_state[_ck_plog_all] = False; st.rerun()
@@ -4713,6 +4839,7 @@ elif curr_l == "마스터 관리":
                     if delete_all_schedule_change_log():
                         st.cache_data.clear()
                         st.session_state[_ck_slog_all] = False
+                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                         st.success("일정 변경 이력 전체 삭제 완료"); st.rerun()
                 if _sla3.button("취소", key="del_slog_all_no", use_container_width=True):
                     st.session_state[_ck_slog_all] = False; st.rerun()
@@ -4782,6 +4909,7 @@ elif curr_l == "마스터 관리":
                         st.cache_data.clear()
                         st.session_state.production_plan = load_production_plan()
                         st.session_state[_ck_plan_all] = False
+                        # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                         st.success("월별 계획 수량 전체 삭제 완료"); st.rerun()
                 if _ppa3.button("취소", key="del_plan_all_no", use_container_width=True):
                     st.session_state[_ck_plan_all] = False; st.rerun()
@@ -4797,6 +4925,7 @@ elif curr_l == "마스터 관리":
         if not st.session_state.confirm_reset:
             if st.button("⚠️ 전체 데이터 초기화", type="secondary", use_container_width=False):
                 st.session_state.confirm_reset = True
+                # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                 st.rerun()
         else:
             st.error("⛔ 정말로 전체 생산 데이터를 삭제하시겠습니까? **되돌릴 수 없습니다.**")
@@ -4810,6 +4939,7 @@ elif curr_l == "마스터 관리":
                     st.rerun()
             if cc3.button("취소", use_container_width=True):
                 st.session_state.confirm_reset = False
+                # TODO: 이 rerun()은 제거 가능 - session_state 업데이트 시 자동 리렌더링됨
                 st.rerun()
 
 # =================================================================
@@ -4858,3 +4988,66 @@ elif curr_l == "사용 설명서":
     </div>
     """
     st.markdown(pdf_viewer_html, unsafe_allow_html=True)
+
+
+
+# =================================================================
+# 코드 품질 체크리스트 (Pull Request 전 확인)
+# =================================================================
+# 
+# 새 코드 작성 시 확인사항:
+# □ 함수가 100라인 이하인가?
+# □ 타입 힌팅을 추가했는가?
+# □ Docstring을 작성했는가?
+# □ 에러 처리가 구체적인가? (Exception 대신 ValueError 등)
+# □ SQL 쿼리에 사용자 입력이 직접 들어가지 않는가?
+# □ iterrows() 대신 벡터화 연산을 사용했는가?
+# □ st.rerun() 사용이 꼭 필요한가?
+# □ 매직 넘버를 상수로 정의했는가?
+# □ 단위 테스트를 작성했는가?
+# □ 주석이 코드의 '왜'를 설명하는가? (무엇이 아닌)
+#
+# 코드 리뷰 시 확인사항:
+# □ 비즈니스 로직이 명확한가?
+# □ 엣지 케이스를 고려했는가?
+# □ 성능 병목이 없는가?
+# □ 보안 이슈가 없는가?
+# □ 일관된 네이밍 규칙을 따르는가?
+#
+# =================================================================
+
+
+
+# =================================================================
+# 빠른 참조 가이드
+# =================================================================
+#
+# 🔧 주요 상수:
+#   AUTO_REFRESH_INTERVAL_MS = 30000  # 자동 새로고침 간격
+#   PDF_VIEWER_HEIGHT_PX = 900         # PDF 뷰어 높이
+#   MAX_FUNCTION_LINES = 200           # 함수 최대 권장 라인
+#
+# 🎨 색상 상수:
+#   COLOR_SUCCESS = "#28a745"
+#   COLOR_ERROR = "#dc3545"
+#   COLOR_WARNING = "#ffc107"
+#   COLOR_INFO = "#17a2b8"
+#
+# 📊 데이터베이스:
+#   DEFAULT_PAGE_SIZE = 100
+#   MAX_QUERY_RESULTS = 1000
+#
+# 🔐 보안:
+#   - SQL 쿼리 시 re.sub()로 입력 검증
+#   - 비밀번호는 hash_pw()로 해싱
+#   - 역할 확인: CALENDAR_EDIT_ROLES
+#
+# ⚡ 성능:
+#   - iterrows() → 벡터화 연산 사용
+#   - st.cache_data / st.cache_resource 활용
+#   - st.rerun() 최소화
+#
+# 🧪 테스트:
+#   pytest tests/ --cov=. --cov-report=html
+#
+# =================================================================
