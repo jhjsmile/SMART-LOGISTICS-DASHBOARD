@@ -2277,6 +2277,7 @@ elif curr_l == "조립 라인":
             lh2.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>자재 S/N</p>", unsafe_allow_html=True)
 
             updated_list = []
+            _should_rerun = False
             for mi, mat in enumerate(mat_list_now):
                 lc1, lc2, lc3 = st.columns([2, 4, 1])
                 new_name = lc1.selectbox("", MAT_NAME_OPTIONS,
@@ -2288,9 +2289,11 @@ elif curr_l == "조립 라인":
                 if not lc3.button("🗑", key=f"mat_del_{curr_g}_{mi}", help="삭제"):
                     updated_list.append({"자재명": new_name, "자재시리얼": new_sn})
                 else:
-                    st.rerun()
+                    _should_rerun = True  # 삭제 버튼 클릭됨 — 해당 항목은 updated_list에 추가 안 됨
 
-            st.session_state[_mat_list_key] = updated_list
+            st.session_state[_mat_list_key] = updated_list  # 먼저 저장
+            if _should_rerun:
+                st.rerun()  # 저장 후 rerun
 
             if st.button("🗑 전체 초기화", key=f"mat_clear_{curr_g}", type="secondary"):
                 st.session_state[_mat_list_key] = []
