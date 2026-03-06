@@ -591,7 +591,14 @@ def get_master_pw_hash() -> str | None:
     
     try:
         # 2순위: st.secrets에서 로드 (Streamlit Cloud / secrets.toml)
+        # 최상위 키 체크
         secrets_hash = st.secrets.get("master_admin_pw_hash") or st.secrets.get("MASTER_PASSWORD_HASH")
+        # connections.gsheets 하위 키도 체크 (구 구조 호환)
+        if not secrets_hash:
+            try:
+                secrets_hash = st.secrets["connections"]["gsheets"].get("master_admin_pw_hash")
+            except Exception:
+                pass
         if secrets_hash:
             return secrets_hash
     except Exception:
