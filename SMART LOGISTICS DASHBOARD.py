@@ -1999,6 +1999,282 @@ if curr_l == "현황판":
 elif curr_l == "조립 라인":
     st.markdown(f"<h2 class='centered-title'>📦 {curr_g} 신규 조립 현황</h2>", unsafe_allow_html=True)
 
+    db_asm = st.session_state.production_db.copy()
+    db_g   = db_asm[db_asm['반'] == curr_g]
+
+    # ── KPI ─────────────────────────────────────────────────────────
+    asm_ing  = len(db_g[db_g['상태'] == '조립중'])
+    asm_wait = len(db_g[db_g['상태'] == '검사대기'])
+    asm_done = len(db_g[(db_g['라인'] == '포장 라인') & (db_g['상태'] == '완료')])
+    asm_ng   = len(db_g[db_g['상태'].str.contains('불량', na=False)])
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("🔧 조립 중",   f"{asm_ing}건")
+    k2.metric("⏳ 검사 대기", f"{asm_wait}건")
+    k3.metric("✅ 최종 완료", f"{asm_done}건")
+    k4.metric("🚫 불량",      f"{asm_ng}건")
+    st.divider()
+
+    # ── 신규 제품 등록 ───────────────────────────────────────────────
+    st.markdown("<div class='section-title'>➕ 신규 제품 등록</div>", unsafe_allow_html=True)
+    models_for_group = st.session_state.group_master_models.get(curr_g, [])
+    items_for_group  = st.session_state.group_master_items.get(curr_g, {})
+
+    with st.form("asm_register_form", clear_on_submit=True):
+        fc1, fc2, fc3 = st.columns([2, 2, 1.5])
+        sn_input  = fc1.text_input("시리얼 번호 *", placeholder="예: SN20260301001")
+        model_sel = fc2.selectbox("모델 *", ["(선택)"] + models_for_group)
+        auto_pn   = items_for_group.get(model_sel, "") if model_sel != "(선택)" else ""
+        pn_input  = fc3.text_input("품목코드", value=auto_pn)
+        cell_input = st.text_input("Cell / 작업대", placeholder="예: A1")
+        submitted  = st.form_submit_button("✅ 등록", use_container_width=True, type="primary")
+
+    if submitted:
+        sn_clean = sn_input.strip()
+        if not sn_clean:
+            st.error("시리얼 번호를 입력해주세요.")
+        elif model_sel == "(선택)":
+            st.error("모델을 선택해주세요.")
+        else:
+            new_row = {
+                "시간": get_now_kst_str(), "반": curr_g, "라인": "조립 라인",
+                "cell": cell_input.strip(), "모델": model_sel,
+                "품목코드": pn_input.strip(), "시리얼": sn_clean,
+                "상태": "조립중", "증상": "", "수리": "",
+                "작업자": st.session_state.user_id
+            }
+            if insert_row(new_row):
+                insert_audit_log(시리얼=sn_clean, 모델=model_sel, 반=curr_g,
+                    이전상태="", 이후상태="조립중", 작업자=st.session_state.user_id)
+                st.success(f"✅ [{sn_clean}] 등록 완료")
+                st.session_state.production_db = load_realtime_ledger()
+                st.rerun()
+
+    st.divider()
+
+    # ── 조립 중 목록 ─────────────────────────────────────────────────
+    st.markdown("<div class='section-title'>🔧 조립 진행 중</div>", unsafe_allow_html=True)
+    ing_df = db_g[db_g['상태'] == '조립중'].sort_values('시간', ascending=False)
+
+    if not ing_df.empty:
+        hh = st.columns([2, 2, 1.5, 2, 1.5])
+        for col, txt in zip(hh, ["등록 시간", "모델", "Cell", "시리얼", "조립 완료"]):
+            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+        for idx, row in ing_df.iterrows():
+            rr = st.columns([2, 2, 1.5, 2, 1.5])
+            rr[0].caption(str(row.get('시간', ''))[:16])
+            rr[1].write(row.get('모델', ''))
+            rr[2].write(row.get('cell', ''))
+            rr[3].markdown(f"`{row.get('시리얼', '')}`")
+            if rr[4].button("✔ 조립 완료", key=f"asm_done_{idx}", use_container_width=True, type="primary"):
+                st.cache_data.clear()
+                update_row(row['시리얼'], {'상태': '검사대기', '시간': get_now_kst_str()})
+                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                    이전상태='조립중', 이후상태='검사대기', 작업자=st.session_state.user_id)
+                st.session_state.production_db = load_realtime_ledger()
+                st.rerun()
+    else:
+        st.info("조립 진행 중인 제품이 없습니다.")
+
+    st.divider()
+
+    with st.expander("📋 최근 등록 이력 (최근 20건)", expanded=False):
+        hist = db_g[db_g['라인'] == '조립 라인'].sort_values('시간', ascending=False).head(20)
+        if not hist.empty:
+            st.dataframe(hist[['시간', '모델', '시리얼', '상태', '작업자']].reset_index(drop=True),
+                         use_container_width=True, hide_index=True)
+        else:
+            st.info("이력이 없습니다.")
+
+# ── 검사 라인 ────────────────────────────────────────────────────
+elif curr_l == "검사 라인":
+    st.markdown(f"<h2 class='centered-title'>🔍 {curr_g} 검사 라인 현황</h2>", unsafe_allow_html=True)
+
+    db_qc_all = st.session_state.production_db.copy()
+    db_qc     = db_qc_all[db_qc_all['반'] == curr_g]
+    DEFECT_CAUSES = st.session_state.get('dropdown_defect_cause', ['(선택)', '기타 (직접 입력)'])
+
+    # ── KPI ─────────────────────────────────────────────────────────
+    qc_wait = len(db_qc[db_qc['상태'] == '검사대기'])
+    qc_ing  = len(db_qc[db_qc['상태'] == '검사중'])
+    qc_pass = len(db_qc[db_qc['상태'] == 'OQC대기'])
+    qc_ng   = len(db_qc[db_qc['상태'] == '불량 처리 중'])
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("📥 검사 대기", f"{qc_wait}건")
+    k2.metric("🔍 검사 중",   f"{qc_ing}건")
+    k3.metric("✅ OQC 대기",  f"{qc_pass}건")
+    k4.metric("🚫 불량",      f"{qc_ng}건")
+    st.divider()
+
+    # ── 검사 대기 목록 ───────────────────────────────────────────────
+    st.markdown("<div class='section-title'>📥 검사 대기 (조립 완료 제품)</div>", unsafe_allow_html=True)
+    wait_df = db_qc[db_qc['상태'] == '검사대기'].sort_values('시간', ascending=False)
+
+    if not wait_df.empty:
+        hh = st.columns([2, 2, 1.5, 2, 1.5])
+        for col, txt in zip(hh, ["시간", "모델", "Cell", "시리얼", "검사 시작"]):
+            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+        for idx, row in wait_df.iterrows():
+            rr = st.columns([2, 2, 1.5, 2, 1.5])
+            rr[0].caption(str(row.get('시간', ''))[:16])
+            rr[1].write(row.get('모델', ''))
+            rr[2].write(row.get('cell', ''))
+            rr[3].markdown(f"`{row.get('시리얼', '')}`")
+            if rr[4].button("▶ 검사 시작", key=f"qc_in_{idx}", use_container_width=True, type="primary"):
+                st.cache_data.clear()
+                update_row(row['시리얼'], {'상태': '검사중', '시간': get_now_kst_str(),
+                    '라인': '검사 라인', '작업자': st.session_state.user_id})
+                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                    이전상태='검사대기', 이후상태='검사중', 작업자=st.session_state.user_id)
+                st.session_state.production_db = load_realtime_ledger()
+                st.rerun()
+    else:
+        st.info("검사 대기 중인 제품이 없습니다.")
+
+    st.divider()
+
+    # ── 검사 중 → 판정 ───────────────────────────────────────────────
+    st.markdown("<div class='section-title'>🔍 검사 진행 중</div>", unsafe_allow_html=True)
+    qc_ing_df = db_qc[db_qc['상태'] == '검사중'].sort_values('시간', ascending=False)
+
+    if not qc_ing_df.empty:
+        for idx, row in qc_ing_df.iterrows():
+            with st.container(border=True):
+                ic1, ic2, ic3, ic4 = st.columns([2, 1.5, 1.5, 1.5])
+                ic1.markdown(f"**{row.get('모델', '')}**")
+                ic2.markdown(f"`{row.get('시리얼', '')}`")
+                ic3.write(row.get('cell', ''))
+                ic4.markdown("<span style='background:#ddeeff;color:#1a4a7a;padding:2px 8px;"
+                             "border-radius:6px;font-size:0.8rem;font-weight:bold;'>🔍 검사중</span>",
+                             unsafe_allow_html=True)
+
+                qc1, qc2 = st.columns([2, 1])
+                with qc1:
+                    cause_sel = st.selectbox("불량 원인 (불량 처리 시 선택)",
+                        DEFECT_CAUSES, key=f"qc_cause_{idx}")
+                    if cause_sel == "기타 (직접 입력)":
+                        cause_txt = st.text_input("직접 입력", key=f"qc_cause_txt_{idx}", placeholder="불량 원인 입력")
+                    elif cause_sel == "(선택)":
+                        cause_txt = ""
+                    else:
+                        cause_txt = cause_sel
+                with qc2:
+                    btn_pass = st.button("✅ 합격 (OQC 대기)", key=f"qc_ok_{idx}", use_container_width=True, type="primary")
+                    btn_ng   = st.button("🚫 불량 처리",       key=f"qc_ng_{idx}",  use_container_width=True)
+
+                if btn_pass:
+                    st.cache_data.clear()
+                    update_row(row['시리얼'], {'상태': 'OQC대기', '시간': get_now_kst_str()})
+                    insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                        이전상태='검사중', 이후상태='OQC대기', 작업자=st.session_state.user_id)
+                    st.session_state.production_db = load_realtime_ledger()
+                    st.rerun()
+                if btn_ng:
+                    if not cause_txt:
+                        st.warning("⚠️ 불량 원인을 먼저 선택해주세요.")
+                    else:
+                        st.cache_data.clear()
+                        update_row(row['시리얼'], {'상태': '불량 처리 중', '시간': get_now_kst_str(), '증상': cause_txt})
+                        insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                            이전상태='검사중', 이후상태='불량 처리 중',
+                            작업자=st.session_state.user_id, 비고=f"원인:{cause_txt}")
+                        st.session_state.production_db = load_realtime_ledger()
+                        st.rerun()
+    else:
+        st.info("검사 진행 중인 제품이 없습니다.")
+
+    st.divider()
+
+    with st.expander("📋 최근 검사 이력 (최근 20건)", expanded=False):
+        hist = db_qc[db_qc['라인'] == '검사 라인'].sort_values('시간', ascending=False).head(20)
+        if not hist.empty:
+            st.dataframe(hist[['시간', '모델', '시리얼', '상태', '증상', '작업자']].reset_index(drop=True),
+                         use_container_width=True, hide_index=True)
+        else:
+            st.info("이력이 없습니다.")
+
+# ── 포장 라인 ────────────────────────────────────────────────────
+elif curr_l == "포장 라인":
+    st.markdown(f"<h2 class='centered-title'>📦 {curr_g} 포장 라인 현황</h2>", unsafe_allow_html=True)
+
+    db_pk_all = st.session_state.production_db.copy()
+    db_pk     = db_pk_all[db_pk_all['반'] == curr_g]
+
+    # ── KPI ─────────────────────────────────────────────────────────
+    pk_wait = len(db_pk[db_pk['상태'] == '출하승인'])
+    pk_ing  = len(db_pk[db_pk['상태'] == '포장중'])
+    pk_done = len(db_pk[db_pk['상태'] == '완료'])
+    pk_ng   = len(db_pk[db_pk['상태'].str.contains('불량', na=False)])
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("📥 포장 대기", f"{pk_wait}건")
+    k2.metric("📦 포장 중",   f"{pk_ing}건")
+    k3.metric("✅ 완료",      f"{pk_done}건")
+    k4.metric("🚫 불량",      f"{pk_ng}건")
+    st.divider()
+
+    # ── 포장 대기 (OQC 합격 → 출하승인 상태) ────────────────────────
+    st.markdown("<div class='section-title'>📥 포장 대기 (OQC 합격 제품)</div>", unsafe_allow_html=True)
+    pk_wait_df = db_pk[db_pk['상태'] == '출하승인'].sort_values('시간', ascending=False)
+
+    if not pk_wait_df.empty:
+        hh = st.columns([2, 2, 1.5, 2, 1.5])
+        for col, txt in zip(hh, ["시간", "모델", "Cell", "시리얼", "포장 시작"]):
+            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+        for idx, row in pk_wait_df.iterrows():
+            rr = st.columns([2, 2, 1.5, 2, 1.5])
+            rr[0].caption(str(row.get('시간', ''))[:16])
+            rr[1].write(row.get('모델', ''))
+            rr[2].write(row.get('cell', ''))
+            rr[3].markdown(f"`{row.get('시리얼', '')}`")
+            if rr[4].button("▶ 포장 시작", key=f"pk_in_{idx}", use_container_width=True, type="primary"):
+                st.cache_data.clear()
+                update_row(row['시리얼'], {'상태': '포장중', '시간': get_now_kst_str(),
+                    '라인': '포장 라인', '작업자': st.session_state.user_id})
+                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                    이전상태='출하승인', 이후상태='포장중', 작업자=st.session_state.user_id)
+                st.session_state.production_db = load_realtime_ledger()
+                st.rerun()
+    else:
+        st.info("포장 대기 중인 제품이 없습니다.")
+
+    st.divider()
+
+    # ── 포장 중 → 완료 ───────────────────────────────────────────────
+    st.markdown("<div class='section-title'>📦 포장 진행 중</div>", unsafe_allow_html=True)
+    pk_ing_df = db_pk[db_pk['상태'] == '포장중'].sort_values('시간', ascending=False)
+
+    if not pk_ing_df.empty:
+        hh = st.columns([2, 2, 1.5, 2, 1.5])
+        for col, txt in zip(hh, ["시간", "모델", "Cell", "시리얼", "포장 완료"]):
+            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+        for idx, row in pk_ing_df.iterrows():
+            rr = st.columns([2, 2, 1.5, 2, 1.5])
+            rr[0].caption(str(row.get('시간', ''))[:16])
+            rr[1].write(row.get('모델', ''))
+            rr[2].write(row.get('cell', ''))
+            rr[3].markdown(f"`{row.get('시리얼', '')}`")
+            if rr[4].button("✔ 포장 완료", key=f"pk_done_{idx}", use_container_width=True, type="primary"):
+                st.cache_data.clear()
+                update_row(row['시리얼'], {'상태': '완료', '시간': get_now_kst_str()})
+                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                    이전상태='포장중', 이후상태='완료', 작업자=st.session_state.user_id)
+                st.session_state.production_db = load_realtime_ledger()
+                st.rerun()
+    else:
+        st.info("포장 진행 중인 제품이 없습니다.")
+
+    st.divider()
+
+    with st.expander("📋 최근 완료 이력 (최근 20건)", expanded=False):
+        hist = db_pk[db_pk['상태'] == '완료'].sort_values('시간', ascending=False).head(20)
+        if not hist.empty:
+            st.dataframe(hist[['시간', '모델', '시리얼', '작업자']].reset_index(drop=True),
+                         use_container_width=True, hide_index=True)
+        else:
+            st.info("완료된 제품이 없습니다.")
+
 elif curr_l == "생산 현황 리포트":
     st.markdown("<h2 class='centered-title'>📊 생산 운영 통합 모니터링</h2>", unsafe_allow_html=True)
     v_group = st.radio("조회 범위", ["전체"] + PRODUCTION_GROUPS, horizontal=True)
