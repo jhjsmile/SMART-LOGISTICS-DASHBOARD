@@ -590,13 +590,21 @@ def get_master_pw_hash() -> str | None:
         pass
     
     try:
-        # 2순위: 환경변수 (secrets.toml 대신 서버 환경변수 권장)
+        # 2순위: st.secrets에서 로드 (Streamlit Cloud / secrets.toml)
+        secrets_hash = st.secrets.get("master_admin_pw_hash") or st.secrets.get("MASTER_PASSWORD_HASH")
+        if secrets_hash:
+            return secrets_hash
+    except Exception:
+        pass
+
+    try:
+        # 3순위: 환경변수
         env_hash = _os.getenv("MASTER_PASSWORD_HASH")
         if env_hash:
             return env_hash
     except Exception:
         pass
-    
+
     # 없으면 None - 초기 설정 화면으로 유도
     return None
 
