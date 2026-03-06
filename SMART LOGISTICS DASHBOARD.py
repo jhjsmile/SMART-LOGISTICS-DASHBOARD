@@ -644,24 +644,35 @@ def get_now_kst_str() -> str:
 @st.cache_data(ttl=10)
 def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
     """최근 N개월 데이터만 로드 (기본 3개월, 성능 최적화)"""
+    _EMPTY_COLS = ['시간','반','라인','cell','모델','품목코드','시리얼','상태','증상','수리','작업자']
     try:
         sb = get_supabase()
         from datetime import date, timedelta
         cutoff = (date.today().replace(day=1) -
                   timedelta(days=(months-1)*28)).strftime('%Y-%m-%d')
-        res = (sb.table("production")
-                 .select("*")
-                 .gte("시간", cutoff)
-                 .order("created_at", desc=False)
-                 .execute())
+        try:
+            # deleted_at IS NULL 필터 적용 (Soft-delete된 행 제외)
+            res = (sb.table("production")
+                     .select("*")
+                     .gte("시간", cutoff)
+                     .is_("deleted_at", "null")
+                     .order("created_at", desc=False)
+                     .execute())
+        except Exception:
+            # deleted_at 컬럼이 없는 경우 필터 없이 조회 (하위 호환)
+            res = (sb.table("production")
+                     .select("*")
+                     .gte("시간", cutoff)
+                     .order("created_at", desc=False)
+                     .execute())
         if res.data:
             df = pd.DataFrame(res.data)
-            df = df.drop(columns=[c for c in ['id','created_at'] if c in df.columns])
+            df = df.drop(columns=[c for c in ['id','created_at','deleted_at','deleted_by'] if c in df.columns])
             return df.fillna("")
-        return pd.DataFrame(columns=['시간','반','라인','cell','모델','품목코드','시리얼','상태','증상','수리','작업자'])
+        return pd.DataFrame(columns=_EMPTY_COLS)
     except Exception as e:
         st.warning(f"데이터 로드 실패: {e}")
-        return pd.DataFrame(columns=['시간','반','라인','cell','모델','품목코드','시리얼','상태','증상','수리','작업자'])
+        return pd.DataFrame(columns=_EMPTY_COLS)
 
 def insert_row(row: dict) -> bool:
     try:
