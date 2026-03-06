@@ -498,7 +498,51 @@ def delete_all_rows() -> bool:
         get_supabase().table("production").delete().neq("시리얼", "IMPOSSIBLE_XYZ").execute()
         return True
     except Exception as e:
-        st.error(f"초기화 실패: {e}"); return False
+        st.error(f"삭제 실패: {e}"); return False
+
+def delete_production_row_by_sn(시리얼: str) -> bool:
+    try:
+        get_supabase().table("production").delete().eq("시리얼", 시리얼).execute()
+        return True
+    except Exception as e:
+        st.error(f"삭제 실패: {e}"); return False
+
+def delete_all_audit_log() -> bool:
+    try:
+        get_supabase().table("audit_log").delete().neq("시리얼", "IMPOSSIBLE_XYZ").execute()
+        return True
+    except Exception as e:
+        st.error(f"감사로그 삭제 실패: {e}"); return False
+
+def delete_audit_log_row(row_id) -> bool:
+    try:
+        get_supabase().table("audit_log").delete().eq("id", row_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"감사로그 행 삭제 실패: {e}"); return False
+
+def delete_all_material_serial() -> bool:
+    try:
+        get_supabase().table("material_serial").delete().neq("자재시리얼", "IMPOSSIBLE_XYZ").execute()
+        return True
+    except Exception as e:
+        st.error(f"자재시리얼 삭제 실패: {e}"); return False
+
+def delete_material_serial_row(row_id) -> bool:
+    try:
+        get_supabase().table("material_serial").delete().eq("id", row_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"자재시리얼 행 삭제 실패: {e}"); return False
+
+def delete_all_production_schedule() -> bool:
+    try:
+        get_supabase().table("production_schedule").delete().neq("id", -1).execute()
+        return True
+    except Exception as e:
+        st.error(f"생산일정 삭제 실패: {e}"); return False
+
+
 
 @st.cache_data(ttl=60)
 def load_schedule() -> pd.DataFrame:
@@ -4059,6 +4103,257 @@ elif curr_l == "마스터 관리":
 
         st.divider()
 
+        # ── 데이터 삭제 관리 ──────────────────────────────────────
+        st.markdown("<h4 style='color:#c8605a; font-weight:bold; margin:16px 0 10px 0;'>🗑️ 데이터 삭제 관리</h4>", unsafe_allow_html=True)
+        st.caption("생산 이력, 감사 로그, 자재 시리얼, 생산 일정을 개별 또는 전체 삭제합니다.")
+
+        del_tab1, del_tab2, del_tab3, del_tab4 = st.tabs(["📦 생산 이력", "🔍 감사 로그", "🔩 자재 시리얼", "📅 생산 일정"])
+
+        # ─── 탭1: 생산 이력 ───────────────────────────────────────
+        with del_tab1:
+            prod_df = st.session_state.production_db.copy()
+            st.caption(f"현재 **{len(prod_df)}건** 등록됨")
+
+            # 필터
+            dt1, dt2, dt3 = st.columns([1.5, 1.5, 2])
+            _d_grp  = dt1.selectbox("반",    ["전체"] + PRODUCTION_GROUPS, key="d_prod_grp")
+            _d_line = dt2.selectbox("라인",  ["전체","조립 라인","검사 라인","OQC 라인","포장 라인","불량 공정"], key="d_prod_line")
+            _d_sn   = dt3.text_input("S/N 검색", key="d_prod_sn", placeholder="시리얼 일부 입력")
+            if _d_grp  != "전체": prod_df = prod_df[prod_df['반']  == _d_grp]
+            if _d_line != "전체": prod_df = prod_df[prod_df['라인'] == _d_line]
+            if _d_sn.strip():    prod_df = prod_df[prod_df['시리얼'].str.contains(_d_sn.strip(), case=False, na=False)]
+
+            if not prod_df.empty:
+                # 개별 삭제
+                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
+                ph = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
+                for c, t in zip(ph, ["시간","반","라인","시리얼","상태","삭제"]):
+                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                for i, (idx, row) in enumerate(prod_df.sort_values('시간', ascending=False).head(200).iterrows()):
+                    pr = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
+                    pr[0].caption(str(row.get('시간',''))[:16])
+                    pr[1].caption(row.get('반',''))
+                    pr[2].caption(row.get('라인',''))
+                    pr[3].caption(f"`{row.get('시리얼','')}`")
+                    pr[4].caption(row.get('상태',''))
+                    if pr[5].button("🗑️", key=f"del_prod_{idx}", help="이 행 삭제"):
+                        if delete_production_row_by_sn(row['시리얼']):
+                            st.cache_data.clear()
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.success(f"삭제 완료: {row['시리얼']}")
+                            st.rerun()
+                if len(prod_df) > 200:
+                    st.caption(f"※ 최대 200건만 표시. 필터로 범위를 좁혀주세요.")
+            else:
+                st.info("조건에 맞는 데이터가 없습니다.")
+
+            # 전체 삭제
+            st.markdown("<hr style='margin:12px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
+            _ck_prod_all = "del_prod_all_ck"
+            if not st.session_state.get(_ck_prod_all):
+                if st.button("⛔ 생산 이력 전체 삭제", key="del_prod_all_btn",
+                             type="secondary", use_container_width=False):
+                    st.session_state[_ck_prod_all] = True; st.rerun()
+            else:
+                st.error("⛔ 생산 이력 **전체**를 삭제합니다. 되돌릴 수 없습니다.")
+                _pa1, _pa2, _pa3 = st.columns([2,1,1])
+                _pa1.markdown("<p style='color:#c8605a;font-weight:bold;margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
+                if _pa2.button("✅ 예, 전체 삭제", key="del_prod_all_yes", type="primary", use_container_width=True):
+                    if delete_all_rows():
+                        st.cache_data.clear()
+                        st.session_state.production_db = load_realtime_ledger()
+                        st.session_state[_ck_prod_all] = False
+                        st.success("생산 이력 전체 삭제 완료"); st.rerun()
+                if _pa3.button("취소", key="del_prod_all_no", use_container_width=True):
+                    st.session_state[_ck_prod_all] = False; st.rerun()
+
+        # ─── 탭2: 감사 로그 ───────────────────────────────────────
+        with del_tab2:
+            @st.cache_data(ttl=15)
+            def _load_audit_all():
+                try:
+                    res = get_supabase().table("audit_log").select("*").order("시간", desc=True).limit(500).execute()
+                    return pd.DataFrame(res.data) if res.data else pd.DataFrame(
+                        columns=['id','시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+                except: return pd.DataFrame(columns=['id','시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+
+            audit_df = _load_audit_all()
+            st.caption(f"현재 **{len(audit_df)}건** (최대 500건 표시)")
+            if st.button("🔄 새로고침", key="audit_del_refresh"):
+                st.cache_data.clear(); st.rerun()
+
+            # 필터
+            al1, al2 = st.columns([1.5, 2])
+            _a_grp = al1.selectbox("반", ["전체"] + PRODUCTION_GROUPS, key="d_audit_grp")
+            _a_sn  = al2.text_input("S/N 검색", key="d_audit_sn", placeholder="시리얼 일부 입력")
+            adf = audit_df.copy()
+            if _a_grp != "전체": adf = adf[adf['반'] == _a_grp]
+            if _a_sn.strip():   adf = adf[adf['시리얼'].str.contains(_a_sn.strip(), case=False, na=False)]
+
+            if not adf.empty:
+                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
+                ah = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
+                for c, t in zip(ah, ["시간","반","시리얼","모델","이전상태","이후상태","삭제"]):
+                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                for idx, row in adf.iterrows():
+                    ar = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
+                    ar[0].caption(str(row.get('시간',''))[:16])
+                    ar[1].caption(row.get('반',''))
+                    ar[2].caption(f"`{row.get('시리얼','')}`")
+                    ar[3].caption(row.get('모델',''))
+                    ar[4].caption(row.get('이전상태',''))
+                    ar[5].caption(row.get('이후상태',''))
+                    _row_id = row.get('id')
+                    if _row_id and ar[6].button("🗑️", key=f"del_audit_{_row_id}", help="이 행 삭제"):
+                        if delete_audit_log_row(_row_id):
+                            st.cache_data.clear()
+                            st.success("삭제 완료"); st.rerun()
+            else:
+                st.info("조건에 맞는 감사 로그가 없습니다.")
+
+            st.markdown("<hr style='margin:12px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
+            _ck_audit_all = "del_audit_all_ck"
+            if not st.session_state.get(_ck_audit_all):
+                if st.button("⛔ 감사 로그 전체 삭제", key="del_audit_all_btn",
+                             type="secondary", use_container_width=False):
+                    st.session_state[_ck_audit_all] = True; st.rerun()
+            else:
+                st.error("⛔ 감사 로그 **전체**를 삭제합니다. 되돌릴 수 없습니다.")
+                _aa1, _aa2, _aa3 = st.columns([2,1,1])
+                _aa1.markdown("<p style='color:#c8605a;font-weight:bold;margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
+                if _aa2.button("✅ 예, 전체 삭제", key="del_audit_all_yes", type="primary", use_container_width=True):
+                    if delete_all_audit_log():
+                        st.cache_data.clear()
+                        st.session_state[_ck_audit_all] = False
+                        st.success("감사 로그 전체 삭제 완료"); st.rerun()
+                if _aa3.button("취소", key="del_audit_all_no", use_container_width=True):
+                    st.session_state[_ck_audit_all] = False; st.rerun()
+
+        # ─── 탭3: 자재 시리얼 ────────────────────────────────────
+        with del_tab3:
+            @st.cache_data(ttl=15)
+            def _load_mat_all():
+                try:
+                    res = get_supabase().table("material_serial").select("*").order("시간", desc=True).limit(500).execute()
+                    return pd.DataFrame(res.data) if res.data else pd.DataFrame(
+                        columns=['id','시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+                except: return pd.DataFrame(columns=['id','시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+
+            mat_df = _load_mat_all()
+            st.caption(f"현재 **{len(mat_df)}건** (최대 500건 표시)")
+            if st.button("🔄 새로고침", key="mat_del_refresh"):
+                st.cache_data.clear(); st.rerun()
+
+            ml1, ml2 = st.columns([1.5, 2])
+            _m_grp = ml1.selectbox("반", ["전체"] + PRODUCTION_GROUPS, key="d_mat_grp")
+            _m_sn  = ml2.text_input("S/N 검색", key="d_mat_sn", placeholder="메인 또는 자재 S/N")
+            mdf = mat_df.copy()
+            if _m_grp != "전체": mdf = mdf[mdf['반'] == _m_grp]
+            if _m_sn.strip():
+                mdf = mdf[
+                    mdf['메인시리얼'].str.contains(_m_sn.strip(), case=False, na=False) |
+                    mdf['자재시리얼'].str.contains(_m_sn.strip(), case=False, na=False)
+                ]
+
+            if not mdf.empty:
+                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
+                mh = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
+                for c, t in zip(mh, ["시간","메인S/N","모델","자재명","자재S/N","삭제"]):
+                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                for idx, row in mdf.iterrows():
+                    mr = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
+                    mr[0].caption(str(row.get('시간',''))[:16])
+                    mr[1].caption(f"`{row.get('메인시리얼','')}`")
+                    mr[2].caption(row.get('모델',''))
+                    mr[3].caption(row.get('자재명',''))
+                    mr[4].caption(f"`{row.get('자재시리얼','')}`")
+                    _mid = row.get('id')
+                    if _mid and mr[5].button("🗑️", key=f"del_mat_{_mid}", help="이 행 삭제"):
+                        if delete_material_serial_row(_mid):
+                            st.cache_data.clear()
+                            st.success("삭제 완료"); st.rerun()
+            else:
+                st.info("조건에 맞는 자재 시리얼이 없습니다.")
+
+            st.markdown("<hr style='margin:12px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
+            _ck_mat_all = "del_mat_all_ck"
+            if not st.session_state.get(_ck_mat_all):
+                if st.button("⛔ 자재 시리얼 전체 삭제", key="del_mat_all_btn",
+                             type="secondary", use_container_width=False):
+                    st.session_state[_ck_mat_all] = True; st.rerun()
+            else:
+                st.error("⛔ 자재 시리얼 **전체**를 삭제합니다. 되돌릴 수 없습니다.")
+                _ma1, _ma2, _ma3 = st.columns([2,1,1])
+                _ma1.markdown("<p style='color:#c8605a;font-weight:bold;margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
+                if _ma2.button("✅ 예, 전체 삭제", key="del_mat_all_yes", type="primary", use_container_width=True):
+                    if delete_all_material_serial():
+                        st.cache_data.clear()
+                        st.session_state[_ck_mat_all] = False
+                        st.success("자재 시리얼 전체 삭제 완료"); st.rerun()
+                if _ma3.button("취소", key="del_mat_all_no", use_container_width=True):
+                    st.session_state[_ck_mat_all] = False; st.rerun()
+
+        # ─── 탭4: 생산 일정 ───────────────────────────────────────
+        with del_tab4:
+            sch_del_df = st.session_state.schedule_db.copy() if not st.session_state.schedule_db.empty else pd.DataFrame()
+            st.caption(f"현재 **{len(sch_del_df)}건** 등록됨")
+
+            sd1, sd2 = st.columns([1.5, 2])
+            _s_grp = sd1.selectbox("반", ["전체"] + PRODUCTION_GROUPS, key="d_sch_grp")
+            _s_kw  = sd2.text_input("모델명/비고 검색", key="d_sch_kw", placeholder="검색어 입력")
+            sdf = sch_del_df.copy()
+            if _s_grp != "전체": sdf = sdf[sdf['반'] == _s_grp]
+            if _s_kw.strip():
+                sdf = sdf[
+                    sdf.get('모델명', pd.Series(dtype=str)).str.contains(_s_kw.strip(), case=False, na=False) |
+                    sdf.get('특이사항', pd.Series(dtype=str)).str.contains(_s_kw.strip(), case=False, na=False)
+                ]
+
+            if not sdf.empty:
+                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
+                sh = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
+                for c, t in zip(sh, ["날짜","반","카테고리","모델명","조립수","출하계획","삭제"]):
+                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                for idx, row in sdf.sort_values('날짜', ascending=False).iterrows():
+                    sr = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
+                    sr[0].caption(str(row.get('날짜',''))[:10])
+                    sr[1].caption(row.get('반',''))
+                    sr[2].caption(row.get('카테고리',''))
+                    sr[3].caption(row.get('모델명',''))
+                    sr[4].caption(str(row.get('조립수','')))
+                    sr[5].caption(str(row.get('출하계획','')))
+                    _sid = row.get('id')
+                    if _sid and sr[6].button("🗑️", key=f"del_sch_{_sid}", help="이 행 삭제"):
+                        if delete_schedule(int(_sid)):
+                            st.cache_data.clear()
+                            st.session_state.schedule_db = load_schedule()
+                            st.success("삭제 완료"); st.rerun()
+            else:
+                st.info("조건에 맞는 일정이 없습니다.")
+
+            st.markdown("<hr style='margin:12px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
+            _ck_sch_all = "del_sch_all_ck"
+            if not st.session_state.get(_ck_sch_all):
+                if st.button("⛔ 생산 일정 전체 삭제", key="del_sch_all_btn",
+                             type="secondary", use_container_width=False):
+                    st.session_state[_ck_sch_all] = True; st.rerun()
+            else:
+                st.error("⛔ 생산 일정 **전체**를 삭제합니다. 되돌릴 수 없습니다.")
+                _sa1, _sa2, _sa3 = st.columns([2,1,1])
+                _sa1.markdown("<p style='color:#c8605a;font-weight:bold;margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
+                if _sa2.button("✅ 예, 전체 삭제", key="del_sch_all_yes", type="primary", use_container_width=True):
+                    if delete_all_production_schedule():
+                        st.cache_data.clear()
+                        st.session_state.schedule_db = load_schedule()
+                        st.session_state[_ck_sch_all] = False
+                        st.success("생산 일정 전체 삭제 완료"); st.rerun()
+                if _sa3.button("취소", key="del_sch_all_no", use_container_width=True):
+                    st.session_state[_ck_sch_all] = False; st.rerun()
+
+        st.divider()
+
+        # 기존 전체 초기화 버튼 (하위 호환)
+        st.markdown("<p style='color:#8a7f72;font-size:0.85rem;'>⚠️ 아래는 생산 이력만 초기화하는 기존 버튼입니다. 위 탭을 이용하세요.</p>", unsafe_allow_html=True)
         # 초기화 버튼 - 2단계 확인
         if 'confirm_reset' not in st.session_state:
             st.session_state.confirm_reset = False
