@@ -129,6 +129,39 @@ st.markdown("""
     .stMultiSelect > div > div {
         max-width: 480px !important;
     }
+    /* selectbox 드롭다운 팝업 글자 선명하게 */
+    [data-baseweb="popover"],
+    [data-baseweb="popover"] * {
+        -webkit-font-smoothing: antialiased !important;
+        -moz-osx-font-smoothing: grayscale !important;
+        font-smoothing: antialiased !important;
+        opacity: 1 !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+    [data-baseweb="menu"] {
+        background: #ffffff !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+        border: 1px solid #e0d8c8 !important;
+        border-radius: 8px !important;
+    }
+    [data-baseweb="menu"] li,
+    [data-baseweb="option"] {
+        color: #2a2420 !important;
+        font-weight: 500 !important;
+        opacity: 1 !important;
+        background: #ffffff !important;
+    }
+    [data-baseweb="menu"] li:hover,
+    [data-baseweb="option"]:hover {
+        background: #f5f0e8 !important;
+        color: #2a2420 !important;
+    }
+    [aria-selected="true"][data-baseweb="option"] {
+        background: #e8e0d0 !important;
+        color: #2a2420 !important;
+        font-weight: 700 !important;
+    }
     /* number_input 짧게 */
     .stNumberInput {
         max-width: 200px !important;
