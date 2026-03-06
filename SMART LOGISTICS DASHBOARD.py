@@ -44,6 +44,9 @@ COLOR_INFO = "#17a2b8"
 # 
 # ❌ 느린 방법 (iterrows 사용):
 # 💡 성능 개선 예시: 위 DataFrame 성능 최적화 섹션 참고
+# 💡 벡터화 예: df['result'] = df['col1'] + df['col2']  (현재 코드는 10-100배 느림)
+# 💡 벡터화 예: df['result'] = df['col1'] + df['col2']  (현재 코드는 10-100배 느림)
+# 💡 벡터화 예: df['result'] = df['col1'] + df['col2']  (현재 코드는 10-100배 느림)
 # for idx, row in df.iterrows():
 #     df.at[idx, 'result'] = row['a'] + row['b']
 #
