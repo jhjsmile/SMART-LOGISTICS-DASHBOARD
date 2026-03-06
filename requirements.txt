@@ -6,3 +6,4 @@ google-auth
 streamlit-autorefresh
 supabase
 openpyxl
+bcrypt
