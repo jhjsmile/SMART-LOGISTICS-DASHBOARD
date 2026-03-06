@@ -3279,26 +3279,59 @@ elif curr_l == "OQC 라인":
     mat_tab1, mat_tab2, mat_tab3 = st.tabs(["🔍 자재 S/N 검색 (역추적)", "➕ 자재 S/N 등록", "📂 엑셀 업로드"])
 
     with mat_tab1:
-        st.caption("자재 S/N으로 어떤 제품(메인 S/N)에 사용됐는지 역추적합니다.")
-        ms_input = st.text_input("자재 시리얼 입력", placeholder="자재 S/N 일부 입력", key="mat_search_input")
-        if ms_input.strip():
-            found = search_material_by_sn(ms_input.strip())
-            if not found.empty:
-                st.success(f"✅ {len(found)}건 검색됨")
-                mh = st.columns([1.8, 2, 1.5, 2, 2, 1.5])
-                for col, txt in zip(mh, ["등록시간","메인 S/N","반","모델","자재명","작업자"]):
-                    col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-                # TODO: 성능 개선 - iterrows() 대신 벡터화 연산 또는 .values 사용 권장
-                for _, mr in found.iterrows():
-                    mc = st.columns([1.8, 2, 1.5, 2, 2, 1.5])
-                    mc[0].caption(str(mr.get('시간',''))[:16])
-                    mc[1].markdown(f"**`{mr.get('메인시리얼','')}`**")
-                    mc[2].write(mr.get('반',''))
-                    mc[3].write(mr.get('모델',''))
-                    mc[4].write(mr.get('자재명',''))
-                    mc[5].caption(mr.get('작업자',''))
-            else:
-                st.warning("검색 결과 없음")
+        st.caption("메인 S/N 또는 자재 S/N으로 검색합니다.")
+        
+        # ✨ 개선: 검색 타입 선택 추가
+        search_col1, search_col2 = st.columns(2)
+        
+        with search_col1:
+            st.markdown("#### 📦 메인 S/N → 자재 조회")
+            main_search = st.text_input("메인 S/N 입력", placeholder="메인 시리얼 입력", key="main_sn_search_mat")
+            
+            if main_search.strip():
+                # 메인 시리얼로 자재 목록 조회
+                mat_list = load_material_serials(main_search.strip())
+                
+                if not mat_list.empty:
+                    st.success(f"✅ {len(mat_list)}건 발견")
+                    st.markdown(f"**메인 S/N: `{main_search.strip()}`에 사용된 자재 목록**")
+                    mh1 = st.columns([2, 2.5, 2.5, 1.5])
+                    for col, txt in zip(mh1, ["등록시간", "자재명", "자재 S/N", "작업자"]):
+                        col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                    
+                    for _, mr in mat_list.iterrows():
+                        mc1 = st.columns([2, 2.5, 2.5, 1.5])
+                        mc1[0].caption(str(mr.get('시간',''))[:16])
+                        mc1[1].write(mr.get('자재명',''))
+                        mc1[2].markdown(f"`{mr.get('자재시리얼','')}`")
+                        mc1[3].caption(mr.get('작업자',''))
+                else:
+                    st.info("해당 메인 S/N의 자재 기록이 없습니다.")
+        
+        with search_col2:
+            st.markdown("#### 🔩 자재 S/N → 메인 역추적")
+            mat_search = st.text_input("자재 S/N 입력", placeholder="자재 시리얼 입력", key="mat_sn_search_reverse")
+            
+            if mat_search.strip():
+                # 자재 시리얼로 역추적
+                found = search_material_by_sn(mat_search.strip())
+                
+                if not found.empty:
+                    st.success(f"✅ {len(found)}건 발견")
+                    st.markdown(f"**자재 S/N: `{mat_search.strip()}`이 사용된 제품**")
+                    mh2 = st.columns([1.8, 2, 1.5, 2, 1.5])
+                    for col, txt in zip(mh2, ["등록시간","메인 S/N","반","모델","작업자"]):
+                        col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                    
+                    for _, mr in found.iterrows():
+                        mc2 = st.columns([1.8, 2, 1.5, 2, 1.5])
+                        mc2[0].caption(str(mr.get('시간',''))[:16])
+                        mc2[1].markdown(f"**`{mr.get('메인시리얼','')}`**")
+                        mc2[2].write(mr.get('반',''))
+                        mc2[3].write(mr.get('모델',''))
+                        mc2[4].caption(mr.get('작업자',''))
+                else:
+                    st.info("검색 결과 없음")
 
     with mat_tab2:
         st.caption("메인 S/N에 자재 S/N을 수동으로 추가 등록합니다.")
