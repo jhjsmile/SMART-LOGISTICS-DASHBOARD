@@ -1464,9 +1464,10 @@ if 'user_db' not in st.session_state:
             }
     except Exception as e:
         # Supabase 연결 실패 시 임시 계정 (경고 표시)
-        st.sidebar.warning("⚠️ 보안 경고: 기본 비밀번호 사용 중! 즉시 변경하세요.")
+        st.sidebar.warning("⚠️ Supabase 연결 실패: 로컬 임시 계정으로 실행 중입니다.")
         st.session_state.user_db = {
-            "admin": {"pw_hash": hash_pw("CHANGE_ME_IMMEDIATELY"), "role": "admin"},
+            "master": {"pw_hash": hash_pw("master1234"), "role": "master"},
+            "admin":  {"pw_hash": hash_pw("admin1234"),  "role": "admin"},
         }
 
 if 'group_master_models' not in st.session_state:
