@@ -125,14 +125,14 @@ def _load_manual_pdf_b64() -> str:
 _MANUAL_PDF_B64 = _load_manual_pdf_b64()
 
 ROLES = {
-    "master":        ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리", "사용 설명서"],
-    "control_tower": ["생산 지표 관리", "생산 현황 리포트", "수리 현황 리포트", "마스터 관리", "사용 설명서"],
-    "assembly_team": ["조립 라인", "사용 설명서"],
-    "qc_team":       ["검사 라인", "불량 공정", "사용 설명서"],
-    "packing_team":  ["포장 라인", "사용 설명서"],
-    "admin":         ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리", "사용 설명서"],
-    "schedule_manager": ["생산 지표 관리", "사용 설명서"],
-    "oqc_team":       ["OQC 라인", "사용 설명서"]
+    "master":           ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼"],
+    "admin":            ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼"],
+    "control_tower":    ["생산 지표 관리", "생산 현황 리포트", "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼"],
+    "assembly_team":    ["조립 라인", "작업자 매뉴얼"],
+    "qc_team":          ["검사 라인", "불량 공정", "작업자 매뉴얼"],
+    "packing_team":     ["포장 라인", "작업자 매뉴얼"],
+    "schedule_manager": ["생산 지표 관리", "작업자 매뉴얼"],
+    "oqc_team":         ["OQC 라인", "작업자 매뉴얼"],
 }
 
 ROLE_LABELS = {
@@ -1643,12 +1643,19 @@ if "마스터 관리" in allowed_nav:
         st.session_state.current_line = "마스터 관리"
         st.rerun()
 
-if "사용 설명서" in allowed_nav:
+if "작업자 매뉴얼" in allowed_nav or "관리자 매뉴얼" in allowed_nav:
     st.sidebar.divider()
-    if st.sidebar.button("📖 사용 설명서", use_container_width=True,
-        type="primary" if st.session_state.current_line == "사용 설명서" else "secondary"):
+if "작업자 매뉴얼" in allowed_nav:
+    if st.sidebar.button("📖 작업자 매뉴얼", use_container_width=True,
+        type="primary" if st.session_state.current_line == "작업자 매뉴얼" else "secondary"):
         clear_cal()
-        st.session_state.current_line = "사용 설명서"
+        st.session_state.current_line = "작업자 매뉴얼"
+        st.rerun()
+if "관리자 매뉴얼" in allowed_nav:
+    if st.sidebar.button("🔐 관리자 매뉴얼", use_container_width=True,
+        type="primary" if st.session_state.current_line == "관리자 매뉴얼" else "secondary"):
+        clear_cal()
+        st.session_state.current_line = "관리자 매뉴얼"
         st.rerun()
 
 if st.sidebar.button("🚪 로그아웃", use_container_width=True):
@@ -5377,49 +5384,417 @@ elif curr_l == "마스터 관리":
 # =================================================================
 
 # ── 사용 설명서 ──────────────────────────────────────────────────
-elif curr_l == "사용 설명서":
-    st.markdown("<h2 class='centered-title'>📖 사용 설명서</h2>", unsafe_allow_html=True)
-    st.markdown(
-        "<p style='text-align:center;color:#8a7f72;font-size:0.9rem;'>PMS v22.3 &nbsp;·&nbsp; 전체 사용자 대상</p>",
-        unsafe_allow_html=True
-    )
-
-    # 다운로드 버튼
-    if not _MANUAL_PDF_B64:
-        st.warning(f"PDF 파일을 찾을 수 없습니다. 경로를 확인하세요: {_PDF_PATH}")
-        st.stop()
-    pdf_bytes = _b64_loader.b64decode(_MANUAL_PDF_B64)
-    dl_col1, dl_col2, dl_col3 = st.columns([2, 2, 2])
-    dl_col2.download_button(
-        label="⬇️ PDF 다운로드",
-        data=pdf_bytes,
-        file_name="PMS_v22.3_사용설명서.pdf",
-        mime="application/pdf",
-        use_container_width=True,
-        type="primary"
-    )
-
+elif curr_l == "작업자 매뉴얼":
+    # ══════════════════════════════════════════════════════════
+    # 📖 작업자 매뉴얼
+    # ══════════════════════════════════════════════════════════
+    st.markdown("<h2 class='centered-title'>📖 작업자 매뉴얼</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;color:#8a7f72;font-size:0.9rem;'>스마트 물류 대시보드 &nbsp;·&nbsp; 현장 작업자용</p>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # PDF 인라인 뷰어 (iframe embed)
-    pdf_b64_str = _MANUAL_PDF_B64
-    pdf_viewer_html = f"""
-    <div style="border:1px solid #ddd5c0; border-radius:10px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-        <iframe
-            src="data:application/pdf;base64,{pdf_b64_str}"
-            width="100%"
-            height="{PDF_VIEWER_HEIGHT_PX}px"
-            style="border:none; display:block;"
-            type="application/pdf"
-        >
-            <p style="padding:20px;text-align:center;">
-                이 브라우저는 PDF 인라인 보기를 지원하지 않습니다.<br>
-                위의 <strong>PDF 다운로드</strong> 버튼을 이용해 주세요.
-            </p>
-        </iframe>
-    </div>
-    """
-    st.markdown(pdf_viewer_html, unsafe_allow_html=True)
+    def _man_section(icon, title, color="#1B3A5C"):
+        st.markdown(f"""
+        <div style='background:{color};color:#fff;padding:8px 16px;border-radius:8px 8px 0 0;
+                    font-weight:700;font-size:1.0rem;margin-top:16px;'>
+            {icon} {title}
+        </div>""", unsafe_allow_html=True)
+
+    def _man_box(html_content, bg="#f8f6f2"):
+        st.markdown(f"""
+        <div style='background:{bg};border:1px solid #ddd5c0;border-radius:0 0 8px 8px;
+                    padding:14px 18px;font-size:0.92rem;line-height:1.75;margin-bottom:4px;'>
+            {html_content}
+        </div>""", unsafe_allow_html=True)
+
+    # ── 1. 시스템 소개 & 로그인 ──────────────────────────────
+    with st.expander("🔑 1. 로그인 방법", expanded=True):
+        _man_section("🔑", "로그인 절차")
+        _man_box("""
+        <ol style='margin:0;padding-left:1.4em;'>
+          <li>브라우저(Chrome 권장)에서 시스템 URL 접속</li>
+          <li><b>아이디(ID)</b>와 <b>비밀번호(PW)</b> 입력 후 <b>인증 시작</b> 클릭</li>
+          <li>로그인 성공 → 내 권한에 맞는 화면으로 자동 이동</li>
+          <li>실패 시 '로그인 정보가 올바르지 않습니다.' 메시지 → 관리자 문의</li>
+        </ol>
+        <p style='margin:8px 0 0;color:#7a5c00;background:#fff3d4;padding:6px 10px;border-radius:5px;'>
+          ⚠ 비밀번호는 대소문자를 구분합니다. 초기 비밀번호는 관리자에게 문의하세요.
+        </p>""")
+
+    # ── 2. 생산 상태 흐름도 ──────────────────────────────────
+    with st.expander("🔄 2. 생산 상태 흐름도"):
+        _man_section("🔄", "제품이 거치는 상태 변화", "#2B7CB5")
+        _man_box("""
+        <div style='display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 0;'>
+          <span style='background:#2B7CB5;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>조립중</span>
+          <span style='color:#aaa;'>▶</span>
+          <span style='background:#0D9488;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>검사대기</span>
+          <span style='color:#aaa;'>▶</span>
+          <span style='background:#0D9488;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>검사중</span>
+          <span style='color:#aaa;'>▶</span>
+          <span style='background:#16A34A;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>OQC대기</span>
+          <span style='color:#aaa;'>▶</span>
+          <span style='background:#16A34A;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>OQC중</span>
+          <span style='color:#aaa;'>▶</span>
+          <span style='background:#F4892A;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>출하승인</span>
+          <span style='color:#aaa;'>▶</span>
+          <span style='background:#7C3AED;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>포장중</span>
+          <span style='color:#aaa;'>▶</span>
+          <span style='background:#1B3A5C;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>✅ 완료</span>
+        </div>
+        <hr style='border:none;border-top:1px solid #e0d8c8;margin:10px 0;'>
+        <p style='margin:0;'><b>🔴 불량 발생 시:</b>
+          <span style='background:#DC2626;color:#fff;padding:3px 8px;border-radius:4px;font-size:0.82rem;'>불량 처리 중</span>
+          → 불량 공정에서 원인 분석 →
+          <span style='background:#F4892A;color:#fff;padding:3px 8px;border-radius:4px;font-size:0.82rem;'>수리 완료(재투입)</span>
+          → 검사대기 복귀
+        </p>""")
+
+    # ── 3. 조립 라인 ────────────────────────────────────────
+    with st.expander("🔧 3. 조립 라인 사용법"):
+        _man_section("🔧", "조립 라인", "#16A34A")
+        _man_box("""
+        <b>① 오늘 일정 확인</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>화면 상단에 당일 생산 일정이 자동 표시됩니다.</li>
+          <li>새 일정 등록 시 알림 팝업 → <b>확인</b> 버튼으로 닫기</li>
+        </ul>
+        <b>② 신규 제품 등록</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>모델명·품목코드·Cell(작업대)·시리얼 번호 입력</li>
+          <li>바코드 스캐너 연동 가능 — 스캔 후 자동 입력됩니다.</li>
+          <li>자재 시리얼(부품 S/N)은 별도 항목에 추가 등록 가능</li>
+        </ul>
+        <b>③ 조립 완료 처리</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>이력 목록에서 완료된 항목 체크박스 선택</li>
+          <li><b>조립 완료</b> 버튼 클릭 → 상태가 <b>검사대기</b>로 자동 전환</li>
+          <li>불량 발생 시 <b>불량 처리</b> 버튼 클릭</li>
+        </ul>
+        <p style='margin:6px 0 0;background:#e8f5e9;padding:6px 10px;border-radius:5px;color:#1B5E20;'>
+          💡 사이드바에서 반(제조1반·2반·3반)을 선택하면 해당 반의 일정과 이력만 표시됩니다.
+        </p>""")
+
+    # ── 4. 검사 라인 ────────────────────────────────────────
+    with st.expander("🔍 4. 검사 라인 사용법"):
+        _man_section("🔍", "검사 라인", "#0D9488")
+        _man_box("""
+        <b>① 입고 대기 처리 (검사대기 → 검사중)</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>조립 완료된 제품 목록이 <b>검사대기</b> 섹션에 표시됩니다.</li>
+          <li>시리얼 번호 스캔/검색으로 빠른 조회</li>
+          <li>체크박스 선택 후 <b>일괄 입고</b> 버튼 → <b>검사중</b>으로 전환</li>
+        </ul>
+        <b>② 검사 판정</b>
+        <ul style='margin:4px 0 0;padding-left:1.4em;'>
+          <li><b>✅ 합격</b> 버튼 → 상태가 <b>OQC대기</b>로 자동 전환</li>
+          <li><b>🚫 불합격</b> 버튼 → 증상 메모 입력 후 확인 → <b>불량 처리 중</b>으로 전환</li>
+        </ul>""")
+
+    # ── 5. 포장 라인 ────────────────────────────────────────
+    with st.expander("📦 5. 포장 라인 사용법"):
+        _man_section("📦", "포장 라인", "#7C3AED")
+        _man_box("""
+        <b>① 입고 대기 처리 (출하승인 → 포장중)</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>OQC 합격(출하승인) 제품이 목록에 표시됩니다.</li>
+          <li>체크박스 선택 후 <b>일괄 입고</b> 버튼 → <b>포장중</b>으로 전환</li>
+        </ul>
+        <b>② 포장 완료 처리</b>
+        <ul style='margin:4px 0 0;padding-left:1.4em;'>
+          <li>포장중 목록에서 <b>포장 완료</b> 버튼 클릭 → <b>완료</b> 상태로 최종 처리</li>
+          <li>완료된 수량은 KPI 대시보드에 자동 반영됩니다.</li>
+        </ul>""")
+
+    # ── 6. OQC 라인 ─────────────────────────────────────────
+    with st.expander("🏅 6. OQC 라인 사용법"):
+        _man_section("🏅", "OQC 라인 (최종 출하 품질 검사)", "#16A34A")
+        _man_box("""
+        <b>① OQC 시작</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>검사 완료(OQC대기) 제품 목록에서 <b>OQC 시작</b> 버튼 클릭 → <b>OQC중</b> 전환</li>
+        </ul>
+        <b>② 최종 판정</b>
+        <ul style='margin:4px 0 0;padding-left:1.4em;'>
+          <li><b>✅ 합격</b> → <b>출하승인</b> (포장 라인으로 이동)</li>
+          <li><b>🚫 부적합</b> → 부적합 사유 입력 후 <b>불량 처리 중</b>으로 전환</li>
+        </ul>""")
+
+    # ── 7. 불량 공정 ─────────────────────────────────────────
+    with st.expander("🛠 7. 불량 공정 처리"):
+        _man_section("🛠", "불량 공정", "#DC2626")
+        _man_box("""
+        <ol style='margin:0;padding-left:1.4em;'>
+          <li>불량 처리 중 목록에서 해당 제품 확인</li>
+          <li><b>불량 원인</b> 드롭다운에서 원인 선택 (또는 직접 입력)</li>
+          <li><b>조치 방법</b> 선택 (재작업·폐기·반품 등)</li>
+          <li><b>조치 완료</b> 버튼 클릭 → <b>수리 완료(재투입)</b> 상태로 전환</li>
+          <li>재투입된 제품은 <b>검사대기</b> 상태로 복귀하여 재검사 진행</li>
+        </ol>""")
+
+    # ── 8. FAQ ───────────────────────────────────────────────
+    with st.expander("❓ 8. 자주 묻는 질문 (FAQ)"):
+        _man_section("❓", "FAQ", "#64748B")
+        _man_box("""
+        <table style='width:100%;border-collapse:collapse;font-size:0.91rem;'>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:8px 12px;font-weight:700;width:42%;border-bottom:1px solid #ddd;'>Q. 로그인이 안 됩니다.</td>
+            <td style='padding:8px 12px;border-bottom:1px solid #ddd;'>A. 아이디/비밀번호 재확인 후 관리자에게 계정 재설정 요청하세요.</td>
+          </tr>
+          <tr>
+            <td style='padding:8px 12px;font-weight:700;border-bottom:1px solid #ddd;'>Q. 데이터가 표시되지 않습니다.</td>
+            <td style='padding:8px 12px;border-bottom:1px solid #ddd;'>A. 사이드바의 Supabase 경고 확인 후 페이지를 새로 고침하세요.</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:8px 12px;font-weight:700;border-bottom:1px solid #ddd;'>Q. 버튼을 눌렀는데 반응이 없습니다.</td>
+            <td style='padding:8px 12px;border-bottom:1px solid #ddd;'>A. 처리 후 자동 새로고침됩니다. 잠시 기다려 주세요.</td>
+          </tr>
+          <tr>
+            <td style='padding:8px 12px;font-weight:700;border-bottom:1px solid #ddd;'>Q. 불량 처리 후 제품이 안 보입니다.</td>
+            <td style='padding:8px 12px;border-bottom:1px solid #ddd;'>A. 불량 공정 화면에서 해당 시리얼을 검색하세요.</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:8px 12px;font-weight:700;'>Q. 내 반이 아닌 데이터가 보입니다.</td>
+            <td style='padding:8px 12px;'>A. 사이드바에서 본인 반(제조1반·2반·3반)을 선택하세요.</td>
+          </tr>
+        </table>""")
+
+elif curr_l == "관리자 매뉴얼":
+    # ══════════════════════════════════════════════════════════
+    # 🔐 관리자 매뉴얼
+    # ══════════════════════════════════════════════════════════
+    st.markdown("<h2 class='centered-title'>🔐 관리자 매뉴얼</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;color:#8a7f72;font-size:0.9rem;'>스마트 물류 대시보드 &nbsp;·&nbsp; 관리자·마스터 전용</p>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    def _adm_section(icon, title, color="#1B3A5C"):
+        st.markdown(f"""
+        <div style='background:{color};color:#fff;padding:8px 16px;border-radius:8px 8px 0 0;
+                    font-weight:700;font-size:1.0rem;margin-top:16px;'>
+            {icon} {title}
+        </div>""", unsafe_allow_html=True)
+
+    def _adm_box(html_content, bg="#f8f6f2"):
+        st.markdown(f"""
+        <div style='background:{bg};border:1px solid #ddd5c0;border-radius:0 0 8px 8px;
+                    padding:14px 18px;font-size:0.92rem;line-height:1.75;margin-bottom:4px;'>
+            {html_content}
+        </div>""", unsafe_allow_html=True)
+
+    # ── 1. 사용자 권한 안내 ──────────────────────────────────
+    with st.expander("👥 1. 사용자 권한(Role) 안내", expanded=True):
+        _adm_section("👥", "역할별 접근 메뉴")
+        _adm_box("""
+        <table style='width:100%;border-collapse:collapse;font-size:0.89rem;'>
+          <tr style='background:#1B3A5C;color:#fff;'>
+            <th style='padding:7px 10px;text-align:left;'>역할</th>
+            <th style='padding:7px 10px;text-align:left;'>Role ID</th>
+            <th style='padding:7px 10px;text-align:left;'>접근 가능 화면</th>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>👤 마스터 관리자</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>master</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>전체 메뉴</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>🛡 관리자</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>admin</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>전체 메뉴</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>🗼 컨트롤 타워</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>control_tower</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>KPI·리포트·마스터관리·매뉴얼</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>🔧 조립 담당자</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>assembly_team</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>조립 라인·작업자 매뉴얼</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>🔍 검사 담당자</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>qc_team</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>검사 라인·불량공정·작업자 매뉴얼</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>📦 포장 담당자</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>packing_team</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>포장 라인·작업자 매뉴얼</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>📅 일정 관리자</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>schedule_manager</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>생산 지표 관리·작업자 매뉴얼</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;'>🏅 OQC 품질팀</td>
+            <td style='padding:6px 10px;font-family:monospace;'>oqc_team</td>
+            <td style='padding:6px 10px;'>OQC 라인·작업자 매뉴얼</td>
+          </tr>
+        </table>
+        <p style='margin:10px 0 0;color:#1B5E20;background:#e8f5e9;padding:6px 10px;border-radius:5px;'>
+          💡 계정 등록·수정·삭제는 Supabase Table Editor → <code>users</code> 테이블에서 직접 관리합니다.
+        </p>""")
+
+    # ── 2. 마스터 데이터 관리 ────────────────────────────────
+    with st.expander("⚙ 2. 마스터 데이터 관리"):
+        _adm_section("⚙", "모델·품목코드 기준 정보 등록", "#2B7CB5")
+        _adm_box("""
+        <p style='margin:0 0 8px;background:#fef2f2;padding:6px 10px;border-radius:5px;color:#7F1D1D;font-weight:700;'>
+          🔐 마스터 비밀번호 인증 필요 — 관리자·마스터 권한만 접근 가능
+        </p>
+        <b>모델 등록</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>반별(제조1·2·3반) 탭 선택 후 모델명 입력 (줄바꿈으로 여러 개 한 번에 등록)</li>
+          <li>등록된 모델은 조립 라인 등록 화면의 드롭다운에 즉시 반영</li>
+        </ul>
+        <b>품목코드(P/N) 등록</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>모델 선택 후 품목코드 입력 (줄바꿈으로 일괄 등록 가능)</li>
+          <li>모델-품목 연결 관계가 설정되어 조립 화면에서 선택 가능</li>
+        </ul>
+        <b>삭제</b>
+        <ul style='margin:4px 0 0;padding-left:1.4em;'>
+          <li>개별 삭제: 목록에서 삭제 버튼 클릭 (확인 팝업)</li>
+          <li>전체 삭제: 해당 반의 모든 모델/품목 일괄 삭제</li>
+          <li>⚠ 삭제는 되돌릴 수 없으므로 신중하게 진행</li>
+        </ul>""")
+
+    # ── 3. 생산 일정 관리 ────────────────────────────────────
+    with st.expander("📅 3. 생산 일정 관리"):
+        _adm_section("📅", "생산 계획 등록 및 편집", "#D97706")
+        _adm_box("""
+        <b>일정 등록 방법</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>메인 현황판 하단 달력에서 <b>날짜 클릭</b> → 일정 입력 팝업</li>
+          <li>입력 항목: 날짜·유형·모델명·P/N·조립수량·출하계획·특이사항</li>
+          <li>유형별 색상: 🔵 조립계획 / 🟢 포장계획 / 🟡 출하계획</li>
+        </ul>
+        <b>엑셀 일괄 업로드</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>생산 지표 관리 → <b>일정 관리</b> 탭 → 엑셀 업로드</li>
+          <li>지원 형식: .xlsx (헤더: 날짜·유형·모델·P/N·조립수·출하·특이사항)</li>
+        </ul>
+        <b>편집·삭제 권한</b>
+        <ul style='margin:4px 0 0;padding-left:1.4em;'>
+          <li>마스터·관리자·컨트롤 타워·일정 관리자만 추가/수정/삭제 가능</li>
+        </ul>""")
+
+    # ── 4. 생산 지표(KPI) 관리 ───────────────────────────────
+    with st.expander("📊 4. 생산 지표(KPI) 분석"):
+        _adm_section("📊", "KPI 대시보드 활용", "#1B3A5C")
+        _adm_box("""
+        <b>필터 옵션</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>기간: 오늘 / 이번 주 / 이번 달</li>
+          <li>반: 전체 / 제조1반 / 제조2반 / 제조3반</li>
+        </ul>
+        <b>주요 확인 지표</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li><b>투입·완료·진행·불량</b> 수량 카드</li>
+          <li><b>공정 흐름 표</b>: 각 단계별 적체 수량 → 병목 지점 파악</li>
+          <li><b>불량 분석 차트</b>: 라인별·모델별 불량 분포</li>
+          <li><b>FPY(First Pass Yield)</b>: 전체 품질 수준 지표</li>
+          <li><b>월별 달성률 추이</b>: 계획 대비 실적 그래프</li>
+        </ul>
+        <p style='margin:0;background:#e0f2fe;padding:6px 10px;border-radius:5px;color:#0C4A6E;'>
+          💡 공정 흐름 표에서 특정 단계 수량이 급증하면 해당 공정에 병목이 발생한 것입니다.
+        </p>""")
+
+    # ── 5. 수리 현황 리포트 ──────────────────────────────────
+    with st.expander("📋 5. 수리 현황 리포트 & 감사 로그"):
+        _adm_section("📋", "품질 추적 및 이력 관리", "#DC2626")
+        _adm_box("""
+        <b>수리 현황 리포트</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>라인별 불량 건수 막대 차트</li>
+          <li>모델별 불량 분포 파이 차트</li>
+          <li>전체 수리 이력 테이블 (시리얼·모델·원인·조치)</li>
+        </ul>
+        <b>감사 로그 (Audit Log)</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>모든 상태 변화 이력 기록 (누가·언제·어떤 제품을·어떤 상태로 변경)</li>
+          <li>필터: 반 / 이후 상태 / 시리얼 번호 검색</li>
+          <li>컬럼: 시간·시리얼·모델·반·이전상태·이후상태·작업자·비고</li>
+        </ul>
+        <p style='margin:0;background:#fef2f2;padding:6px 10px;border-radius:5px;color:#7F1D1D;'>
+          ⚠ 감사 로그는 완전한 추적 이력(Traceability)을 제공합니다. 품질 이슈 발생 시 반드시 확인하세요.
+        </p>""")
+
+    # ── 6. 시스템 설정 안내 ──────────────────────────────────
+    with st.expander("🛠 6. 시스템 설정 안내 (Streamlit Secrets)"):
+        _adm_section("🛠", "운영 환경 설정", "#64748B")
+        _adm_box("""
+        <b>Streamlit Cloud Secrets 주요 항목</b>
+        <table style='width:100%;border-collapse:collapse;font-size:0.88rem;margin-top:6px;'>
+          <tr style='background:#1B3A5C;color:#fff;'>
+            <th style='padding:6px 10px;text-align:left;'>키</th>
+            <th style='padding:6px 10px;text-align:left;'>설명</th>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>master_admin_pw_hash</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>마스터 데이터 관리 비밀번호 SHA-256 해시 (최상위 키)</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>[supabase] url / key</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>Supabase 프로젝트 URL 및 anon 키</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>[connections.gsheets]</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>Google Sheets 서비스 계정 인증 정보</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;font-family:monospace;'>[fallback_users]</td>
+            <td style='padding:6px 10px;'>Supabase 연결 실패 시 임시 계정 해시 (선택)</td>
+          </tr>
+        </table>
+        <p style='margin:10px 0 0;background:#fff3d4;padding:6px 10px;border-radius:5px;color:#7a5c00;'>
+          ⚠ <code>master_admin_pw_hash</code>는 반드시 <b>최상위 키</b>(어떤 [섹션] 밖)에 위치해야 합니다.
+        </p>""")
+
+    # ── 7. Supabase 테이블 구조 ──────────────────────────────
+    with st.expander("🗄 7. Supabase 테이블 구조"):
+        _adm_section("🗄", "DB 테이블 목록 및 주요 컬럼", "#2B7CB5")
+        _adm_box("""
+        <table style='width:100%;border-collapse:collapse;font-size:0.88rem;'>
+          <tr style='background:#1B3A5C;color:#fff;'>
+            <th style='padding:6px 10px;text-align:left;'>테이블</th>
+            <th style='padding:6px 10px;text-align:left;'>주요 컬럼</th>
+            <th style='padding:6px 10px;text-align:left;'>용도</th>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>production</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>시간·반·라인·cell·모델·품목코드·시리얼·상태·deleted_at</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>생산 이력 메인 테이블</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>users</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>username·password_hash·role</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>사용자 계정 관리</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>model_master</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>반·모델명·품목코드</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>모델/품목 기준 정보</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>production_schedule</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>날짜·유형·모델·수량·출하계획</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>생산 일정</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>audit_log</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>시간·시리얼·이전상태·이후상태·작업자</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>상태 변화 이력</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;font-family:monospace;'>system_config</td>
+            <td style='padding:6px 10px;'>key·master_hash</td>
+            <td style='padding:6px 10px;'>마스터 비밀번호 등 시스템 설정</td>
+          </tr>
+        </table>""")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.info("📌 Supabase 테이블 편집은 [supabase.com](https://supabase.com) → 프로젝트 → Table Editor에서 진행합니다.")
 
 
 
