@@ -1469,10 +1469,13 @@ if 'user_db' not in st.session_state:
         result = sb.table("users").select("*").execute()
         if result.data:
             # DB에서 로드 성공
+            import json as _json
             st.session_state.user_db = {
                 user['username']: {
                     'pw_hash': user['password_hash'],
-                    'role': user['role']
+                    'role': user['role'],
+                    **({'custom_permissions': _json.loads(user['custom_permissions'])}
+                       if user.get('custom_permissions') else {})
                 }
                 for user in result.data
             }
@@ -4774,11 +4777,12 @@ elif curr_l == "마스터 관리":
                         current_perms = ROLES.get(current_role, [])
                     
                     # 모든 가능한 메뉴 목록
-                    all_menus = ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", 
-                                "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리", "사용 설명서"]
-                    
+                    all_menus = ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인",
+                                "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리",
+                                "작업자 매뉴얼", "관리자 매뉴얼"]
+
                     st.markdown("**접근 가능 메뉴:**")
-                    
+
                     # 체크박스로 권한 선택
                     selected_perms = []
                     cols = st.columns(2)
@@ -4786,18 +4790,30 @@ elif curr_l == "마스터 관리":
                         col = cols[idx % 2]
                         if col.checkbox(menu, value=(menu in current_perms), key=f"perm_{selected_user}_{menu}"):
                             selected_perms.append(menu)
-                    
+
                     perm_col1, perm_col2 = st.columns(2)
                     if perm_col1.button("💾 권한 저장", key="save_custom_perm", use_container_width=True, type="primary"):
                         st.session_state.user_db[selected_user]["custom_permissions"] = selected_perms
-                        st.success(f"✅ [{selected_user}] 권한 업데이트 완료 ({len(selected_perms)}개 메뉴)")
-                        st.rerun()
-                    
+                        try:
+                            import json
+                            get_supabase().table("users").update(
+                                {"custom_permissions": json.dumps(selected_perms, ensure_ascii=False)}
+                            ).eq("username", selected_user).execute()
+                            st.success(f"✅ [{selected_user}] 권한 저장 완료 ({len(selected_perms)}개 메뉴) — DB 반영됨")
+                        except Exception as _e:
+                            st.success(f"✅ [{selected_user}] 권한 저장 완료 ({len(selected_perms)}개 메뉴)")
+                            st.caption(f"DB 저장 실패 (세션에만 적용): {_e}")
+
                     if perm_col2.button("↩️ 기본 권한 복원", key="reset_custom_perm", use_container_width=True):
                         if "custom_permissions" in st.session_state.user_db[selected_user]:
                             del st.session_state.user_db[selected_user]["custom_permissions"]
-                        st.success(f"✅ [{selected_user}] 역할 기본 권한으로 복원됨")
-                        st.rerun()
+                        try:
+                            get_supabase().table("users").update(
+                                {"custom_permissions": None}
+                            ).eq("username", selected_user).execute()
+                            st.success(f"✅ [{selected_user}] 기본 권한으로 복원됨 — DB 반영됨")
+                        except Exception:
+                            st.success(f"✅ [{selected_user}] 기본 권한으로 복원됨")
                 else:
                     st.info("등록된 사용자가 없습니다. 먼저 계정을 생성해주세요.")
 
