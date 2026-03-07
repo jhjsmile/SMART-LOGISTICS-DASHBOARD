@@ -745,6 +745,29 @@ def delete_production_row_by_sn(시리얼: str) -> bool:
     except Exception as e:
         st.error(f"삭제 실패: {e}"); return False
 
+def load_app_setting(key: str):
+    """app_settings 테이블에서 값 로드. 없으면 None 반환."""
+    try:
+        import json as _j
+        res = get_supabase().table("app_settings").select("value").eq("key", key).execute()
+        if res.data:
+            return _j.loads(res.data[0]["value"])
+    except Exception:
+        pass
+    return None
+
+def save_app_setting(key: str, value) -> bool:
+    """app_settings 테이블에 upsert 저장."""
+    try:
+        import json as _j
+        get_supabase().table("app_settings").upsert(
+            {"key": key, "value": _j.dumps(value, ensure_ascii=False)},
+            on_conflict="key"
+        ).execute()
+        return True
+    except Exception:
+        return False
+
 def delete_all_audit_log() -> bool:
     try:
         get_supabase().table("audit_log").delete().gte("id", 0).execute()
@@ -1416,16 +1439,15 @@ if 'cal_month_month'  not in st.session_state: st.session_state.cal_month_month 
 if 'cal_view'        not in st.session_state: st.session_state.cal_view        = "주별"
 if 'cal_week_idx'    not in st.session_state: st.session_state.cal_week_idx    = 0
 # ── 드롭박스 옵션 기본값 ──────────────────────────────────────────
-if 'dropdown_oqc_defect' not in st.session_state:
-    st.session_state.dropdown_oqc_defect = [
+_DD_DEFAULTS = {
+    "dropdown_oqc_defect": [
         "(선택)",
         "외관 불량 (스크래치/변형)", "기능 불량 (동작 이상)",
         "라벨 / 刻印 오류", "포장 불량", "치수 불량",
         "이물질 혼입", "수량 부족", "서류 오류",
         "기타 (직접 입력)",
-    ]
-if 'dropdown_defect_cause' not in st.session_state:
-    st.session_state.dropdown_defect_cause = [
+    ],
+    "dropdown_defect_cause": [
         "(선택)",
         "납땜 불량", "부품 미삽", "부품 오삽", "부품 불량",
         "기구 파손", "기구 간섭", "나사 체결 불량",
@@ -1433,9 +1455,8 @@ if 'dropdown_defect_cause' not in st.session_state:
         "외관 불량 (스크래치)", "외관 불량 (변형)",
         "통신 불량", "전원 불량", "센서 불량",
         "기타 (직접 입력)",
-    ]
-if 'dropdown_repair_action' not in st.session_state:
-    st.session_state.dropdown_repair_action = [
+    ],
+    "dropdown_repair_action": [
         "(선택)",
         "재납땜", "부품 교체", "부품 재삽입",
         "기구 교체", "나사 재체결",
@@ -1443,12 +1464,16 @@ if 'dropdown_repair_action' not in st.session_state:
         "외관 교체", "세척 후 재검사",
         "재검사 후 양품 확인", "폐기 처리",
         "기타 (직접 입력)",
-    ]
-if 'dropdown_mat_name' not in st.session_state:
-    st.session_state.dropdown_mat_name = [
+    ],
+    "dropdown_mat_name": [
         "PCB", "배터리", "메인보드", "디스플레이",
         "케이블", "모듈", "센서", "커넥터", "기타",
-    ]
+    ],
+}
+for _dd_key, _dd_default in _DD_DEFAULTS.items():
+    if _dd_key not in st.session_state:
+        _loaded = load_app_setting(_dd_key)
+        st.session_state[_dd_key] = _loaded if _loaded is not None else _dd_default
 if 'cal_action'      not in st.session_state: st.session_state.cal_action      = None
 if 'cal_action_data' not in st.session_state: st.session_state.cal_action_data = None
 if 'cal_action_sub'      not in st.session_state: st.session_state.cal_action_sub      = None
@@ -4908,7 +4933,6 @@ elif curr_l == "마스터 관리":
             ec1, ec2 = st.columns([1, 1])
             if ec1.button(f"💾 저장", key=f"dd_save_{tab_key}", use_container_width=True, type="primary"):
                 new_items = [x.strip() for x in new_text.strip().splitlines() if x.strip()]
-                # 중복 제거 후 고정 항목 앞뒤 추가
                 seen = set()
                 deduped = []
                 for item in new_items:
@@ -4916,10 +4940,16 @@ elif curr_l == "마스터 관리":
                         seen.add(item); deduped.append(item)
                 final = ["(선택)"] + deduped + ["기타 (직접 입력)"]
                 st.session_state[ss_key] = final
-                st.success(f"✅ {label} 저장 완료 ({len(deduped)}개 항목)")
+                if save_app_setting(ss_key, final):
+                    st.success(f"✅ {label} 저장 완료 ({len(deduped)}개 항목) — DB 반영됨")
+                else:
+                    st.success(f"✅ {label} 저장 완료 ({len(deduped)}개 항목)")
+                    st.caption("DB 저장 실패 — 앱 재시작 시 초기화될 수 있습니다.")
                 st.rerun()
             if ec2.button(f"↩️ 기본값 복원", key=f"dd_reset_{tab_key}", use_container_width=True):
-                st.session_state.pop(ss_key, None)
+                default_val = _DD_DEFAULTS.get(ss_key, [])
+                st.session_state[ss_key] = default_val
+                save_app_setting(ss_key, default_val)
                 st.success("기본값으로 복원됩니다.")
                 st.rerun()
             st.caption(f"현재 {len(editable)}개 항목 등록됨 (선택·직접입력 제외)")
@@ -4941,10 +4971,15 @@ elif curr_l == "마스터 관리":
                 for item in items:
                     if item not in seen: seen.add(item); deduped.append(item)
                 st.session_state["dropdown_mat_name"] = deduped
-                st.success(f"✅ 자재명 저장 완료 ({len(deduped)}개)")
+                if save_app_setting("dropdown_mat_name", deduped):
+                    st.success(f"✅ 자재명 저장 완료 ({len(deduped)}개) — DB 반영됨")
+                else:
+                    st.success(f"✅ 자재명 저장 완료 ({len(deduped)}개)")
                 st.rerun()
             if mc2.button("↩️ 기본값 복원", key="dd_reset_mat", use_container_width=True):
-                st.session_state.pop("dropdown_mat_name", None)
+                default_val = _DD_DEFAULTS.get("dropdown_mat_name", [])
+                st.session_state["dropdown_mat_name"] = default_val
+                save_app_setting("dropdown_mat_name", default_val)
                 st.success("기본값으로 복원됩니다."); st.rerun()
             st.caption(f"현재 {len(current)}개 항목 등록됨")
 
