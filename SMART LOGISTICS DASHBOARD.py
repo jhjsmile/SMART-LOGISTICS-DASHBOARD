@@ -4733,7 +4733,7 @@ elif curr_l == "마스터 관리":
 
         with ac1:
             # ✨ 개선: 탭으로 기본 생성과 개별 권한 관리 분리
-            user_tab1, user_tab2 = st.tabs(["➕ 계정 생성", "🔑 개별 권한 관리"])
+            user_tab1, user_tab2, user_tab3 = st.tabs(["➕ 계정 생성", "🔑 개별 권한 관리", "🗑️ 계정 삭제"])
             
             with user_tab1:
                 with st.form("user_mgmt"):
@@ -4800,6 +4800,44 @@ elif curr_l == "마스터 관리":
                         st.rerun()
                 else:
                     st.info("등록된 사용자가 없습니다. 먼저 계정을 생성해주세요.")
+
+            with user_tab3:
+                st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>🗑️ 계정 삭제</p>", unsafe_allow_html=True)
+                del_user_list = [u for u in st.session_state.user_db.keys()
+                                 if u != st.session_state.user_id]
+                if del_user_list:
+                    del_target = st.selectbox("삭제할 계정 선택", del_user_list, key="del_user_select")
+                    del_role = st.session_state.user_db[del_target].get("role", "")
+                    st.caption(f"역할: **{del_role}**")
+                    if not st.session_state.get("del_user_confirm", False):
+                        if st.button(f"🗑️ [{del_target}] 삭제", key="del_user_btn",
+                                     use_container_width=True, type="primary"):
+                            st.session_state["del_user_confirm"] = True
+                            st.session_state["del_user_target"] = del_target
+                            st.rerun()
+                    else:
+                        confirm_target = st.session_state.get("del_user_target", "")
+                        st.warning(f"⚠️ [{confirm_target}] 계정을 삭제하시겠습니까? 복구할 수 없습니다.")
+                        dc1, dc2 = st.columns(2)
+                        if dc1.button("✅ 삭제 확인", key="del_user_yes",
+                                      use_container_width=True, type="primary"):
+                            if confirm_target in st.session_state.user_db:
+                                del st.session_state.user_db[confirm_target]
+                            try:
+                                get_supabase().table("users").delete().eq(
+                                    "username", confirm_target).execute()
+                                st.success(f"✅ [{confirm_target}] 계정 삭제 완료")
+                            except Exception as _e:
+                                st.warning(f"메모리 삭제 완료, DB 삭제 실패: {_e}")
+                            st.session_state["del_user_confirm"] = False
+                            st.session_state["del_user_target"] = ""
+                            st.rerun()
+                        if dc2.button("취소", key="del_user_no", use_container_width=True):
+                            st.session_state["del_user_confirm"] = False
+                            st.session_state["del_user_target"] = ""
+                            st.rerun()
+                else:
+                    st.info("삭제 가능한 계정이 없습니다. (본인 계정은 삭제 불가)")
 
         with ac2:
             st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>🗄️ 시스템 데이터 관리</p>", unsafe_allow_html=True)
