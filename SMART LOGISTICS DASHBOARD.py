@@ -2267,10 +2267,10 @@ elif curr_l == "조립 라인":
             st.session_state[_msn_cnt_key] = 0
         _msn_field_key = f"sn_input_{curr_g}_{st.session_state[_msn_cnt_key]}"
         target_sn = ef2.text_input(
-            "📦 메인 S/N (바코드 스캔 → 자동 등록)",
-            placeholder="스캔하면 즉시 등록됩니다",
+            "📦 메인 S/N",
+            placeholder="S/N 입력 후 아래 버튼으로 등록",
             key=_msn_field_key)
-        ef2.caption("💡 바코드 스캔 시 Enter가 자동 입력되어 즉시 등록됩니다")
+        ef2.caption("💡 자재 시리얼 입력 완료 후 [생산 시작 등록] 버튼을 누르세요")
 
         st.divider()
 
@@ -2365,12 +2365,7 @@ elif curr_l == "조립 라인":
                 st.toast(f"✅ 등록 완료: {sn_val}", icon="✅")
                 st.rerun()
 
-        if target_sn.strip() and target_model != "선택하세요.":
-            _do_register_sn(target_sn.strip())
-        elif target_sn.strip() and target_model == "선택하세요.":
-            st.warning("⚠️ 모델을 먼저 선택해주세요.")
-
-        if st.button("▶️ 생산 시작 등록", use_container_width=True, type="secondary", key=f"start_btn_{curr_g}"):
+        if st.button("▶️ 생산 시작 등록", use_container_width=True, type="primary", key=f"start_btn_{curr_g}"):
             if target_model != "선택하세요." and target_sn.strip():
                 _do_register_sn(target_sn.strip())
             else:
