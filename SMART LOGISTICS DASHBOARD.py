@@ -700,6 +700,8 @@ def delete_all_rows() -> bool:
     """
     ✅ 보안 개선: Soft delete + 백업 자동 생성 + 2단계 확인 강화
     """
+    # rerun 이후에도 메시지가 유지되도록 session_state에 수집
+    msgs = []
     try:
         sb = get_supabase()
         
@@ -708,7 +710,6 @@ def delete_all_rows() -> bool:
         all_data = sb.table("production").select("*").execute()
         
         if all_data.data:
-            # 백업 테이블에 저장
             backup_records = [{
                 **record,
                 'deleted_at': backup_time,
@@ -718,24 +719,22 @@ def delete_all_rows() -> bool:
             try:
                 sb.table("production_backup").insert(backup_records).execute()
             except Exception as e:
-                # 백업 테이블이 없거나 삽입 실패
-                st.warning(f"⚠️ 백업 실패 (데이터 복구 불가능): {e}")
+                msgs.append(("warning", f"⚠️ 백업 실패 (데이터 복구 불가능): {e}"))
         
         # 2. Soft Delete (deleted_at 컬럼 사용)
-        # Hard delete 대신 삭제 표시만
         try:
             sb.table("production").update({
                 'deleted_at': backup_time,
                 'deleted_by': st.session_state.get('user_id', 'unknown')
             }).is_('deleted_at', 'null').execute()
         except Exception as e:
-            # deleted_at 컬럼이 없으면 hard delete (위험!) - 오류 정보 포함
-            st.error(f"🚨 Soft delete 불가 ({e}). Hard delete 실행됩니다.")
+            msgs.append(("warning", f"⚠️ Soft delete 불가 — Hard delete 실행됨: {e}"))
             sb.table("production").delete().gte("id", 0).execute()
         
+        st.session_state['_delete_msgs'] = msgs
         return True
     except Exception as e:
-        st.error(f"삭제 실패: {e}")
+        st.session_state['_delete_msgs'] = [("error", f"삭제 실패: {e}")]
         return False
 
 def delete_production_row_by_sn(시리얼: str) -> bool:
@@ -5051,9 +5050,22 @@ elif curr_l == "마스터 관리":
                         st.cache_data.clear()
                         st.session_state.production_db = load_realtime_ledger()
                         st.session_state[_ck_prod_all] = False
-                        st.success("생산 이력 전체 삭제 완료"); st.rerun()
+                        st.session_state["_delete_result"] = "success"
+                        st.rerun()
+                    else:
+                        st.session_state["_delete_result"] = "fail"
+                        st.rerun()
                 if _pa3.button("취소", key="del_prod_all_no", use_container_width=True):
                     st.session_state[_ck_prod_all] = False; st.rerun()
+                # rerun 후 메시지 표시
+                _del_result = st.session_state.pop("_delete_result", None)
+                if _del_result == "success":
+                    st.success("✅ 생산 이력 전체 삭제 완료")
+                elif _del_result == "fail":
+                    st.error("❌ 삭제 실패")
+                for _lvl, _msg in st.session_state.pop("_delete_msgs", []):
+                    if _lvl == "warning": st.warning(_msg)
+                    elif _lvl == "error": st.error(_msg)
 
         # ─── 탭2: 감사 로그 ───────────────────────────────────────
         with del_tab2:
