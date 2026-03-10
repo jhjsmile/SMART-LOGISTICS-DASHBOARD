@@ -2241,7 +2241,8 @@ elif curr_l == "조립 라인":
         st.info("등록된 생산 내역이 없습니다.")
 
     # 자재 목록 마스터
-    MAT_NAME_OPTIONS = ["PCB", "배터리", "메인보드", "디스플레이", "케이블", "모듈", "센서", "커넥터", "기타"]
+    _mat_default = ["PCB", "배터리", "메인보드", "디스플레이", "케이블", "모듈", "센서", "커넥터", "기타"]
+    MAT_NAME_OPTIONS = st.session_state.get("dropdown_mat_name", _mat_default) or _mat_default
 
     _mat_list_key  = f"mat_list_{curr_g}"
     _scan_sn_key   = f"scan_sn_{curr_g}"
@@ -4949,33 +4950,70 @@ elif curr_l == "마스터 관리":
             st.caption(f"현재 {len(editable)}개 항목 등록됨 (선택·직접입력 제외)")
 
         def _render_mat_name_editor():
-            """자재명은 (선택)/기타 없는 단순 목록"""
-            current = st.session_state.get("dropdown_mat_name", [])
-            current_text = "\n".join(current)
-            new_text = st.text_area(
-                "자재명 목록 (한 줄에 하나씩)",
-                value=current_text, height=180,
-                key="dd_edit_mat",
-                placeholder="PCB\n배터리\n메인보드"
-            )
-            mc1, mc2 = st.columns([1, 1])
-            if mc1.button("💾 저장", key="dd_save_mat", use_container_width=True, type="primary"):
-                items = [x.strip() for x in new_text.strip().splitlines() if x.strip()]
-                seen = set(); deduped = []
-                for item in items:
-                    if item not in seen: seen.add(item); deduped.append(item)
-                st.session_state["dropdown_mat_name"] = deduped
-                if save_app_setting("dropdown_mat_name", deduped):
-                    st.success(f"✅ 자재명 저장 완료 ({len(deduped)}개) — DB 반영됨")
+            """자재명 목록 — 항목별 삭제 + 추가 + 전체삭제"""
+            _SS = "dropdown_mat_name"
+            current = list(st.session_state.get(_SS, []))
+
+            # ── 항목별 행 렌더 ───────────────────────────────────────
+            if current:
+                st.markdown("<p style='font-size:0.8rem;font-weight:700;color:#5a4f45;margin:0 0 6px 0;'>등록된 자재명</p>", unsafe_allow_html=True)
+                _del_idx = None
+                for i, item in enumerate(current):
+                    r1, r2 = st.columns([5, 1])
+                    r1.markdown(f"<div style='padding:5px 8px;background:#f5f2ec;border-radius:6px;font-size:0.85rem;'>{item}</div>", unsafe_allow_html=True)
+                    if r2.button("🗑", key=f"mat_del_item_{i}", help=f"{item} 삭제", use_container_width=True):
+                        _del_idx = i
+                if _del_idx is not None:
+                    current.pop(_del_idx)
+                    st.session_state[_SS] = current
+                    save_app_setting(_SS, current)
+                    st.rerun()
+            else:
+                st.info("등록된 자재명이 없습니다. 아래에서 추가하세요.")
+
+            st.divider()
+
+            # ── 신규 추가 ────────────────────────────────────────────
+            st.markdown("<p style='font-size:0.8rem;font-weight:700;color:#5a4f45;margin:0 0 4px 0;'>자재명 추가</p>", unsafe_allow_html=True)
+            na1, na2 = st.columns([4, 1])
+            new_item = na1.text_input("", placeholder="추가할 자재명 입력", key="mat_new_input", label_visibility="collapsed")
+            if na2.button("➕ 추가", key="mat_add_btn", use_container_width=True, type="primary"):
+                val = new_item.strip()
+                if val and val not in current:
+                    current.append(val)
+                    st.session_state[_SS] = current
+                    save_app_setting(_SS, current)
+                    st.rerun()
+                elif val in current:
+                    st.warning(f"'{val}'은 이미 등록된 자재명입니다.")
                 else:
-                    st.success(f"✅ 자재명 저장 완료 ({len(deduped)}개)")
+                    st.warning("자재명을 입력해주세요.")
+
+            st.divider()
+
+            # ── 전체 삭제 / 기본값 복원 ──────────────────────────────
+            bc1, bc2 = st.columns([1, 1])
+            if bc1.button("🗑 전체 삭제", key="mat_clear_all", use_container_width=True):
+                st.session_state["_mat_clear_confirm"] = True; st.rerun()
+            if bc2.button("↩️ 기본값 복원", key="dd_reset_mat", use_container_width=True):
+                default_val = _DD_DEFAULTS.get(_SS, [])
+                st.session_state[_SS] = default_val
+                save_app_setting(_SS, default_val)
                 st.rerun()
-            if mc2.button("↩️ 기본값 복원", key="dd_reset_mat", use_container_width=True):
-                default_val = _DD_DEFAULTS.get("dropdown_mat_name", [])
-                st.session_state["dropdown_mat_name"] = default_val
-                save_app_setting("dropdown_mat_name", default_val)
-                st.success("기본값으로 복원됩니다."); st.rerun()
+
+            if st.session_state.get("_mat_clear_confirm"):
+                st.error("⛔ 자재명 목록을 전체 삭제합니다. 계속하시겠습니까?")
+                cc1, cc2 = st.columns([1, 1])
+                if cc1.button("✅ 예, 전체 삭제", key="mat_clear_yes", type="primary", use_container_width=True):
+                    st.session_state[_SS] = []
+                    save_app_setting(_SS, [])
+                    st.session_state["_mat_clear_confirm"] = False
+                    st.rerun()
+                if cc2.button("취소", key="mat_clear_no", use_container_width=True):
+                    st.session_state["_mat_clear_confirm"] = False; st.rerun()
+
             st.caption(f"현재 {len(current)}개 항목 등록됨")
+
 
         with dd_tab1:
             _render_dropdown_editor("dropdown_oqc_defect", "OQC 부적합 사유", "oqc")
