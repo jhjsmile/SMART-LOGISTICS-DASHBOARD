@@ -4968,11 +4968,11 @@ elif curr_l == "마스터 관리":
                 if _del_idx is not None:
                     current.pop(_del_idx)
                     st.session_state[_SS] = current
-                    _save_result = save_app_setting(_SS, current)
-                    if _save_result is True:
+                    ok = save_app_setting(_SS, current)
+                    if ok:
                         st.toast("✅ 삭제 완료", icon="✅")
                     else:
-                        st.session_state["_mat_save_err"] = _save_result
+                        st.toast("⚠️ DB 저장 실패 — 앱 재시작 시 복원될 수 있습니다", icon="⚠️")
                     st.rerun()
             else:
                 st.info("등록된 자재명이 없습니다. 아래에서 추가하거나 기본값을 복원하세요.")
@@ -4988,11 +4988,11 @@ elif curr_l == "마스터 관리":
                 if val and val not in current:
                     current.append(val)
                     st.session_state[_SS] = current
-                    _save_result = save_app_setting(_SS, current)
-                    if _save_result is True:
+                    ok = save_app_setting(_SS, current)
+                    if ok:
                         st.toast(f"✅ '{val}' 추가 완료", icon="✅")
                     else:
-                        st.session_state["_mat_save_err"] = _save_result
+                        st.toast("⚠️ DB 저장 실패 — 앱 재시작 시 복원될 수 있습니다", icon="⚠️")
                     st.rerun()
                 elif val in current:
                     st.warning(f"'{val}'은 이미 등록된 자재명입니다.")
@@ -5008,9 +5008,9 @@ elif curr_l == "마스터 관리":
             if bc2.button("↩️ 기본값 복원", key="dd_reset_mat", use_container_width=True):
                 default_val = _DD_DEFAULTS.get(_SS, [])
                 st.session_state[_SS] = default_val
-                _save_result = save_app_setting(_SS, default_val)
-                if _save_result is not True:
-                    st.session_state["_mat_save_err"] = _save_result
+                ok = save_app_setting(_SS, default_val)
+                if not ok:
+                    st.toast("⚠️ DB 저장 실패", icon="⚠️")
                 st.rerun()
 
             if st.session_state.get("_mat_clear_confirm"):
@@ -5018,20 +5018,14 @@ elif curr_l == "마스터 관리":
                 cc1, cc2 = st.columns([1, 1])
                 if cc1.button("✅ 예, 전체 삭제", key="mat_clear_yes", type="primary", use_container_width=True):
                     st.session_state[_SS] = []
-                    _save_result = save_app_setting(_SS, [])
+                    ok = save_app_setting(_SS, [])
                     st.session_state["_mat_clear_confirm"] = False
-                    if _save_result is not True:
-                        st.session_state["_mat_save_err"] = _save_result
+                    if not ok:
+                        st.toast("⚠️ DB 저장 실패 — 앱 재시작 시 복원될 수 있습니다", icon="⚠️")
                     st.rerun()
                 if cc2.button("취소", key="mat_clear_no", use_container_width=True):
                     st.session_state["_mat_clear_confirm"] = False; st.rerun()
 
-            # ── DB 저장 오류 표시 ─────────────────────────────────
-            _err = st.session_state.pop("_mat_save_err", None)
-            if _err:
-                st.error(f"⚠️ DB 저장 실패 (앱 재시작 시 목록이 초기화됩니다):
-{_err}")
-                st.info("💡 Supabase app_settings 테이블에 key 컬럼 UNIQUE 제약이 필요합니다.")
             st.caption(f"현재 {len(current)}개 항목 등록됨")
 
 
