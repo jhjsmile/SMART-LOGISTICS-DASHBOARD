@@ -1472,7 +1472,7 @@ _DD_DEFAULTS = {
 for _dd_key, _dd_default in _DD_DEFAULTS.items():
     if _dd_key not in st.session_state:
         _loaded = load_app_setting(_dd_key)
-        st.session_state[_dd_key] = _loaded if _loaded is not None else _dd_default
+        st.session_state[_dd_key] = _loaded if _loaded else _dd_default
 if 'cal_action'      not in st.session_state: st.session_state.cal_action      = None
 if 'cal_action_data' not in st.session_state: st.session_state.cal_action_data = None
 if 'cal_action_sub'      not in st.session_state: st.session_state.cal_action_sub      = None
@@ -2241,8 +2241,7 @@ elif curr_l == "조립 라인":
         st.info("등록된 생산 내역이 없습니다.")
 
     # 자재 목록 마스터
-    _mat_default = ["PCB", "배터리", "메인보드", "디스플레이", "케이블", "모듈", "센서", "커넥터", "기타"]
-    MAT_NAME_OPTIONS = st.session_state.get("dropdown_mat_name", _mat_default) or _mat_default
+    MAT_NAME_OPTIONS = st.session_state.get("dropdown_mat_name") or ["PCB", "배터리", "메인보드", "디스플레이", "케이블", "모듈", "센서", "커넥터", "기타"]
 
     _mat_list_key  = f"mat_list_{curr_g}"
     _scan_sn_key   = f"scan_sn_{curr_g}"
@@ -4952,7 +4951,11 @@ elif curr_l == "마스터 관리":
         def _render_mat_name_editor():
             """자재명 목록 — 항목별 삭제 + 추가 + 전체삭제"""
             _SS = "dropdown_mat_name"
-            current = list(st.session_state.get(_SS, []))
+            _mat_defaults = ["PCB", "배터리", "메인보드", "디스플레이", "케이블", "모듈", "센서", "커넥터", "기타"]
+            current = list(st.session_state.get(_SS) or _mat_defaults)
+            # session_state가 비어있으면 기본값으로 동기화
+            if not st.session_state.get(_SS):
+                st.session_state[_SS] = current
 
             # ── 항목별 행 렌더 ───────────────────────────────────────
             if current:
