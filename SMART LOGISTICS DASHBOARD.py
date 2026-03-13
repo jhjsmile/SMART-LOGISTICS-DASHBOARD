@@ -48,6 +48,10 @@ IFRAME_BORDER_RADIUS_PX = 10
 # 데이터베이스
 DEFAULT_PAGE_SIZE = 100
 MAX_QUERY_RESULTS = 1000
+MAX_AUDIT_LOG_ROWS = 200
+MAX_PLAN_LOG_ROWS  = 500
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_LOCKOUT_SECONDS = 300  # 5분
 
 # 파일 업로드
 MAX_UPLOAD_SIZE_MB = 200
@@ -156,6 +160,26 @@ SCHEDULE_COLORS = {
 # 일정 등록 폼에서 선택 가능한 계획 카테고리 (특이사항/기타 제외)
 PLAN_CATEGORIES = ["조립계획", "포장계획", "출하계획"]
 calendar.setfirstweekday(6)  # 일요일 시작
+
+# ── 상태값 상수 ─────────────────────────────────────────────────
+WIP_STATES    = ['조립중', '수리 완료(재투입)']
+DONE_STATES   = ['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료']
+ACTIVE_STATES = ['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)']
+
+# ── 상태 스타일 (모듈 레벨 상수) ───────────────────────────────
+STATUS_STYLE = {
+    '검사대기': ('#fff3d4','#7a5c00','#f0c878','🔜'),
+    '검사중':   ('#ddeeff','#1a4a7a','#7eb8e8','🔍'),
+    '포장대기': ('#ede0f5','#4a1a7a','#b07ed8','🔜'),
+    '포장중':   ('#fde8d4','#7a3c1a','#e8a87e','📦'),
+    '완료':     ('#d4f0e2','#1f6640','#7ec8a0','✅'),
+    'OQC대기':  ('#fef0d4','#7a5c00','#f0a868','🔜'),
+    'OQC중':    ('#fde8d4','#7a3c1a','#f0a868','🔍'),
+    '출하승인': ('#d4e8f0','#1a4a7a','#7eb8e8','✅'),
+    '조립중':   ('#f0f0f0','#3d3530','#c8b89a','🔧'),
+    '수리 완료(재투입)': ('#f0e8d4','#5a4020','#c8a87a','♻️'),
+    '불량 처리 중': ('#fde8e7','#7a2e2a','#e87e7a','🚫'),
+}
 
 st.markdown("""
     <style>
@@ -626,6 +650,27 @@ def get_supabase() -> Client:
     key = st.secrets["supabase"]["key"]
     return create_client(url, key)
 
+def _clear_production_cache() -> None:
+    """생산 데이터 캐시만 초기화"""
+    load_realtime_ledger.clear()
+
+def _clear_schedule_cache() -> None:
+    """일정 캐시만 초기화"""
+    load_schedule.clear()
+
+def _clear_plan_cache() -> None:
+    """계획 관련 캐시 초기화"""
+    load_production_plan.clear()
+    load_plan_change_log.clear()
+
+def _clear_master_cache() -> None:
+    """모델 마스터 캐시 초기화"""
+    load_model_master.clear()
+
+def _clear_audit_cache() -> None:
+    """감사 로그 캐시 초기화"""
+    load_audit_log.clear()
+
 def keep_supabase_alive() -> None:
     try:
         get_supabase().table("production").select("id").limit(1).execute()
@@ -700,6 +745,8 @@ def delete_all_rows() -> bool:
     """
     ✅ 보안 개선: Soft delete + 백업 자동 생성 + 2단계 확인 강화
     """
+    # rerun 이후에도 메시지가 유지되도록 session_state에 수집
+    msgs = []
     try:
         sb = get_supabase()
         
@@ -708,7 +755,6 @@ def delete_all_rows() -> bool:
         all_data = sb.table("production").select("*").execute()
         
         if all_data.data:
-            # 백업 테이블에 저장
             backup_records = [{
                 **record,
                 'deleted_at': backup_time,
@@ -718,24 +764,22 @@ def delete_all_rows() -> bool:
             try:
                 sb.table("production_backup").insert(backup_records).execute()
             except Exception as e:
-                # 백업 테이블이 없거나 삽입 실패
-                st.warning(f"⚠️ 백업 실패 (데이터 복구 불가능): {e}")
+                msgs.append(("warning", f"⚠️ 백업 실패 (데이터 복구 불가능): {e}"))
         
         # 2. Soft Delete (deleted_at 컬럼 사용)
-        # Hard delete 대신 삭제 표시만
         try:
             sb.table("production").update({
                 'deleted_at': backup_time,
                 'deleted_by': st.session_state.get('user_id', 'unknown')
             }).is_('deleted_at', 'null').execute()
         except Exception as e:
-            # deleted_at 컬럼이 없으면 hard delete (위험!) - 오류 정보 포함
-            st.error(f"🚨 Soft delete 불가 ({e}). Hard delete 실행됩니다.")
+            msgs.append(("warning", f"⚠️ Soft delete 불가 — Hard delete 실행됨: {e}"))
             sb.table("production").delete().gte("id", 0).execute()
         
+        st.session_state['_delete_msgs'] = msgs
         return True
     except Exception as e:
-        st.error(f"삭제 실패: {e}")
+        st.session_state['_delete_msgs'] = [("error", f"삭제 실패: {e}")]
         return False
 
 def delete_production_row_by_sn(시리얼: str) -> bool:
@@ -756,8 +800,8 @@ def load_app_setting(key: str):
         pass
     return None
 
-def save_app_setting(key: str, value) -> bool:
-    """app_settings 테이블에 upsert 저장."""
+def save_app_setting(key: str, value):
+    """app_settings 테이블에 upsert 저장. 성공 시 True, 실패 시 오류 메시지 문자열 반환."""
     try:
         import json as _j
         get_supabase().table("app_settings").upsert(
@@ -765,8 +809,8 @@ def save_app_setting(key: str, value) -> bool:
             on_conflict="key"
         ).execute()
         return True
-    except Exception:
-        return False
+    except Exception as e:
+        return str(e)
 
 def delete_all_audit_log() -> bool:
     try:
@@ -864,7 +908,7 @@ def upsert_model_master(반: str, 모델명: str, 품목코드: str) -> bool:
             on_conflict="반,모델명,품목코드"
         ).execute()
         return True
-    except:
+    except Exception:
         return False
 
 def delete_model_from_master(반: str, 모델명: str) -> bool:
@@ -873,7 +917,7 @@ def delete_model_from_master(반: str, 모델명: str) -> bool:
         get_supabase().table("model_master").delete()\
             .eq("반", 반).eq("모델명", 모델명).execute()
         return True
-    except:
+    except Exception:
         return False
 
 def delete_item_from_master(반: str, 모델명: str, 품목코드: str) -> bool:
@@ -882,7 +926,7 @@ def delete_item_from_master(반: str, 모델명: str, 품목코드: str) -> bool
         get_supabase().table("model_master").delete()\
             .eq("반", 반).eq("모델명", 모델명).eq("품목코드", 품목코드).execute()
         return True
-    except:
+    except Exception:
         return False
 
 def delete_all_master_by_group(반: str) -> bool:
@@ -890,7 +934,7 @@ def delete_all_master_by_group(반: str) -> bool:
     try:
         get_supabase().table("model_master").delete().eq("반", 반).execute()
         return True
-    except:
+    except Exception:
         return False
 
 def sync_master_to_session():
@@ -900,18 +944,15 @@ def sync_master_to_session():
         return
     models_map = {g: [] for g in PRODUCTION_GROUPS}
     items_map  = {g: {} for g in PRODUCTION_GROUPS}
-    for _, r in df.iterrows():
-        g  = str(r['반'])
-        m  = str(r['모델명'])
-        pn = str(r['품목코드'])
-        if g not in models_map:
-            continue
-        if m not in models_map[g]:
+    # 벡터화: iterrows 대신 groupby 사용
+    valid_df = df[df['반'].isin(PRODUCTION_GROUPS)].copy()
+    valid_df['반']      = valid_df['반'].astype(str)
+    valid_df['모델명']   = valid_df['모델명'].astype(str)
+    valid_df['품목코드'] = valid_df['품목코드'].astype(str)
+    for g, gdf in valid_df.groupby('반'):
+        for m, mdf in gdf.groupby('모델명'):
             models_map[g].append(m)
-        if m not in items_map[g]:
-            items_map[g][m] = []
-        if pn and pn not in items_map[g][m]:
-            items_map[g][m].append(pn)
+            items_map[g][m] = [pn for pn in mdf['품목코드'].unique() if pn and pn != 'nan']
     # 기존 session 값과 병합 (수동 등록분 유지)
     for g in PRODUCTION_GROUPS:
         for m in models_map[g]:
@@ -966,14 +1007,14 @@ def delete_schedule(row_id: int) -> bool:
 
 # ── 감사 로그 ────────────────────────────────────────────────────
 @st.cache_data(ttl=30)
-def load_audit_log(limit: int = 200) -> pd.DataFrame:
+def load_audit_log(limit: int = MAX_AUDIT_LOG_ROWS) -> pd.DataFrame:
     try:
         sb  = get_supabase()
         res = sb.table("audit_log").select("*").order("시간", desc=True).limit(limit).execute()
         if res.data:
             return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
         return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
-    except:
+    except Exception:
         return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
 
 # ── 생산 계획 수량 (대시보드용) ──────────────────────────────────
@@ -986,7 +1027,7 @@ def load_production_plan() -> dict:
         if res.data:
             return {f"{r['반']}_{r['월']}": int(r.get('계획수량', 0)) for r in res.data}
         return {}
-    except:
+    except Exception:
         return {}
 
 def save_production_plan(반: str, 월: str, 계획수량: int) -> bool:
@@ -1036,7 +1077,7 @@ def insert_audit_log(시리얼: str, 모델: str, 반: str,
             "비고":    비고,
         }).execute()
         return True
-    except:
+    except Exception:
         return False  # 로그 실패는 무시 (주요 흐름 방해 안 함)
 
 
@@ -1058,11 +1099,11 @@ def insert_plan_change_log(반: str, 월: str, 이전수량: int, 변경수량: 
             "작업자":   작업자,
         }).execute()
         return True
-    except:
+    except Exception:
         return False
 
 @st.cache_data(ttl=60)
-def load_plan_change_log(limit: int = 100) -> pd.DataFrame:
+def load_plan_change_log(limit: int = DEFAULT_PAGE_SIZE) -> pd.DataFrame:
     """plan_change_log 최근 N건 조회"""
     try:
         sb  = get_supabase()
@@ -1070,7 +1111,7 @@ def load_plan_change_log(limit: int = 100) -> pd.DataFrame:
         if res.data:
             return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
         return pd.DataFrame(columns=['시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
-    except:
+    except Exception:
         return pd.DataFrame(columns=['시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
 
 
@@ -1108,7 +1149,7 @@ def load_material_serials(메인시리얼: str = "") -> pd.DataFrame:
         if res.data:
             return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
         return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
-    except:
+    except Exception:
         return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
 
 def search_material_by_sn(자재시리얼: str) -> pd.DataFrame:
@@ -1121,7 +1162,7 @@ def search_material_by_sn(자재시리얼: str) -> pd.DataFrame:
         if res.data:
             return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
         return pd.DataFrame()
-    except:
+    except Exception:
         return pd.DataFrame()
 
 def upload_img_to_drive(file_obj, serial_no: str) -> str:
@@ -1135,7 +1176,7 @@ def upload_img_to_drive(file_obj, serial_no: str) -> str:
         uploaded  = drive_svc.files().create(body=meta, media_body=media, fields='id,webViewLink').execute()
         return uploaded.get('webViewLink', "")
     except Exception as e:
-        return f"⚠️ 업로드 실패: {e}"
+        return "⚠️ 이미지 업로드에 실패했습니다. 관리자에게 문의하세요."
 
 # =================================================================
 # 4. 캘린더 다이얼로그
@@ -1176,7 +1217,7 @@ def insert_schedule_change_log(sch_id: int, 날짜: str, 반: str, 모델명: st
             "작업자":   작업자,
         }).execute()
         return True
-    except:
+    except Exception:
         return False
 
 
@@ -1559,8 +1600,19 @@ if not st.session_state.login_status:
             in_id = st.text_input("아이디(ID)")
             in_pw = st.text_input("비밀번호(PW)", type="password")
             if st.form_submit_button("인증 시작", use_container_width=True):
+                # ── 로그인 시도 제한 (Brute-force 방어) ──
+                _now_ts = datetime.now(KST).timestamp()
+                _attempt_key = f"login_attempts_{in_id}"
+                _lockout_key = f"login_lockout_{in_id}"
+                _lockout_until = st.session_state.get(_lockout_key, 0)
+                if _now_ts < _lockout_until:
+                    _remain = int(_lockout_until - _now_ts)
+                    st.error(f"⛔ 로그인 잠금 중입니다. {_remain}초 후 다시 시도하세요.")
+                    st.stop()
                 user_info = st.session_state.user_db.get(in_id)
                 if user_info and verify_pw(in_pw, user_info["pw_hash"]):
+                    # 로그인 성공 → 시도 카운터 초기화
+                    st.session_state[_attempt_key] = 0
                     # bcrypt 설치 후 최초 로그인 시 SHA-256 → bcrypt 자동 업그레이드
                     if _BCRYPT_AVAILABLE and not user_info["pw_hash"].startswith("$2"):
                         new_hash = hash_pw(in_pw)
@@ -1585,7 +1637,14 @@ if not st.session_state.login_status:
                     st.session_state.schedule_db   = load_schedule()
                     st.rerun()
                 else:
-                    st.error("로그인 정보가 올바르지 않습니다.")
+                    _attempts = st.session_state.get(_attempt_key, 0) + 1
+                    st.session_state[_attempt_key] = _attempts
+                    _remain_attempts = MAX_LOGIN_ATTEMPTS - _attempts
+                    if _attempts >= MAX_LOGIN_ATTEMPTS:
+                        st.session_state[_lockout_key] = _now_ts + LOGIN_LOCKOUT_SECONDS
+                        st.error(f"⛔ 로그인 {MAX_LOGIN_ATTEMPTS}회 실패로 {LOGIN_LOCKOUT_SECONDS//60}분 동안 잠금됩니다.")
+                    else:
+                        st.error(f"로그인 정보가 올바르지 않습니다. (남은 시도: {_remain_attempts}회)")
     st.stop()
 
 # =================================================================
@@ -1745,14 +1804,13 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                 border    = "2px solid #7ec8a0" if is_today else "1px solid #e0d8c8"
                 today_cls = " today" if is_today else ""
 
-                # 카테고리별 건수 집계
+                # 카테고리별 건수 집계 (벡터화)
                 cat_counts = {}
                 event_count = 0
                 if not day_data.empty:
-                    for _, r in day_data.iterrows():
-                        cat = str(r.get("카테고리","기타")) if r.get("카테고리") else "기타"
-                        cat_counts[cat] = cat_counts.get(cat, 0) + 1
-                        event_count += 1
+                    _cat_col = day_data['카테고리'].fillna('기타').astype(str).replace('', '기타')
+                    cat_counts = _cat_col.value_counts().to_dict()
+                    event_count = len(day_data)
 
                 today_mark = " 🟢" if is_today else ""
                 btn_label  = f"{day}{today_mark}"
@@ -2088,7 +2146,7 @@ elif curr_l == "조립 라인":
                 qty   = sr.get('조립수', 0)
                 try:
                     qty = int(float(qty)) if qty not in (None, '', 'nan') else 0
-                except:
+                except (ValueError, TypeError):
                     qty = 0
                 ship  = str(sr.get('출하계획', ''))
                 note  = str(sr.get('특이사항', ''))
@@ -2193,13 +2251,7 @@ elif curr_l == "조립 라인":
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
 
-            STATUS_STYLE = {
-                '검사대기': ('#fff3d4','#7a5c00','#f0c878','🔜'),
-                '검사중':   ('#ddeeff','#1a4a7a','#7eb8e8','🔍'),
-                '포장대기': ('#ede0f5','#4a1a7a','#b07ed8','🔜'),
-                '포장중':   ('#fde8d4','#7a3c1a','#e8a87e','📦'),
-                '완료':     ('#d4f0e2','#1f6640','#7ec8a0','✅'),
-            }
+            # STATUS_STYLE: 모듈 상수 사용 (상단 정의 참조)
             h = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 2.0])
             for col, txt in zip(h, ["☑","기록 시간","모델","품목","시리얼","현장 제어"]):
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;'>{txt}</p>", unsafe_allow_html=True)
@@ -2242,7 +2294,7 @@ elif curr_l == "조립 라인":
         st.info("등록된 생산 내역이 없습니다.")
 
     # 자재 목록 마스터
-    MAT_NAME_OPTIONS = ["PCB", "배터리", "메인보드", "디스플레이", "케이블", "모듈", "센서", "커넥터", "기타"]
+    MAT_NAME_OPTIONS = st.session_state.get("dropdown_mat_name") or ["PCB", "배터리", "메인보드", "디스플레이", "케이블", "모듈", "센서", "커넥터", "기타"]
 
     _mat_list_key  = f"mat_list_{curr_g}"
     _scan_sn_key   = f"scan_sn_{curr_g}"
@@ -2267,10 +2319,10 @@ elif curr_l == "조립 라인":
             st.session_state[_msn_cnt_key] = 0
         _msn_field_key = f"sn_input_{curr_g}_{st.session_state[_msn_cnt_key]}"
         target_sn = ef2.text_input(
-            "📦 메인 S/N (바코드 스캔 → 자동 등록)",
-            placeholder="스캔하면 즉시 등록됩니다",
+            "📦 메인 S/N",
+            placeholder="S/N 입력 후 아래 버튼으로 등록",
             key=_msn_field_key)
-        ef2.caption("💡 바코드 스캔 시 Enter가 자동 입력되어 즉시 등록됩니다")
+        ef2.caption("💡 자재 시리얼 입력 완료 후 [생산 시작 등록] 버튼을 누르세요")
 
         st.divider()
 
@@ -2365,12 +2417,7 @@ elif curr_l == "조립 라인":
                 st.toast(f"✅ 등록 완료: {sn_val}", icon="✅")
                 st.rerun()
 
-        if target_sn.strip() and target_model != "선택하세요.":
-            _do_register_sn(target_sn.strip())
-        elif target_sn.strip() and target_model == "선택하세요.":
-            st.warning("⚠️ 모델을 먼저 선택해주세요.")
-
-        if st.button("▶️ 생산 시작 등록", use_container_width=True, type="secondary", key=f"start_btn_{curr_g}"):
+        if st.button("▶️ 생산 시작 등록", use_container_width=True, type="primary", key=f"start_btn_{curr_g}"):
             if target_model != "선택하세요." and target_sn.strip():
                 _do_register_sn(target_sn.strip())
             else:
@@ -2416,7 +2463,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                               unsafe_allow_html=True)
                 if wba2.button("✅ 일괄 입고", key=f"wait_bulk_{curr_g}_{curr_l}",
                                type="primary", use_container_width=True):
-                    st.cache_data.clear()
+                    _clear_production_cache()
                     _next_s = '검사중' if curr_l == '검사 라인' else '포장중'
                     _prev_s = '검사대기' if curr_l == '검사 라인' else '출하승인'
                     for wi in w_checked:
@@ -2454,7 +2501,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         wr2.markdown(f"`{wrow['시리얼']}`  <span style='color:#999;font-size:0.75rem;'>{str(wrow.get('시간',''))[:16]}</span>",
                                     unsafe_allow_html=True)
                         if wr3.button("📥 입고", key=f"in_{widx}", use_container_width=True):
-                            st.cache_data.clear()
+                            _clear_production_cache()
                             _next_s = '검사중' if curr_l == '검사 라인' else '포장중'
                             _prev_s = '검사대기' if curr_l == '검사 라인' else '출하승인'
                             update_row(wrow['시리얼'], {'시간': get_now_kst_str(),
@@ -2508,7 +2555,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                               unsafe_allow_html=True)
                 if hba2.button(f"✅ 일괄 {btn_lbl}", key=f"hist_bulk_ok_{curr_g}_{curr_l}",
                                type="primary", use_container_width=True):
-                    st.cache_data.clear()
+                    _clear_production_cache()
                     _ok_s  = 'OQC대기' if curr_l == '검사 라인' else '완료'
                     _prv_s = '검사중'  if curr_l == '검사 라인' else '포장중'
                     for ci in _h_checked:
@@ -2524,7 +2571,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     st.rerun()
                 if hba3.button("🚫 일괄 불량", key=f"hist_bulk_ng_{curr_g}_{curr_l}",
                                use_container_width=True):
-                    st.cache_data.clear()
+                    _clear_production_cache()
                     for ci in _h_checked:
                         ci_int = int(ci)
                         if ci_int in f_df.index:
@@ -2573,7 +2620,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         btn_lbl = "검사 합격" if curr_l == "검사 라인" else "포장 완료"
                         c1, c2 = st.columns(2)
                         if c1.button("✅", key=f"ok_{idx}", use_container_width=True, help=btn_lbl):
-                            st.cache_data.clear()
+                            _clear_production_cache()
                             _ok_s  = 'OQC대기' if curr_l == '검사 라인' else '완료'
                             _prv_s = '검사중'  if curr_l == '검사 라인' else '포장중'
                             update_row(row['시리얼'], {'상태':_ok_s,'시간':get_now_kst_str()})
@@ -2652,7 +2699,7 @@ elif curr_l == "생산 현황 리포트":
             rr[1].write(row.get('모델', ''))
             rr[2].markdown(f"`{row.get('시리얼', '')}`")
             if rr[3].button("✔ 조립 완료", key=f"asm_done_{idx}", use_container_width=True, type="primary"):
-                st.cache_data.clear()
+                _clear_production_cache()
                 update_row(row['시리얼'], {'상태': '검사대기', '시간': get_now_kst_str()})
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                     이전상태='조립중', 이후상태='검사대기', 작업자=st.session_state.user_id)
@@ -2706,7 +2753,7 @@ elif curr_l == "검사 라인":
             rr[1].write(row.get('모델', ''))
             rr[2].markdown(f"`{row.get('시리얼', '')}`")
             if rr[3].button("▶ 검사 시작", key=f"qc_in_{idx}", use_container_width=True, type="primary"):
-                st.cache_data.clear()
+                _clear_production_cache()
                 update_row(row['시리얼'], {'상태': '검사중', '시간': get_now_kst_str(),
                     '라인': '검사 라인', '작업자': st.session_state.user_id})
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
@@ -2747,7 +2794,7 @@ elif curr_l == "검사 라인":
                     btn_ng   = st.button("🚫 불량 처리",       key=f"qc_ng_{idx}",  use_container_width=True)
 
                 if btn_pass:
-                    st.cache_data.clear()
+                    _clear_production_cache()
                     update_row(row['시리얼'], {'상태': 'OQC대기', '시간': get_now_kst_str()})
                     insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                         이전상태='검사중', 이후상태='OQC대기', 작업자=st.session_state.user_id)
@@ -2757,7 +2804,7 @@ elif curr_l == "검사 라인":
                     if not cause_txt:
                         st.warning("⚠️ 불량 원인을 먼저 선택해주세요.")
                     else:
-                        st.cache_data.clear()
+                        _clear_production_cache()
                         update_row(row['시리얼'], {'상태': '불량 처리 중', '시간': get_now_kst_str(), '증상': cause_txt})
                         insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                             이전상태='검사중', 이후상태='불량 처리 중',
@@ -2811,7 +2858,7 @@ elif curr_l == "포장 라인":
             rr[1].write(row.get('모델', ''))
             rr[2].markdown(f"`{row.get('시리얼', '')}`")
             if rr[3].button("▶ 포장 시작", key=f"pk_in_{idx}", use_container_width=True, type="primary"):
-                st.cache_data.clear()
+                _clear_production_cache()
                 update_row(row['시리얼'], {'상태': '포장중', '시간': get_now_kst_str(),
                     '라인': '포장 라인', '작업자': st.session_state.user_id})
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
@@ -2837,7 +2884,7 @@ elif curr_l == "포장 라인":
             rr[1].write(row.get('모델', ''))
             rr[2].markdown(f"`{row.get('시리얼', '')}`")
             if rr[3].button("✔ 포장 완료", key=f"pk_done_{idx}", use_container_width=True, type="primary"):
-                st.cache_data.clear()
+                _clear_production_cache()
                 update_row(row['시리얼'], {'상태': '완료', '시간': get_now_kst_str()})
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                     이전상태='포장중', 이후상태='완료', 작업자=st.session_state.user_id)
@@ -3204,7 +3251,7 @@ elif curr_l == "생산 지표 관리":
                     )
                     plan_key = f"{p_ban}_{p_month}"
                     st.session_state.production_plan[plan_key] = int(p_qty)
-                    st.cache_data.clear()
+                    _clear_plan_cache()
                     st.success(f"✅ {p_ban} / {p_month} → {p_qty:,}대 저장 완료")
                     st.rerun()
 
@@ -3389,7 +3436,7 @@ elif curr_l == "생산 지표 관리":
                 if res.data:
                     return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
                 return pd.DataFrame(columns=['시간','일정id','날짜','반','모델명','이전내용','변경내용','변경사유','사유상세','작업자'])
-            except:
+            except Exception:
                 return pd.DataFrame(columns=['시간','일정id','날짜','반','모델명','이전내용','변경내용','변경사유','사유상세','작업자'])
 
         sf1, sf2, sf3 = st.columns([1.5, 2, 1])
@@ -3666,7 +3713,7 @@ elif curr_l == "생산 지표 관리":
                                 try:
                                     from datetime import date as _date
                                     date_str = (_date(1899, 12, 30) + __import__('datetime').timedelta(days=int(date_val))).strftime('%Y-%m-%d')
-                                except:
+                                except Exception:
                                     pass
                             if not date_str:
                                 continue
@@ -3875,7 +3922,7 @@ elif curr_l == "생산 지표 관리":
                 if ac2.button("✅ 예, 전체 삭제", type="primary", use_container_width=True, key="sch_all_del_yes"):
                     for _, row in sch_list.iterrows():
                         delete_schedule(int(row['id']))
-                    st.cache_data.clear()                          # ← 캐시 초기화
+                    _clear_schedule_cache()                        # ← 캐시 초기화
                     st.session_state.schedule_db = load_schedule()
                     st.session_state[all_del_key] = False
                     st.rerun()
@@ -3915,7 +3962,7 @@ elif curr_l == "생산 지표 관리":
                         cf1.warning(f"**[{row.get('날짜','')} / {row.get('모델명','')}]** 일정을 삭제하시겠습니까?")
                         if cf2.button("✅ 삭제", key=f"del_sch_yes_{row_id}", type="primary", use_container_width=True):
                             delete_schedule(int(row_id))
-                            st.cache_data.clear()                  # ← 캐시 초기화
+                            _clear_schedule_cache()                # ← 캐시 초기화
                             st.session_state.schedule_db = load_schedule()
                             st.session_state[del_ck] = False
                             st.rerun()
@@ -3980,7 +4027,7 @@ elif curr_l == "OQC 라인":
             rr[2].write(row.get('반',''))
             rr[3].markdown(f"`{row.get('시리얼','')}`")
             if rr[4].button("▶ OQC 시작", key=f"oqc_in_{idx}", use_container_width=True, type="primary"):
-                st.cache_data.clear()
+                _clear_production_cache()
                 update_row(row['시리얼'], {'상태': 'OQC중', '시간': get_now_kst_str(), '라인': 'OQC 라인'})
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                     이전상태='OQC대기', 이후상태='OQC중', 작업자=st.session_state.user_id)
@@ -4028,7 +4075,7 @@ elif curr_l == "OQC 라인":
                         btn2 = st.button("🚫 부적합", key=f"oqc_ng_{idx}",
                                          use_container_width=True)
                     if btn1:
-                        st.cache_data.clear()
+                        _clear_production_cache()
                         update_row(row['시리얼'], {
                             '상태': '출하승인', '시간': get_now_kst_str(),
                             '증상': 'OQC합격', '수리': 'OQC합격'
@@ -4042,7 +4089,7 @@ elif curr_l == "OQC 라인":
                         if not defect_txt:
                             st.warning("⚠️ 부적합 사유를 먼저 선택해주세요.")
                         else:
-                            st.cache_data.clear()
+                            _clear_production_cache()
                             update_row(row['시리얼'], {
                                 '상태': '부적합(OQC)', '시간': get_now_kst_str(),
                                 '증상': defect_txt, '수리': f"사유:{defect_txt}"
@@ -4348,7 +4395,7 @@ elif curr_l == "OQC 라인":
                 m_model = row_m.iloc[0]['모델'] if not row_m.empty else ""
                 m_ban   = row_m.iloc[0]['반']   if not row_m.empty else ""
                 if insert_material_serials(sn_final, m_model, m_ban, valid, st.session_state.user_id):
-                    st.cache_data.clear()
+                    load_material_serials.clear()
                     st.success(f"✅ {sn_final} → {len(valid)}개 자재 S/N 저장 완료")
             else:
                 st.warning("메인 S/N과 자재 S/N을 입력해주세요.")
@@ -4491,7 +4538,7 @@ elif curr_l == "불량 공정":
                 c_b.markdown("<div class='button-spacer'></div>", unsafe_allow_html=True)
                 if c_b.button("✅ 확정", key=f"b_{idx}", type="primary", use_container_width=True):
                     if v_c and v_a:
-                        st.cache_data.clear()
+                        _clear_production_cache()
                         img_link = f" [사진: {upload_img_to_drive(img, row['시리얼'])}]" if img else ""
                         update_row(row['시리얼'], {
                             '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
@@ -4955,33 +5002,86 @@ elif curr_l == "마스터 관리":
             st.caption(f"현재 {len(editable)}개 항목 등록됨 (선택·직접입력 제외)")
 
         def _render_mat_name_editor():
-            """자재명은 (선택)/기타 없는 단순 목록"""
-            current = st.session_state.get("dropdown_mat_name", [])
-            current_text = "\n".join(current)
-            new_text = st.text_area(
-                "자재명 목록 (한 줄에 하나씩)",
-                value=current_text, height=180,
-                key="dd_edit_mat",
-                placeholder="PCB\n배터리\n메인보드"
-            )
-            mc1, mc2 = st.columns([1, 1])
-            if mc1.button("💾 저장", key="dd_save_mat", use_container_width=True, type="primary"):
-                items = [x.strip() for x in new_text.strip().splitlines() if x.strip()]
-                seen = set(); deduped = []
-                for item in items:
-                    if item not in seen: seen.add(item); deduped.append(item)
-                st.session_state["dropdown_mat_name"] = deduped
-                if save_app_setting("dropdown_mat_name", deduped):
-                    st.success(f"✅ 자재명 저장 완료 ({len(deduped)}개) — DB 반영됨")
+            """자재명 목록 — 항목별 삭제 + 추가 + 전체삭제"""
+            _SS = "dropdown_mat_name"
+
+            # ── session_state 직접 참조 (or 폴백 없음 — 빈 목록도 유지)
+            # 초기화 루프에서 이미 None이면 기본값 세팅됨
+            current = list(st.session_state.get(_SS, []))
+
+            # ── 항목별 행 렌더 ────────────────────────────────────────
+            if current:
+                st.markdown("<p style='font-size:0.8rem;font-weight:700;color:#5a4f45;margin:0 0 6px 0;'>등록된 자재명</p>", unsafe_allow_html=True)
+                _del_idx = None
+                for i, item in enumerate(current):
+                    r1, r2 = st.columns([5, 1])
+                    r1.markdown(f"<div style='padding:5px 8px;background:#f5f2ec;border-radius:6px;font-size:0.85rem;'>{item}</div>", unsafe_allow_html=True)
+                    if r2.button("🗑", key=f"mat_del_item_{i}", help=f"{item} 삭제", use_container_width=True):
+                        _del_idx = i
+                if _del_idx is not None:
+                    current.pop(_del_idx)
+                    st.session_state[_SS] = current
+                    ok = save_app_setting(_SS, current)
+                    if ok:
+                        st.toast("✅ 삭제 완료", icon="✅")
+                    else:
+                        st.toast("⚠️ DB 저장 실패 — 앱 재시작 시 복원될 수 있습니다", icon="⚠️")
+                    st.rerun()
+            else:
+                st.info("등록된 자재명이 없습니다. 아래에서 추가하거나 기본값을 복원하세요.")
+
+            st.divider()
+
+            # ── 신규 추가 ─────────────────────────────────────────────
+            st.markdown("<p style='font-size:0.8rem;font-weight:700;color:#5a4f45;margin:0 0 4px 0;'>자재명 추가</p>", unsafe_allow_html=True)
+            na1, na2 = st.columns([4, 1])
+            new_item = na1.text_input("", placeholder="추가할 자재명 입력", key="mat_new_input", label_visibility="collapsed")
+            if na2.button("➕ 추가", key="mat_add_btn", use_container_width=True, type="primary"):
+                val = new_item.strip()
+                if val and val not in current:
+                    current.append(val)
+                    st.session_state[_SS] = current
+                    ok = save_app_setting(_SS, current)
+                    if ok:
+                        st.toast(f"✅ '{val}' 추가 완료", icon="✅")
+                    else:
+                        st.toast("⚠️ DB 저장 실패 — 앱 재시작 시 복원될 수 있습니다", icon="⚠️")
+                    st.rerun()
+                elif val in current:
+                    st.warning(f"'{val}'은 이미 등록된 자재명입니다.")
                 else:
-                    st.success(f"✅ 자재명 저장 완료 ({len(deduped)}개)")
+                    st.warning("자재명을 입력해주세요.")
+
+            st.divider()
+
+            # ── 전체 삭제 / 기본값 복원 ───────────────────────────────
+            bc1, bc2 = st.columns([1, 1])
+            if bc1.button("🗑 전체 삭제", key="mat_clear_all", use_container_width=True):
+                st.session_state["_mat_clear_confirm"] = True; st.rerun()
+            if bc2.button("↩️ 기본값 복원", key="dd_reset_mat", use_container_width=True):
+                default_val = _DD_DEFAULTS.get(_SS, [])
+                st.session_state[_SS] = default_val
+                ok = save_app_setting(_SS, default_val)
+                if not ok:
+                    st.toast("⚠️ DB 저장 실패", icon="⚠️")
                 st.rerun()
-            if mc2.button("↩️ 기본값 복원", key="dd_reset_mat", use_container_width=True):
-                default_val = _DD_DEFAULTS.get("dropdown_mat_name", [])
-                st.session_state["dropdown_mat_name"] = default_val
-                save_app_setting("dropdown_mat_name", default_val)
-                st.success("기본값으로 복원됩니다."); st.rerun()
+
+            if st.session_state.get("_mat_clear_confirm"):
+                st.error("⛔ 자재명 목록을 전체 삭제합니다. 계속하시겠습니까?")
+                cc1, cc2 = st.columns([1, 1])
+                if cc1.button("✅ 예, 전체 삭제", key="mat_clear_yes", type="primary", use_container_width=True):
+                    st.session_state[_SS] = []
+                    ok = save_app_setting(_SS, [])
+                    st.session_state["_mat_clear_confirm"] = False
+                    if not ok:
+                        st.toast("⚠️ DB 저장 실패 — 앱 재시작 시 복원될 수 있습니다", icon="⚠️")
+                    st.rerun()
+                if cc2.button("취소", key="mat_clear_no", use_container_width=True):
+                    st.session_state["_mat_clear_confirm"] = False; st.rerun()
+
             st.caption(f"현재 {len(current)}개 항목 등록됨")
+
+
 
         with dd_tab1:
             _render_dropdown_editor("dropdown_oqc_defect", "OQC 부적합 사유", "oqc")
@@ -5031,7 +5131,7 @@ elif curr_l == "마스터 관리":
                     pr[4].caption(row.get('상태',''))
                     if pr[5].button("🗑️", key=f"del_prod_{idx}", help="이 행 삭제"):
                         if delete_production_row_by_sn(row['시리얼']):
-                            st.cache_data.clear()
+                            _clear_production_cache()
                             st.session_state.production_db = load_realtime_ledger()
                             st.success(f"삭제 완료: {row['시리얼']}")
                             st.rerun()
@@ -5053,12 +5153,25 @@ elif curr_l == "마스터 관리":
                 _pa1.markdown("<p style='color:#c8605a;font-weight:bold;margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
                 if _pa2.button("✅ 예, 전체 삭제", key="del_prod_all_yes", type="primary", use_container_width=True):
                     if delete_all_rows():
-                        st.cache_data.clear()
+                        _clear_production_cache()
                         st.session_state.production_db = load_realtime_ledger()
                         st.session_state[_ck_prod_all] = False
-                        st.success("생산 이력 전체 삭제 완료"); st.rerun()
+                        st.session_state["_delete_result"] = "success"
+                        st.rerun()
+                    else:
+                        st.session_state["_delete_result"] = "fail"
+                        st.rerun()
                 if _pa3.button("취소", key="del_prod_all_no", use_container_width=True):
                     st.session_state[_ck_prod_all] = False; st.rerun()
+                # rerun 후 메시지 표시
+                _del_result = st.session_state.pop("_delete_result", None)
+                if _del_result == "success":
+                    st.success("✅ 생산 이력 전체 삭제 완료")
+                elif _del_result == "fail":
+                    st.error("❌ 삭제 실패")
+                for _lvl, _msg in st.session_state.pop("_delete_msgs", []):
+                    if _lvl == "warning": st.warning(_msg)
+                    elif _lvl == "error": st.error(_msg)
 
         # ─── 탭2: 감사 로그 ───────────────────────────────────────
         with del_tab2:
@@ -5116,7 +5229,7 @@ elif curr_l == "마스터 관리":
                 _aa1.markdown("<p style='color:#c8605a;font-weight:bold;margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
                 if _aa2.button("✅ 예, 전체 삭제", key="del_audit_all_yes", type="primary", use_container_width=True):
                     if delete_all_audit_log():
-                        st.cache_data.clear()
+                        _clear_audit_cache()
                         st.session_state[_ck_audit_all] = False
                         st.success("감사 로그 전체 삭제 완료"); st.rerun()
                 if _aa3.button("취소", key="del_audit_all_no", use_container_width=True):
@@ -5180,7 +5293,7 @@ elif curr_l == "마스터 관리":
                 _ma1.markdown("<p style='color:#c8605a;font-weight:bold;margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
                 if _ma2.button("✅ 예, 전체 삭제", key="del_mat_all_yes", type="primary", use_container_width=True):
                     if delete_all_material_serial():
-                        st.cache_data.clear()
+                        load_material_serials.clear()
                         st.session_state[_ck_mat_all] = False
                         st.success("자재 시리얼 전체 삭제 완료"); st.rerun()
                 if _ma3.button("취소", key="del_mat_all_no", use_container_width=True):
@@ -5218,7 +5331,7 @@ elif curr_l == "마스터 관리":
                     _sid = row.get('id')
                     if _sid and sr[6].button("🗑️", key=f"del_sch_{_sid}", help="이 행 삭제"):
                         if delete_schedule(int(_sid)):
-                            st.cache_data.clear()
+                            _clear_schedule_cache()
                             st.session_state.schedule_db = load_schedule()
                             st.success("삭제 완료"); st.rerun()
             else:
@@ -5236,7 +5349,7 @@ elif curr_l == "마스터 관리":
                 _sa1.markdown("<p style='color:#c8605a;font-weight:bold;margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
                 if _sa2.button("✅ 예, 전체 삭제", key="del_sch_all_yes", type="primary", use_container_width=True):
                     if delete_all_production_schedule():
-                        st.cache_data.clear()
+                        _clear_schedule_cache()
                         st.session_state.schedule_db = load_schedule()
                         st.session_state[_ck_sch_all] = False
                         st.success("생산 일정 전체 삭제 완료"); st.rerun()
@@ -5251,7 +5364,7 @@ elif curr_l == "마스터 관리":
                     res = get_supabase().table("plan_change_log").select("*").order("시간", desc=True).limit(500).execute()
                     return pd.DataFrame(res.data) if res.data else pd.DataFrame(
                         columns=['id','시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
-                except:
+                except Exception:
                     return pd.DataFrame(columns=['id','시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
 
             plog = _load_plan_log_all()
@@ -5302,7 +5415,7 @@ elif curr_l == "마스터 관리":
                 _pla1.markdown("<p style='color:#c8605a;font-weight:bold;margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
                 if _pla2.button("✅ 예, 전체 삭제", key="del_plog_all_yes", type="primary", use_container_width=True):
                     if delete_all_plan_change_log():
-                        st.cache_data.clear()
+                        _clear_plan_cache()
                         st.session_state[_ck_plog_all] = False
                         st.success("계획 변경 이력 전체 삭제 완료"); st.rerun()
                 if _pla3.button("취소", key="del_plog_all_no", use_container_width=True):
@@ -5316,7 +5429,7 @@ elif curr_l == "마스터 관리":
                     res = get_supabase().table("schedule_change_log").select("*").order("시간", desc=True).limit(500).execute()
                     return pd.DataFrame(res.data) if res.data else pd.DataFrame(
                         columns=['id','시간','일정id','날짜','반','모델명','이전내용','변경내용','변경사유','사유상세','작업자'])
-                except:
+                except Exception:
                     return pd.DataFrame(columns=['id','시간','일정id','날짜','반','모델명','이전내용','변경내용','변경사유','사유상세','작업자'])
 
             slog = _load_sch_log_all()
@@ -5378,7 +5491,7 @@ elif curr_l == "마스터 관리":
                     res = get_supabase().table("production_plan").select("*").order("월", desc=True).execute()
                     return pd.DataFrame(res.data) if res.data else pd.DataFrame(
                         columns=['id','반','월','계획수량'])
-                except:
+                except Exception:
                     return pd.DataFrame(columns=['id','반','월','계획수량'])
 
             plan_df = _load_plan_all()
@@ -5410,7 +5523,7 @@ elif curr_l == "마스터 관리":
                     _p_wol = row.get('월', '')
                     if ppr[3].button("🗑️", key=f"del_plan_{idx}", help="이 행 삭제"):
                         if delete_production_plan_row(_p_ban, _p_wol):
-                            st.cache_data.clear()
+                            _clear_plan_cache()
                             st.session_state.production_plan = load_production_plan()
                             st.success(f"삭제 완료: {_p_ban} {_p_wol}")
                             st.rerun()
@@ -5431,7 +5544,7 @@ elif curr_l == "마스터 관리":
                 if _ppa2.button("✅ 예, 전체 삭제", key="del_plan_all_yes",
                                 type="primary", use_container_width=True):
                     if delete_all_production_plan():
-                        st.cache_data.clear()
+                        _clear_plan_cache()
                         st.session_state.production_plan = load_production_plan()
                         st.session_state[_ck_plan_all] = False
                         st.success("월별 계획 수량 전체 삭제 완료"); st.rerun()
