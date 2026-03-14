@@ -686,6 +686,36 @@ if "supabase_alive_checked" not in st.session_state:
 def get_now_kst_str() -> str:
     return datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
 
+def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
+    """입고 대기 수량이 증가하면 토스트 알림 + 사운드를 출력한다."""
+    prev = st.session_state.get(notif_key, -1)
+    if curr_cnt > 0 and curr_cnt > prev:
+        st.toast(f"📥 {label} — 입고 대기 {curr_cnt}건 도착!", icon="🔔")
+        st.components.v1.html("""
+        <script>
+        (function(){
+            try {
+                var ctx = new (window.AudioContext || window.webkitAudioContext)();
+                function beep(freq, t, dur) {
+                    var o = ctx.createOscillator();
+                    var g = ctx.createGain();
+                    o.connect(g); g.connect(ctx.destination);
+                    o.type = 'sine';
+                    o.frequency.setValueAtTime(freq, t);
+                    g.gain.setValueAtTime(0.35, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+                    o.start(t); o.stop(t + dur);
+                }
+                var t = ctx.currentTime;
+                beep(880, t,       0.18);
+                beep(1100, t+0.22, 0.18);
+                beep(1320, t+0.44, 0.25);
+            } catch(e) {}
+        })();
+        </script>
+        """, height=0)
+    st.session_state[notif_key] = curr_cnt
+
 @st.cache_data(ttl=10)
 def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
     """최근 N개월 데이터만 로드 (기본 3개월, 성능 최적화)"""
@@ -2433,6 +2463,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     wait_list = db_s[(db_s['반']==curr_g)&(db_s['상태']==wait_status)]
     _wait_cnt = len(wait_list)
 
+    notify_new_arrivals(_wait_cnt, f"notif_{curr_g}_{curr_l}", f"{curr_g} {curr_l}")
+
     _wck_key     = f"wait_ck_{curr_g}_{curr_l}"
     _wscan_cnt   = f"wscan_cnt_{curr_g}_{curr_l}"
     if _wck_key   not in st.session_state: st.session_state[_wck_key]   = {}
@@ -3998,6 +4030,8 @@ elif curr_l == "OQC 라인":
     oqc_ing   = len(db_oqc[db_oqc['상태'] == 'OQC중'])
     oqc_pass  = len(db_oqc[db_oqc['상태'] == '출하승인'])
     oqc_fail  = len(db_oqc[db_oqc['상태'] == '부적합(OQC)'])
+
+    notify_new_arrivals(oqc_wait, f"notif_oqc_{oqc_ban}", f"OQC 라인 ({oqc_ban})")
 
     # 반 색상 배지
     if oqc_ban != "전체":
