@@ -1506,10 +1506,7 @@ _DD_DEFAULTS = {
         "재검사 후 양품 확인", "폐기 처리",
         "기타 (직접 입력)",
     ],
-    "dropdown_mat_name": [
-        "PCB", "배터리", "메인보드", "디스플레이",
-        "케이블", "모듈", "센서", "커넥터", "기타",
-    ],
+    "dropdown_mat_name": [],
 }
 for _dd_key, _dd_default in _DD_DEFAULTS.items():
     if _dd_key not in st.session_state:
@@ -2294,7 +2291,7 @@ elif curr_l == "조립 라인":
         st.info("등록된 생산 내역이 없습니다.")
 
     # 자재 목록 마스터
-    MAT_NAME_OPTIONS = st.session_state.get("dropdown_mat_name") or ["PCB", "배터리", "메인보드", "디스플레이", "케이블", "모듈", "센서", "커넥터", "기타"]
+    MAT_NAME_OPTIONS = st.session_state.get("dropdown_mat_name") or []
 
     _mat_list_key  = f"mat_list_{curr_g}"
     _scan_sn_key   = f"scan_sn_{curr_g}"
@@ -5028,7 +5025,7 @@ elif curr_l == "마스터 관리":
                         st.toast("⚠️ DB 저장 실패 — 앱 재시작 시 복원될 수 있습니다", icon="⚠️")
                     st.rerun()
             else:
-                st.info("등록된 자재명이 없습니다. 아래에서 추가하거나 기본값을 복원하세요.")
+                st.info("등록된 자재명이 없습니다. 아래에서 추가하세요.")
 
             st.divider()
 
@@ -5054,17 +5051,9 @@ elif curr_l == "마스터 관리":
 
             st.divider()
 
-            # ── 전체 삭제 / 기본값 복원 ───────────────────────────────
-            bc1, bc2 = st.columns([1, 1])
-            if bc1.button("🗑 전체 삭제", key="mat_clear_all", use_container_width=True):
+            # ── 전체 삭제 ─────────────────────────────────────────────
+            if st.button("🗑 전체 삭제", key="mat_clear_all", use_container_width=True):
                 st.session_state["_mat_clear_confirm"] = True; st.rerun()
-            if bc2.button("↩️ 기본값 복원", key="dd_reset_mat", use_container_width=True):
-                default_val = _DD_DEFAULTS.get(_SS, [])
-                st.session_state[_SS] = default_val
-                ok = save_app_setting(_SS, default_val)
-                if not ok:
-                    st.toast("⚠️ DB 저장 실패", icon="⚠️")
-                st.rerun()
 
             if st.session_state.get("_mat_clear_confirm"):
                 st.error("⛔ 자재명 목록을 전체 삭제합니다. 계속하시겠습니까?")
