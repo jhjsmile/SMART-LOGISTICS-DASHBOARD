@@ -1,0 +1,12 @@
+# Secrets - 절대 커밋하지 말 것
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+*.env
+
+# Claude Code 임시 파일
+.claude/settings.local.json
