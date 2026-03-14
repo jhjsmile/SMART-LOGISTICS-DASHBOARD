@@ -3884,10 +3884,9 @@ elif curr_l == "생산 지표 관리":
             sch_date  = sc1.date_input("날짜")
             sch_cat   = sc2.selectbox("계획 유형 *", PLAN_CATEGORIES)
             sch_model = sc3.text_input("모델명")
-            sc4, sc5, sc6 = st.columns(3)
+            sc4, sc5 = st.columns(2)
             sch_pn    = sc4.text_input("P/N (품목코드)")
             sch_qty   = sc5.number_input("조립수", min_value=0, step=1)
-            sch_ship  = sc6.text_input("출하계획")
             sch_note  = st.text_input("특이사항")
             if st.form_submit_button("📅 일정 등록", use_container_width=True, type="primary"):
                 if sch_model.strip() or sch_note.strip():
@@ -3895,7 +3894,7 @@ elif curr_l == "생산 지표 관리":
                         '날짜': str(sch_date), '반': sch_ban,
                         '카테고리': sch_cat,
                         'pn': sch_pn.strip(), '모델명': sch_model.strip(),
-                        '조립수': int(sch_qty), '출하계획': sch_ship.strip(),
+                        '조립수': int(sch_qty), '출하계획': '',
                         '특이사항': sch_note.strip(), '작성자': st.session_state.user_id
                     }):
                         st.session_state.schedule_db = load_schedule()
