@@ -687,16 +687,16 @@ def get_now_kst_str() -> str:
     return datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
 
 def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
-    """입고 대기 수량이 증가하면 토스트 알림 + 사운드를 출력한다."""
+    """입고 대기 수량이 증가하면 가운데 팝업 알림 + 사운드를 출력한다."""
     prev = st.session_state.get(notif_key, -1)
     if curr_cnt > 0 and curr_cnt > prev:
-        st.toast(f"📥 {label} — 입고 대기 {curr_cnt}건 도착!", icon="🔔")
-        st.components.v1.html("""
+        st.components.v1.html(f"""
         <script>
-        (function(){
-            try {
+        (function(){{
+            // ── 사운드 ──
+            try {{
                 var ctx = new (window.AudioContext || window.webkitAudioContext)();
-                function beep(freq, t, dur) {
+                function beep(freq, t, dur) {{
                     var o = ctx.createOscillator();
                     var g = ctx.createGain();
                     o.connect(g); g.connect(ctx.destination);
@@ -705,13 +705,51 @@ def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
                     g.gain.setValueAtTime(0.35, t);
                     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
                     o.start(t); o.stop(t + dur);
-                }
+                }}
                 var t = ctx.currentTime;
-                beep(880, t,       0.18);
-                beep(1100, t+0.22, 0.18);
-                beep(1320, t+0.44, 0.25);
-            } catch(e) {}
-        })();
+                beep(880,  t,       0.18);
+                beep(1100, t+0.22,  0.18);
+                beep(1320, t+0.44,  0.25);
+            }} catch(e) {{}}
+
+            // ── 가운데 팝업 ──
+            var overlay = document.createElement('div');
+            overlay.style.cssText = [
+                'position:fixed','top:0','left:0','width:100%','height:100%',
+                'background:rgba(0,0,0,0.45)','z-index:99999',
+                'display:flex','align-items:center','justify-content:center'
+            ].join(';');
+
+            var box = document.createElement('div');
+            box.style.cssText = [
+                'background:#fff','border-radius:16px',
+                'padding:36px 48px','text-align:center',
+                'box-shadow:0 8px 40px rgba(0,0,0,0.35)',
+                'animation:popIn 0.3s ease'
+            ].join(';');
+            box.innerHTML = `
+                <div style="font-size:3rem;margin-bottom:8px;">📥</div>
+                <div style="font-size:1.4rem;font-weight:700;color:#1a1a2e;margin-bottom:6px;">입고 대기 알림</div>
+                <div style="font-size:1.1rem;color:#2E75B6;font-weight:600;margin-bottom:4px;">{label}</div>
+                <div style="font-size:2rem;font-weight:800;color:#c8605a;margin-bottom:16px;">{curr_cnt}건 도착!</div>
+                <button onclick="this.closest('[style*=fixed]').remove()"
+                    style="background:#2E75B6;color:#fff;border:none;border-radius:8px;
+                           padding:10px 32px;font-size:1rem;cursor:pointer;font-weight:600;">
+                    확인
+                </button>
+            `;
+
+            var style = document.createElement('style');
+            style.textContent = '@keyframes popIn {{from{{transform:scale(0.7);opacity:0}}to{{transform:scale(1);opacity:1}}}}';
+            document.head.appendChild(style);
+
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+            overlay.addEventListener('click', function(e){{ if(e.target===overlay) overlay.remove(); }});
+
+            // 5초 후 자동 닫힘
+            setTimeout(function(){{ if(overlay.parentNode) overlay.remove(); }}, 5000);
+        }})();
         </script>
         """, height=0)
     st.session_state[notif_key] = curr_cnt
