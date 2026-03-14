@@ -1354,9 +1354,7 @@ def show_inline_day_panel():
                 fa1, fa2 = st.columns(2)
                 model = fa1.text_input("모델명 *")
                 pn    = fa2.text_input("P/N (품목코드)")
-                fb1, fb2 = st.columns(2)
-                qty   = fb1.number_input("조립수", min_value=0, step=1)
-                ship  = fb2.text_input("출하계획")
+                qty   = st.number_input("조립수", min_value=0, step=1)
                 note  = st.text_input("특이사항")
                 etc   = st.text_input("기타")
                 if st.form_submit_button("✅ 등록", use_container_width=True, type="primary"):
@@ -1365,7 +1363,7 @@ def show_inline_day_panel():
                         if insert_schedule({
                             '날짜': selected_date, '반': ban,
                             '카테고리': cat, 'pn': pn.strip(), '모델명': model.strip(),
-                            '조립수': int(qty), '출하계획': ship.strip(),
+                            '조립수': int(qty), '출하계획': '',
                             '특이사항': note_combined, '작성자': st.session_state.user_id
                         }):
                             st.session_state.schedule_db = load_schedule()
