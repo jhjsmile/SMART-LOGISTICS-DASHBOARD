@@ -1354,16 +1354,20 @@ def show_inline_day_panel():
                 fa1, fa2 = st.columns(2)
                 model = fa1.text_input("모델명 *")
                 pn    = fa2.text_input("P/N (품목코드)")
-                qty   = st.number_input("조립수", min_value=0, step=1)
+                qty_str = st.text_input("조립수", value="0", placeholder="숫자 입력")
                 note  = st.text_input("특이사항")
                 etc   = st.text_input("기타")
                 if st.form_submit_button("✅ 등록", use_container_width=True, type="primary"):
+                    try:
+                        qty = max(0, int(qty_str.strip() or "0"))
+                    except ValueError:
+                        qty = 0
                     if model.strip() or note.strip():
                         note_combined = " / ".join(filter(None, [note.strip(), etc.strip()]))
                         if insert_schedule({
                             '날짜': selected_date, '반': ban,
                             '카테고리': cat, 'pn': pn.strip(), '모델명': model.strip(),
-                            '조립수': int(qty), '출하계획': '',
+                            '조립수': qty, '출하계획': '',
                             '특이사항': note_combined, '작성자': st.session_state.user_id
                         }):
                             st.session_state.schedule_db = load_schedule()
@@ -3884,15 +3888,19 @@ elif curr_l == "생산 지표 관리":
             sch_model = sc3.text_input("모델명")
             sc4, sc5 = st.columns(2)
             sch_pn    = sc4.text_input("P/N (품목코드)")
-            sch_qty   = sc5.number_input("조립수", min_value=0, step=1)
+            sch_qty_str = sc5.text_input("조립수", value="0", placeholder="숫자 입력")
             sch_note  = st.text_input("특이사항")
             if st.form_submit_button("📅 일정 등록", use_container_width=True, type="primary"):
+                try:
+                    sch_qty = max(0, int(sch_qty_str.strip() or "0"))
+                except ValueError:
+                    sch_qty = 0
                 if sch_model.strip() or sch_note.strip():
                     if insert_schedule({
                         '날짜': str(sch_date), '반': sch_ban,
                         '카테고리': sch_cat,
                         'pn': sch_pn.strip(), '모델명': sch_model.strip(),
-                        '조립수': int(sch_qty), '출하계획': '',
+                        '조립수': sch_qty, '출하계획': '',
                         '특이사항': sch_note.strip(), '작성자': st.session_state.user_id
                     }):
                         st.session_state.schedule_db = load_schedule()
