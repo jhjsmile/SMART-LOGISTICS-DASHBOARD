@@ -953,7 +953,8 @@ def load_schedule() -> pd.DataFrame:
             return pd.DataFrame(res.data).fillna("")
         return pd.DataFrame(columns=['id','날짜','반','카테고리','pn','모델명','조립수','출하계획','특이사항','작성자'])
     except Exception as e:
-        st.warning(f"일정 로드 실패: {e}")
+        if st.session_state.get('login_status', False):
+            st.warning(f"일정 로드 실패: {e}")
         return pd.DataFrame(columns=['id','날짜','반','카테고리','pn','모델명','조립수','출하계획','특이사항','작성자'])
 
 # ── 모델 마스터 DB 함수 ──────────────────────────────────────────
@@ -1705,13 +1706,14 @@ if not st.session_state.login_status:
                     if _role not in ROLES:
                         st.error(f"❌ 허용되지 않은 계정 권한입니다. (role={_role})")
                         st.stop()
-                    st.session_state.login_status  = True
                     st.session_state.user_id       = in_id
                     st.session_state.user_role     = _role
                     # ✨ 커스텀 권한 적용
                     st.session_state.user_custom_permissions = user_info.get("custom_permissions", None)
+                    # 데이터 로드 전에 login_status를 False로 유지 → 로드 중 st.warning() 억제
                     st.session_state.production_db = load_realtime_ledger()
                     st.session_state.schedule_db   = load_schedule()
+                    st.session_state.login_status  = True
                     st.rerun()
                 else:
                     _attempts = st.session_state.get(_attempt_key, 0) + 1
