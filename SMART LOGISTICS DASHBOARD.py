@@ -1449,6 +1449,14 @@ def show_inline_day_panel():
         selected_date = action_data
         day_data = sch_df[sch_df['날짜'] == selected_date] if not sch_df.empty else pd.DataFrame()
 
+        # rerun 후 toast 메시지 표시
+        _del_toast = st.session_state.pop("_sch_del_toast", None)
+        if _del_toast:
+            if "✅" in _del_toast:
+                st.success(_del_toast)
+            else:
+                st.error(_del_toast)
+
         ph1, ph2 = st.columns([8, 1])
         ph1.markdown(
             f"### 📆 {selected_date} &nbsp;<span style='font-size:0.85rem;color:#8a7f72;font-weight:normal;'>총 {len(day_data)}건</span>",
@@ -1517,10 +1525,18 @@ def show_inline_day_panel():
                             st.warning(f"⚠️ [{model_v}] 일정을 삭제하시겠습니까?")
                             y1, y2 = st.columns(2)
                             if y1.button("✅ 예, 삭제", key=f"del_yes_{row_id}", type="primary", use_container_width=True):
-                                delete_schedule(int(row_id))
-                                st.session_state.schedule_db  = load_schedule()
+                                ok = delete_schedule(int(row_id))
                                 st.session_state[confirm_key] = False
-                                st.session_state.cal_action   = None
+                                if ok:
+                                    st.session_state.schedule_db = load_schedule()
+                                    st.session_state["_sch_del_toast"] = f"✅ [{model_v}] 일정이 삭제되었습니다."
+                                    # 패널 갱신: 남은 일정이 있으면 패널 유지, 없으면 닫기
+                                    remaining = st.session_state.schedule_db
+                                    remaining = remaining[remaining['날짜'] == selected_date] if not remaining.empty else remaining
+                                    if remaining.empty:
+                                        st.session_state.cal_action = None
+                                else:
+                                    st.session_state["_sch_del_toast"] = "❌ 삭제 실패 — DB 오류가 발생했습니다."
                                 st.rerun()
                             if y2.button("취소", key=f"del_no_{row_id}", use_container_width=True):
                                 st.session_state[confirm_key] = False
