@@ -1530,11 +1530,6 @@ def show_inline_day_panel():
                                 if ok:
                                     st.session_state.schedule_db = load_schedule()
                                     st.session_state["_sch_del_toast"] = f"✅ [{model_v}] 일정이 삭제되었습니다."
-                                    # 패널 갱신: 남은 일정이 있으면 패널 유지, 없으면 닫기
-                                    remaining = st.session_state.schedule_db
-                                    remaining = remaining[remaining['날짜'] == selected_date] if not remaining.empty else remaining
-                                    if remaining.empty:
-                                        st.session_state.cal_action = None
                                 else:
                                     st.session_state["_sch_del_toast"] = "❌ 삭제 실패 — DB 오류가 발생했습니다."
                                 st.rerun()
