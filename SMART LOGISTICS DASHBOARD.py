@@ -1768,7 +1768,8 @@ for group in PRODUCTION_GROUPS:
            and st.session_state.current_line in ["조립 라인", "검사 라인", "포장 라인"])
     with st.sidebar.expander(f"📍 {group}", expanded=exp):
         for p in ["조립 라인", "검사 라인", "포장 라인"]:
-            if p in allowed_nav:
+            # 반별 권한: "라인::반" 신형 또는 "라인" 구형(= 전 반 허용) 모두 인정
+            if f"{p}::{group}" in allowed_nav or p in allowed_nav:
                 active = (st.session_state.selected_group == group and st.session_state.current_line == p)
                 if st.button(f"{p} 현황", key=f"nav_{group}_{p}", use_container_width=True,
                              type="primary" if active else "secondary"):
@@ -4934,20 +4935,39 @@ elif curr_l == "마스터 관리":
                     if current_perms is None:
                         current_perms = ROLES.get(current_role, [])
                     
-                    # 모든 가능한 메뉴 목록
-                    all_menus = ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인",
-                                "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리",
-                                "작업자 매뉴얼", "관리자 매뉴얼"]
+                    # 일반 메뉴 (반별 구분 없음)
+                    _general_menus = ["생산 지표 관리", "OQC 라인", "생산 현황 리포트", "불량 공정",
+                                      "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼"]
 
                     st.markdown("**접근 가능 메뉴:**")
 
-                    # 체크박스로 권한 선택
+                    # 일반 메뉴 체크박스 (2열)
                     selected_perms = []
-                    cols = st.columns(2)
-                    for idx, menu in enumerate(all_menus):
-                        col = cols[idx % 2]
-                        if col.checkbox(menu, value=(menu in current_perms), key=f"perm_{selected_user}_{menu}"):
+                    _gcols = st.columns(2)
+                    for _gi, menu in enumerate(_general_menus):
+                        if _gcols[_gi % 2].checkbox(menu, value=(menu in current_perms),
+                                                     key=f"perm_{selected_user}_{menu}"):
                             selected_perms.append(menu)
+
+                    # 제조 라인 — 반별 체크 그리드
+                    st.markdown("**📍 제조 라인 접근 (반별 선택):**")
+                    st.caption("각 반(班)별로 접근 가능한 라인을 개별 선택합니다.")
+                    _line_types = ["조립 라인", "검사 라인", "포장 라인"]
+                    _lh = st.columns([1.5, 1, 1, 1])
+                    _lh[0].markdown("**반**")
+                    for _li, _lt in enumerate(_line_types):
+                        _lh[_li + 1].markdown(f"**{_lt}**")
+                    for _group in PRODUCTION_GROUPS:
+                        _rc = st.columns([1.5, 1, 1, 1])
+                        _rc[0].write(_group)
+                        for _li, _lt in enumerate(_line_types):
+                            _pk = f"{_lt}::{_group}"
+                            # 구형("조립 라인" = 전 반 허용) 또는 신형("조립 라인::제조1반") 모두 체크 ON
+                            _chk = (_pk in current_perms) or (_lt in current_perms)
+                            if _rc[_li + 1].checkbox("", value=_chk,
+                                                      key=f"perm_{selected_user}_{_group}_{_lt}",
+                                                      label_visibility="collapsed"):
+                                selected_perms.append(_pk)
 
                     perm_col1, perm_col2 = st.columns(2)
                     if perm_col1.button("💾 권한 저장", key="save_custom_perm", use_container_width=True, type="primary"):
