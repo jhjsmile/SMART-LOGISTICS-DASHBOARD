@@ -181,6 +181,22 @@ STATUS_STYLE = {
     '불량 처리 중': ('#fde8e7','#7a2e2a','#e87e7a','🚫'),
 }
 
+# ── 상태별 배경색 (STATE_CLR / STATE_CLR2 공통 상수, 두 곳에서 재사용) ──
+STATUS_BG = {
+    '조립중':           '#fff3d4',
+    '검사대기':         '#fff3d4',
+    '검사중':           '#ddeeff',
+    '포장대기':         '#ede0f5',
+    '포장중':           '#fde8d4',
+    '완료':             '#d4f0e2',
+    '불량 처리 중':     '#fde8e7',
+    '수리 완료(재투입)':'#e8f4fd',
+    'OQC대기':          '#fff3d4',
+    'OQC중':            '#ddeeff',
+    '출하승인':         '#d4f0e2',
+    '부적합(OQC)':      '#fde8e7',
+}
+
 st.markdown("""
     <style>
     /* ════════════════════════════════════════
@@ -1503,6 +1519,8 @@ def show_inline_day_panel():
 
         if not day_data.empty:
             BAN_COLORS = {"제조1반": "#2471a3", "제조2반": "#1e8449", "제조3반": "#6c3483"}
+            # 성능: HTML 이스케이프 헬퍼를 루프 밖으로 이동 (루프마다 재정의 방지)
+            def _esc(s): return str(s).replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
             for ban in PRODUCTION_GROUPS:
                 ban_rows = day_data[day_data['반'] == ban]
                 if ban_rows.empty:
@@ -1523,11 +1541,11 @@ def show_inline_day_panel():
                         f"<p style='color:#8a7f72;font-size:0.72rem;font-weight:bold;margin:0 0 2px;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{hl}</p>",
                         unsafe_allow_html=True
                     )
-                for _, r in ban_rows.sort_values('카테고리').iterrows():
+                # 성능: iterrows → to_dict('records') (_esc는 루프 밖에서 정의)
+                for r in ban_rows.sort_values('카테고리').to_dict('records'):
                     row_id  = r.get('id', None)
                     cat_v   = str(r.get('카테고리', '기타'))
                     cat_color = SCHEDULE_COLORS.get(cat_v, "#888")
-                    def _esc(s): return str(s).replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
                     model_v = _esc(r.get('모델명', ''))
                     pn_v    = _esc(r.get('pn', ''))
                     ship_v  = _esc(r.get('출하계획', ''))
@@ -2153,7 +2171,7 @@ if curr_l == "현황판":
     col1, col2, col3, col4 = st.columns(4)
     total      = len(db_all)
     completed  = len(db_all[(db_all['라인']=='포장 라인')&(db_all['상태']=='완료')])
-    in_prog    = len(db_all[db_all['상태']=='진행 중'])
+    in_prog    = len(db_all[db_all['상태'].isin(ACTIVE_STATES)])
     defects    = len(db_all[db_all['상태'].str.contains('불량',na=False)])
     col1.markdown(f"<div class='stat-box'><div class='stat-label'>📦 총 투입</div><div class='stat-value'>{total}</div></div>", unsafe_allow_html=True)
     col2.markdown(f"<div class='stat-box'><div class='stat-label'>✅ 최종 완료</div><div class='stat-value'>{completed}</div></div>", unsafe_allow_html=True)
@@ -2254,7 +2272,8 @@ elif curr_l == "조립 라인":
             th = st.columns([1.2, 2.8, 1.5, 0.8, 1.8, 2.5])
             for col, txt in zip(th, ["유형", "모델명", "P/N", "조립수", "출하계획", "특이사항"]):
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:2px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-            for _, sr in today_sch.iterrows():
+            # 성능: iterrows → to_dict('records')
+            for sr in today_sch.to_dict('records'):
                 cat   = str(sr.get('카테고리', '기타'))
                 color = SCHEDULE_COLORS.get(cat, "#888")
                 model = str(sr.get('모델명', ''))
@@ -2332,9 +2351,10 @@ elif curr_l == "조립 라인":
                 f_df_view = f_df[f_df['시리얼'].str.contains(sn_search.strip(), case=False, na=False)]
                 if f_df_view.empty:
                     st.warning(f"🔍 **'{sn_search.strip()}'** 에 해당하는 시리얼이 없습니다.")
-                for _si, _sr in f_df_view.iterrows():
-                    if _sr['상태'] in ["조립중", "수리 완료(재투입)"]:
-                        st.session_state[_asm_chk_key][str(_si)] = True
+                # 성능: iterrows 대신 벡터 마스크 + index 직접 참조
+                _wip_mask = f_df_view['상태'].isin(["조립중", "수리 완료(재투입)"])
+                for _si in f_df_view.index[_wip_mask]:
+                    st.session_state[_asm_chk_key][str(_si)] = True
                 st.session_state[_asm_search_cnt] += 1  # 키 변경 → 체크박스 새 키로 재렌더 → value= 적용
                 st.rerun()
             else:
@@ -2710,15 +2730,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     st.session_state[_hck_key] = {}
                     st.rerun()
 
-            STATUS_STYLE2 = {
-                '검사대기': ('#fff3d4','#7a5c00','#f0c878','🔜'),
-                '검사중':   ('#ddeeff','#1a4a7a','#7eb8e8','🔍'),
-                '포장대기': ('#ede0f5','#4a1a7a','#b07ed8','🔜'),
-                '포장중':   ('#fde8d4','#7a3c1a','#e8a87e','📦'),
-                '완료':     ('#d4f0e2','#1f6640','#7ec8a0','✅'),
-                'OQC대기':  ('#fff3d4','#7a5c00','#f0c878','⏳'),
-                '출하승인': ('#d4f0e2','#1f6640','#7ec8a0','✅'),
-            }
+            # Bug fix: STATUS_STYLE2는 전역 STATUS_STYLE과 중복 — 전역 상수 재사용
+            STATUS_STYLE2 = STATUS_STYLE
 
             h = st.columns([0.4, 1.8, 1.8, 1.3, 1.6, 2.2])
             for col, txt in zip(h, ["☑","기록 시간","모델","품목","시리얼","제어"]):
@@ -2786,7 +2799,9 @@ elif curr_l == "생산 현황 리포트":
         fc1, fc2, fc3 = st.columns([2, 2, 1.5])
         sn_input  = fc1.text_input("시리얼 번호 *", placeholder="예: SN20260301001")
         model_sel = fc2.selectbox("모델 *", ["(선택)"] + models_for_group)
-        auto_pn   = items_for_group.get(model_sel, "") if model_sel != "(선택)" else ""
+        # items_for_group 값은 list이므로 첫 번째 값만 기본값으로 사용 (Bug fix: list → str)
+        _pn_raw   = items_for_group.get(model_sel, []) if model_sel != "(선택)" else []
+        auto_pn   = _pn_raw[0] if isinstance(_pn_raw, list) and _pn_raw else (str(_pn_raw) if _pn_raw else "")
         pn_input  = fc3.text_input("품목코드", value=auto_pn)
         submitted  = st.form_submit_button("✅ 등록", use_container_width=True, type="primary")
 
@@ -2821,7 +2836,8 @@ elif curr_l == "생산 현황 리포트":
         hh = st.columns([2, 2, 2, 1.5])
         for col, txt in zip(hh, ["등록 시간", "모델", "시리얼", "조립 완료"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-        for idx, row in ing_df.iterrows():
+        # 성능: iterrows → enumerate + to_dict('records')
+        for idx, row in enumerate(ing_df.to_dict('records')):
             rr = st.columns([2, 2, 2, 1.5])
             rr[0].caption(str(row.get('시간', ''))[:16])
             rr[1].write(row.get('모델', ''))
@@ -2875,7 +2891,8 @@ elif curr_l == "검사 라인":
         hh = st.columns([2, 2, 2, 1.5])
         for col, txt in zip(hh, ["시간", "모델", "시리얼", "검사 시작"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-        for idx, row in wait_df.iterrows():
+        # 성능: iterrows → enumerate + to_dict('records')
+        for idx, row in enumerate(wait_df.to_dict('records')):
             rr = st.columns([2, 2, 2, 1.5])
             rr[0].caption(str(row.get('시간', ''))[:16])
             rr[1].write(row.get('모델', ''))
@@ -2898,7 +2915,8 @@ elif curr_l == "검사 라인":
     qc_ing_df = db_qc[db_qc['상태'] == '검사중'].sort_values('시간', ascending=False)
 
     if not qc_ing_df.empty:
-        for idx, row in qc_ing_df.iterrows():
+        # 성능: iterrows → enumerate + to_dict('records')
+        for idx, row in enumerate(qc_ing_df.to_dict('records')):
             with st.container(border=True):
                 ic1, ic2, ic3 = st.columns([2, 2, 1.5])
                 ic1.markdown(f"**{row.get('모델', '')}**")
@@ -2980,7 +2998,8 @@ elif curr_l == "포장 라인":
         hh = st.columns([2, 2, 2, 1.5])
         for col, txt in zip(hh, ["시간", "모델", "시리얼", "포장 시작"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-        for idx, row in pk_wait_df.iterrows():
+        # 성능: iterrows → enumerate + to_dict('records')
+        for idx, row in enumerate(pk_wait_df.to_dict('records')):
             rr = st.columns([2, 2, 2, 1.5])
             rr[0].caption(str(row.get('시간', ''))[:16])
             rr[1].write(row.get('모델', ''))
@@ -3006,7 +3025,8 @@ elif curr_l == "포장 라인":
         hh = st.columns([2, 2, 2, 1.5])
         for col, txt in zip(hh, ["시간", "모델", "시리얼", "포장 완료"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-        for idx, row in pk_ing_df.iterrows():
+        # 성능: iterrows → enumerate + to_dict('records')
+        for idx, row in enumerate(pk_ing_df.to_dict('records')):
             rr = st.columns([2, 2, 2, 1.5])
             rr[0].caption(str(row.get('시간', ''))[:16])
             rr[1].write(row.get('모델', ''))
@@ -3276,8 +3296,9 @@ elif curr_l == "생산 지표 관리":
             ng_df = ng_df[ng_df['불량'] > 0].sort_values('불량률', ascending=False)
             if not ng_df.empty:
                 max_pct = ng_df['불량률'].max() or 1
+                # 성능: iterrows → to_dict('records') (read-only HTML 빌딩에 10-100배 빠름)
                 ng_html = ""
-                for _, row in ng_df.iterrows():
+                for row in ng_df.to_dict('records'):
                     bar_w = int(row['불량률'] / max_pct * 100)
                     bar_c = "#c0392b" if row['불량률'] > 10 else "#d68910" if row['불량률'] > 5 else "#e8c97a"
                     ng_html += f"""
@@ -3305,7 +3326,8 @@ elif curr_l == "생산 지표 관리":
             BAN_CL = {"제조1반":"#2471a3","제조2반":"#1e8449","제조3반":"#6c3483"}
             LINE_BG = {"조립 라인":"#fff3d4","검사 라인":"#d4f0e2","포장 라인":"#fde8d4"}
             rt_html = "<div style='font-size:0.7rem;font-weight:600;color:#aaa;display:flex;gap:0;padding:0 0 4px 0;border-bottom:2px solid #e8e2d8;margin-bottom:2px;'><span style='flex:1.2;'>반</span><span style='flex:1.5;'>라인</span><span style='flex:2.5;'>모델</span><span style='flex:2;'>시리얼</span><span style='flex:1.8;'>시작</span></div>"
-            for _, row in rt_wip.iterrows():
+            # 성능: iterrows → to_dict('records')
+            for row in rt_wip.to_dict('records'):
                 ban_v  = row.get('반','')
                 line_v = row.get('라인','')
                 bbg = BAN_BG.get(ban_v, "#f0f0f0"); bcl = BAN_CL.get(ban_v, "#666")
@@ -3349,10 +3371,13 @@ elif curr_l == "생산 지표 관리":
             pl1, pl2, pl3 = st.columns([1.5, 1.5, 1.2])
             p_ban  = pl1.selectbox("반", PRODUCTION_GROUPS, key="plan_ban")
             from datetime import date as _d2
+            # Bug fix: 28일 단위 대신 월 단위로 정확히 역산 (Python modulo 활용)
+            _today2 = _d2.today()
             _months = []
             for i in range(6):
-                _m = (_d2.today().replace(day=1) - __import__('datetime').timedelta(days=i*28)).strftime('%Y-%m')
-                if _m not in _months: _months.append(_m)
+                _mo = (_today2.month - 1 - i) % 12 + 1
+                _yr = _today2.year + (_today2.month - 1 - i) // 12
+                _months.append(f"{_yr}-{_mo:02d}")
             _months = sorted(set(_months), reverse=True)[:6]
             p_month = pl2.selectbox("월", _months, key="plan_month")
             p_qty   = pl3.number_input("계획 수량 (대)", min_value=0, step=10, key="plan_qty")
@@ -3386,12 +3411,14 @@ elif curr_l == "생산 지표 관리":
     # ── 월별 달성률 그래프 ────────────────────────────────────────
     plan_map_now = st.session_state.production_plan  # {반_YYYY-MM: 계획수량}
 
-    # 최근 6개월 목록
+    # 최근 6개월 목록 (Bug fix: 28일 단위 대신 월 단위로 정확히 역산)
     from datetime import date as _d3
+    _td3 = _d3.today()
     months_list = []
     for i in range(5, -1, -1):
-        _m = (_d3.today().replace(day=1) - __import__('datetime').timedelta(days=i*28))
-        months_list.append(_m.strftime('%Y-%m'))
+        _mo3 = (_td3.month - 1 - i) % 12 + 1
+        _yr3 = _td3.year + (_td3.month - 1 - i) // 12
+        months_list.append(f"{_yr3}-{_mo3:02d}")
     months_list = sorted(set(months_list))[-6:]
 
     # 반별 월별 실적 집계
@@ -3518,7 +3545,7 @@ elif curr_l == "생산 지표 관리":
         log_ban    = lf1.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="plog_ban")
         log_reason = lf2.selectbox("사유 필터", ["전체"] + PLAN_CHANGE_REASONS, key="plog_reason")
         if lf3.button("🔄 새로고침", key="plog_refresh", use_container_width=True):
-            st.cache_data.clear(); st.rerun()
+            _clear_plan_cache(); st.rerun()
 
         plog_df = load_plan_change_log()
         if not plog_df.empty:
@@ -3536,7 +3563,8 @@ elif curr_l == "생산 지표 관리":
             th = st.columns([1.8, 1.0, 1.0, 1.0, 1.0, 0.9, 2.5, 2.0, 1.2])
             for col, txt in zip(th, ["시간","반","월","이전","변경","증감","변경 사유","상세 내용","작업자"]):
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-            for _, row in plog_df.iterrows():
+            # 성능: iterrows → to_dict('records')
+            for row in plog_df.to_dict('records'):
                 tr = st.columns([1.8, 1.0, 1.0, 1.0, 1.0, 0.9, 2.5, 2.0, 1.2])
                 tr[0].caption(str(row.get('시간',''))[:16])
                 tr[1].write(row.get('반',''))
@@ -3571,7 +3599,7 @@ elif curr_l == "생산 지표 관리":
         s_ban    = sf1.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="slog_ban")
         s_reason = sf2.selectbox("사유 필터", ["전체"] + SCH_CHANGE_REASONS[1:], key="slog_reason")
         if sf3.button("🔄 새로고침", key="slog_refresh", use_container_width=True):
-            st.cache_data.clear(); st.rerun()
+            _clear_schedule_cache(); st.rerun()
 
         slog_df = load_schedule_change_log()
         if not slog_df.empty:
@@ -3587,7 +3615,8 @@ elif curr_l == "생산 지표 관리":
             th2 = st.columns([1.6, 1.0, 1.0, 1.2, 2.0, 2.0, 2.2, 1.8, 1.2])
             for col, txt in zip(th2, ["수정 시간","날짜","반","모델","이전 내용","변경 내용","변경 사유","상세","작업자"]):
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-            for _, row in slog_df.iterrows():
+            # 성능: iterrows → to_dict('records')
+            for row in slog_df.to_dict('records'):
                 tr2 = st.columns([1.6, 1.0, 1.0, 1.2, 2.0, 2.0, 2.2, 1.8, 1.2])
                 tr2[0].caption(str(row.get('시간',''))[:16])
                 tr2[1].caption(str(row.get('날짜',''))[:10])
@@ -4081,8 +4110,9 @@ elif curr_l == "생산 지표 관리":
                 ac1, ac2, ac3 = st.columns([2, 1, 1])
                 ac1.markdown("<p style='color:#c8605a; font-weight:bold; margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
                 if ac2.button("✅ 예, 전체 삭제", type="primary", use_container_width=True, key="sch_all_del_yes"):
-                    for _, row in sch_list.iterrows():
-                        delete_schedule(int(row['id']))
+                    # 성능: iterrows 대신 ID 리스트로 직접 처리
+                    for _sid in sch_list['id'].dropna().astype(int).tolist():
+                        delete_schedule(_sid)
                     _clear_schedule_cache()                        # ← 캐시 초기화
                     st.session_state.schedule_db = load_schedule()
                     st.session_state[all_del_key] = False
@@ -4097,7 +4127,8 @@ elif curr_l == "생산 지표 관리":
             for col, txt in zip(hh, ["유형","반","날짜","P/N","모델명","수량","특이사항",""]):
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
 
-            for _, row in sch_list.sort_values('날짜').iterrows():
+            # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
+            for row in sch_list.sort_values('날짜').to_dict('records'):
                 cat    = row.get('카테고리', '기타')
                 color  = SCHEDULE_COLORS.get(cat, "#888")
                 row_id = row['id']
@@ -4384,19 +4415,14 @@ elif curr_l == "OQC 라인":
         if oqc_sn_filter.strip():
             oqc_done = oqc_done[oqc_done['시리얼'].str.contains(oqc_sn_filter.strip(), case=False, na=False)]
 
-        STATE_CLR2 = {
-            '조립중':'#fff3d4','검사대기':'#fff3d4','검사중':'#ddeeff',
-            '포장대기':'#ede0f5','포장중':'#fde8d4','완료':'#d4f0e2',
-            '불량 처리 중':'#fde8e7','수리 완료(재투입)':'#e8f4fd',
-            'OQC대기':'#fff3d4','OQC중':'#ddeeff',
-            '출하승인':'#d4f0e2','부적합(OQC)':'#fde8e7',
-        }
+        STATE_CLR2 = STATUS_BG  # 전역 상수 재사용 (중복 정의 제거)
 
         rh = st.columns([1.8, 2, 1.5, 2.2, 1.5, 2.5, 1])
         for col, txt in zip(rh, ["시간", "모델", "반", "시리얼", "결과", "비고", "이력"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
 
-        for idx2, row in oqc_done.iterrows():
+        # 성능: iterrows → enumerate + to_dict('records') (idx2 → 순번 _i 로 교체)
+        for _i, row in enumerate(oqc_done.to_dict('records')):
             rr2 = st.columns([1.8, 2, 1.5, 2.2, 1.5, 2.5, 1])
             rr2[0].caption(str(row.get('시간',''))[:16])
             rr2[1].write(row.get('모델',''))
@@ -4410,8 +4436,8 @@ elif curr_l == "OQC 라인":
             rr2[5].caption(row.get('수리',''))
 
             # 이력 버튼 → 해당 행 아래 인라인 expander로 표시
-            _hist_key = f"oqc_hist_open_{idx2}"
-            if rr2[6].button("📋", key=f"oqc_hist_{idx2}", help="이력 조회"):
+            _hist_key = f"oqc_hist_open_{_i}"
+            if rr2[6].button("📋", key=f"oqc_hist_{_i}", help="이력 조회"):
                 st.session_state[_hist_key] = not st.session_state.get(_hist_key, False)
 
             if st.session_state.get(_hist_key, False):
@@ -4439,7 +4465,8 @@ elif curr_l == "OQC 라인":
                             ah = st.columns([1.8, 1.5, 1.5, 1.2, 3])
                             for col, txt in zip(ah, ["시간","이전상태","이후상태","작업자","비고"]):
                                 col.markdown(f"<p style='font-size:0.7rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-                            for _, ar in aud_df.iterrows():
+                            # 성능: iterrows → to_dict('records')
+                            for ar in aud_df.to_dict('records'):
                                 ac = st.columns([1.8, 1.5, 1.5, 1.2, 3])
                                 ac[0].caption(str(ar.get('시간',''))[:16])
                                 prev_c = STATE_CLR2.get(ar.get('이전상태',''), '#f5f2ec')
@@ -4458,7 +4485,8 @@ elif curr_l == "OQC 라인":
                     st.markdown("**🔩 연결된 자재 시리얼**")
                     mat_df = load_material_serials(sn)
                     if not mat_df.empty:
-                        for _, mr in mat_df.iterrows():
+                        # 성능: iterrows → to_dict('records')
+                        for mr in mat_df.to_dict('records'):
                             st.markdown(f"- **{mr.get('자재명','')}** : `{mr.get('자재시리얼','')}`　<span style='color:#aaa;font-size:0.75rem;'>{mr.get('작업자','')}</span>", unsafe_allow_html=True)
                     else:
                         st.info("등록된 자재 시리얼 없음")
@@ -4600,7 +4628,8 @@ elif curr_l == "OQC 라인":
                     for col, txt in zip(mh1, ["등록시간", "자재명", "자재 S/N", "작업자"]):
                         col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
                     
-                    for _, mr in mat_list.iterrows():
+                    # 성능: iterrows → to_dict('records')
+                    for mr in mat_list.to_dict('records'):
                         mc1 = st.columns([2, 2.5, 2.5, 1.5])
                         mc1[0].caption(str(mr.get('시간',''))[:16])
                         mc1[1].write(mr.get('자재명',''))
@@ -4624,7 +4653,8 @@ elif curr_l == "OQC 라인":
                     for col, txt in zip(mh2, ["등록시간","메인 S/N","반","모델","작업자"]):
                         col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
                     
-                    for _, mr in found.iterrows():
+                    # 성능: iterrows → to_dict('records')
+                    for mr in found.to_dict('records'):
                         mc2 = st.columns([1.8, 2, 1.5, 2, 1.5])
                         mc2[0].caption(str(mr.get('시간',''))[:16])
                         mc2[1].markdown(f"**`{mr.get('메인시리얼','')}`**")
@@ -4709,7 +4739,7 @@ elif curr_l == "OQC 라인":
                         )
                         if res2: ok_cnt += 1
                         else:    err_cnt += 1
-                st.cache_data.clear()
+                load_material_serials.clear()  # 자재 캐시만 초기화
                 st.success(f"✅ 업로드 완료: {ok_cnt}건 성공 / {err_cnt}건 실패")
             except Exception as e:
                 st.error(f"파일 처리 오류: {e}")
@@ -4762,7 +4792,8 @@ elif curr_l == "불량 공정":
         if wait.empty: continue
         has_any = True
         st.markdown(f"#### 📍 {g} 불량 처리 대기")
-        for idx, row in wait.iterrows():
+        # 성능: iterrows → enumerate + to_dict('records')
+        for idx, row in enumerate(wait.to_dict('records')):
             with st.container(border=True):
                 # 발생 정보
                 # 불량 입고 출처 파싱
@@ -4858,8 +4889,7 @@ elif curr_l == "수리 현황 리포트":
                                            "완료", "불량 처리 중", "수리 완료(재투입)"], key="audit_state")
     a_sn     = af3.text_input("S/N 검색", placeholder="시리얼 일부 입력", key="audit_sn")
     if af4.button("🔄 새로고침", key="audit_refresh", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
+        _clear_audit_cache(); st.rerun()
 
     audit_df = load_audit_log()
 
@@ -4877,23 +4907,16 @@ elif curr_l == "수리 현황 리포트":
 
         st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
-        # 상태별 색상
-        STATE_CLR = {
-            '검사대기':        '#fff3d4',
-            '검사중':          '#ddeeff',
-            '포장대기':        '#ede0f5',
-            '포장중':          '#fde8d4',
-            '완료':            '#d4f0e2',
-            '불량 처리 중':    '#fde8e7',
-            '수리 완료(재투입)':'#e8f4fd',
-        }
+        # 상태별 색상 (전역 STATUS_BG 재사용)
+        STATE_CLR = STATUS_BG
 
         # 테이블 헤더
         th = st.columns([1.8, 1.5, 2.2, 1.2, 1.5, 1.5, 1.2, 2.5])
         for col, txt in zip(th, ["시간", "시리얼", "모델", "반", "이전 상태", "이후 상태", "작업자", "비고"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
 
-        for _, row in audit_df.iterrows():
+        # 성능: iterrows → to_dict('records')
+        for row in audit_df.to_dict('records'):
             tr = st.columns([1.8, 1.5, 2.2, 1.2, 1.5, 1.5, 1.2, 2.5])
             tr[0].caption(str(row.get('시간',''))[:16])
             tr[1].markdown(f"`{row.get('시리얼','')}`")
@@ -5412,14 +5435,15 @@ elif curr_l == "마스터 관리":
                 ph = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
                 for c, t in zip(ph, ["시간","반","라인","시리얼","상태","삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                for i, (idx, row) in enumerate(prod_df.sort_values('시간', ascending=False).head(200).iterrows()):
+                # 성능: iterrows → enumerate + to_dict('records')
+                for i, row in enumerate(prod_df.sort_values('시간', ascending=False).head(200).to_dict('records')):
                     pr = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
                     pr[0].caption(str(row.get('시간',''))[:16])
                     pr[1].caption(row.get('반',''))
                     pr[2].caption(row.get('라인',''))
                     pr[3].caption(f"`{row.get('시리얼','')}`")
                     pr[4].caption(row.get('상태',''))
-                    if pr[5].button("🗑️", key=f"del_prod_{idx}", help="이 행 삭제"):
+                    if pr[5].button("🗑️", key=f"del_prod_{i}", help="이 행 삭제"):
                         if delete_production_row_by_sn(row['시리얼']):
                             _clear_production_cache()
                             st.session_state.production_db = load_realtime_ledger()
@@ -5477,7 +5501,7 @@ elif curr_l == "마스터 관리":
             audit_df = _load_audit_all()
             st.caption(f"현재 **{len(audit_df)}건** (최대 500건 표시)")
             if st.button("🔄 새로고침", key="audit_del_refresh"):
-                st.cache_data.clear(); st.rerun()
+                _clear_audit_cache(); st.rerun()
 
             # 필터
             al1, al2 = st.columns([1.5, 2])
@@ -5492,7 +5516,8 @@ elif curr_l == "마스터 관리":
                 ah = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
                 for c, t in zip(ah, ["시간","반","시리얼","모델","이전상태","이후상태","삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                for idx, row in adf.iterrows():
+                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
+                for row in adf.to_dict('records'):
                     ar = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
                     ar[0].caption(str(row.get('시간',''))[:16])
                     ar[1].caption(row.get('반',''))
@@ -5503,7 +5528,7 @@ elif curr_l == "마스터 관리":
                     _row_id = row.get('id')
                     if _row_id and ar[6].button("🗑️", key=f"del_audit_{_row_id}", help="이 행 삭제"):
                         if delete_audit_log_row(_row_id):
-                            st.cache_data.clear()
+                            _clear_audit_cache()
                             st.session_state["_del_mgr_toast"] = "✅ 감사 로그 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 감사 로그가 없습니다.")
@@ -5539,7 +5564,7 @@ elif curr_l == "마스터 관리":
             mat_df = _load_mat_all()
             st.caption(f"현재 **{len(mat_df)}건** (최대 500건 표시)")
             if st.button("🔄 새로고침", key="mat_del_refresh"):
-                st.cache_data.clear(); st.rerun()
+                load_material_serials.clear(); st.rerun()
 
             ml1, ml2 = st.columns([1.5, 2])
             _m_grp = ml1.selectbox("반", ["전체"] + PRODUCTION_GROUPS, key="d_mat_grp")
@@ -5557,7 +5582,8 @@ elif curr_l == "마스터 관리":
                 mh = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
                 for c, t in zip(mh, ["시간","메인S/N","모델","자재명","자재S/N","삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                for idx, row in mdf.iterrows():
+                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
+                for row in mdf.to_dict('records'):
                     mr = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
                     mr[0].caption(str(row.get('시간',''))[:16])
                     mr[1].caption(f"`{row.get('메인시리얼','')}`")
@@ -5567,7 +5593,7 @@ elif curr_l == "마스터 관리":
                     _mid = row.get('id')
                     if _mid and mr[5].button("🗑️", key=f"del_mat_{_mid}", help="이 행 삭제"):
                         if delete_material_serial_row(_mid):
-                            st.cache_data.clear()
+                            load_material_serials.clear()
                             st.session_state["_del_mgr_toast"] = "✅ 자재 시리얼 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 자재 시리얼이 없습니다.")
@@ -5611,7 +5637,8 @@ elif curr_l == "마스터 관리":
                 sh = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
                 for c, t in zip(sh, ["날짜","반","카테고리","모델명","조립수","출하계획","삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                for idx, row in sdf.sort_values('날짜', ascending=False).iterrows():
+                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
+                for row in sdf.sort_values('날짜', ascending=False).to_dict('records'):
                     sr = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
                     sr[0].caption(str(row.get('날짜',''))[:10])
                     sr[1].caption(row.get('반',''))
@@ -5661,7 +5688,7 @@ elif curr_l == "마스터 관리":
             plog = _load_plan_log_all()
             st.caption(f"현재 **{len(plog)}건** (최대 500건 표시)")
             if st.button("🔄 새로고침", key="plog_del_refresh"):
-                st.cache_data.clear(); st.rerun()
+                _clear_plan_cache(); st.rerun()
 
             pl1, pl2 = st.columns([1.5, 2])
             _pl_grp = pl1.selectbox("반", ["전체"] + PRODUCTION_GROUPS, key="d_plog_grp")
@@ -5675,7 +5702,8 @@ elif curr_l == "마스터 관리":
                 plh = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
                 for c, t in zip(plh, ["시간","반","월","이전수량","변경수량","증감","변경사유","삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                for idx, row in pldf.iterrows():
+                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
+                for row in pldf.to_dict('records'):
                     plr = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
                     plr[0].caption(str(row.get('시간',''))[:16])
                     plr[1].caption(row.get('반',''))
@@ -5689,7 +5717,7 @@ elif curr_l == "마스터 관리":
                     _plid = row.get('id')
                     if _plid and plr[7].button("🗑️", key=f"del_plog_{_plid}", help="이 행 삭제"):
                         if delete_plan_change_log_row(_plid):
-                            st.cache_data.clear()
+                            _clear_plan_cache()
                             st.session_state["_del_mgr_toast"] = "✅ 계획 변경 이력 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 계획 변경 이력이 없습니다.")
@@ -5726,7 +5754,7 @@ elif curr_l == "마스터 관리":
             slog = _load_sch_log_all()
             st.caption(f"현재 **{len(slog)}건** (최대 500건 표시)")
             if st.button("🔄 새로고침", key="slog_del_refresh"):
-                st.cache_data.clear(); st.rerun()
+                _clear_schedule_cache(); st.rerun()
 
             sl1, sl2 = st.columns([1.5, 2])
             _sl_grp = sl1.selectbox("반", ["전체"] + PRODUCTION_GROUPS, key="d_slog_grp")
@@ -5740,7 +5768,8 @@ elif curr_l == "마스터 관리":
                 slh = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
                 for c, t in zip(slh, ["시간","반","날짜","모델명","변경사유","작업자","삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                for idx, row in sldf.iterrows():
+                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
+                for row in sldf.to_dict('records'):
                     slr = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
                     slr[0].caption(str(row.get('시간',''))[:16])
                     slr[1].caption(row.get('반',''))
@@ -5751,7 +5780,7 @@ elif curr_l == "마스터 관리":
                     _slid = row.get('id')
                     if _slid and slr[6].button("🗑️", key=f"del_slog_{_slid}", help="이 행 삭제"):
                         if delete_schedule_change_log_row(_slid):
-                            st.cache_data.clear()
+                            _clear_schedule_cache()
                             st.session_state["_del_mgr_toast"] = "✅ 일정 변경 이력 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 일정 변경 이력이 없습니다.")
@@ -5768,7 +5797,7 @@ elif curr_l == "마스터 관리":
                 _sla1.markdown("<p style='color:#c8605a;font-weight:bold;margin-top:8px;'>삭제 후 복구 불가</p>", unsafe_allow_html=True)
                 if _sla2.button("✅ 예, 전체 삭제", key="del_slog_all_yes", type="primary", use_container_width=True):
                     if delete_all_schedule_change_log():
-                        st.cache_data.clear()
+                        _clear_schedule_cache()
                         st.session_state[_ck_slog_all] = False
                         st.session_state["_del_mgr_toast"] = "✅ 일정 변경 이력 전체 삭제 완료"; st.rerun()
                 if _sla3.button("취소", key="del_slog_all_no", use_container_width=True):
@@ -5788,7 +5817,7 @@ elif curr_l == "마스터 관리":
             plan_df = _load_plan_all()
             st.caption(f"현재 **{len(plan_df)}건** 등록됨")
             if st.button("🔄 새로고침", key="plan_del_refresh"):
-                st.cache_data.clear(); st.rerun()
+                _clear_plan_cache(); st.rerun()
 
             # 필터
             pp1, pp2 = st.columns([1.5, 2])
@@ -5805,14 +5834,15 @@ elif curr_l == "마스터 관리":
                 for c, t in zip(pph, ["반", "월", "계획 수량", "삭제"]):
                     c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>",
                                unsafe_allow_html=True)
-                for idx, row in ppdf.iterrows():
+                # 성능: iterrows → enumerate + to_dict('records')
+                for _pi, row in enumerate(ppdf.to_dict('records')):
                     ppr = st.columns([2, 2, 2, 1])
                     ppr[0].write(row.get('반', ''))
                     ppr[1].write(str(row.get('월', '')))
                     ppr[2].write(f"{int(row.get('계획수량', 0)):,} EA")
                     _p_ban = row.get('반', '')
                     _p_wol = row.get('월', '')
-                    if ppr[3].button("🗑️", key=f"del_plan_{idx}", help="이 행 삭제"):
+                    if ppr[3].button("🗑️", key=f"del_plan_{_pi}", help="이 행 삭제"):
                         if delete_production_plan_row(_p_ban, _p_wol):
                             _clear_plan_cache()
                             st.session_state.production_plan = load_production_plan()
