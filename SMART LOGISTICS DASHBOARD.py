@@ -4855,7 +4855,11 @@ elif curr_l == "마스터 관리":
                     else:
                         st.error("비밀번호가 올바르지 않습니다.")
     else:
-
+        # 등록/삭제 후 rerun 이전에 저장된 메시지 표시
+        _mreg = st.session_state.pop("_master_reg_msg", None)
+        if _mreg:
+            if _mreg[0] == "success": st.success(_mreg[1])
+            else: st.warning(_mreg[1])
 
         st.markdown("<div class='section-title'>📋 반별 독립 모델/품목 설정</div>", unsafe_allow_html=True)
         tabs = st.tabs([f"{g} 설정" for g in PRODUCTION_GROUPS])
@@ -4878,8 +4882,10 @@ elif curr_l == "마스터 관리":
                                         upsert_model_master(g_name, nm, nm)
                                         added.append(nm)
                                     else: skipped.append(nm)
-                                if added:   st.success(f"등록 완료: {', '.join(added)}")
-                                if skipped: st.warning(f"이미 존재: {', '.join(skipped)}")
+                                if added:
+                                    st.session_state["_master_reg_msg"] = ("success", f"✅ 등록 완료: {', '.join(added)}")
+                                elif skipped:
+                                    st.session_state["_master_reg_msg"] = ("warning", f"⚠️ 이미 존재: {', '.join(skipped)}")
                                 st.rerun()
                             else: st.warning("모델명을 입력해주세요.")
                 with c2:
@@ -4900,8 +4906,10 @@ elif curr_l == "마스터 관리":
                                             upsert_model_master(g_name, sm, ni)
                                             added.append(ni)
                                         else: skipped.append(ni)
-                                    if added:   st.success(f"등록 완료: {', '.join(added)}")
-                                    if skipped: st.warning(f"이미 존재: {', '.join(skipped)}")
+                                    if added:
+                                        st.session_state["_master_reg_msg"] = ("success", f"✅ 등록 완료: {', '.join(added)}")
+                                    elif skipped:
+                                        st.session_state["_master_reg_msg"] = ("warning", f"⚠️ 이미 존재: {', '.join(skipped)}")
                                     st.rerun()
                                 else: st.warning("품목코드를 입력해주세요.")
                         else:
@@ -5352,6 +5360,16 @@ elif curr_l == "마스터 관리":
             # 전체 삭제
             st.markdown("<hr style='margin:12px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
             _ck_prod_all = "del_prod_all_ck"
+            # rerun 후 결과 메시지 표시 (if/else 블록 바깥에서 항상 실행)
+            _del_result = st.session_state.pop("_delete_result", None)
+            if _del_result == "success":
+                st.success("✅ 생산 이력 전체 삭제 완료")
+            elif _del_result == "fail":
+                st.error("❌ 삭제 실패")
+            for _lvl, _msg in st.session_state.pop("_delete_msgs", []):
+                if _lvl == "warning": st.warning(_msg)
+                elif _lvl == "error": st.error(_msg)
+
             if not st.session_state.get(_ck_prod_all):
                 if st.button("⛔ 생산 이력 전체 삭제", key="del_prod_all_btn",
                              type="secondary", use_container_width=False):
@@ -5372,15 +5390,6 @@ elif curr_l == "마스터 관리":
                         st.rerun()
                 if _pa3.button("취소", key="del_prod_all_no", use_container_width=True):
                     st.session_state[_ck_prod_all] = False; st.rerun()
-                # rerun 후 메시지 표시
-                _del_result = st.session_state.pop("_delete_result", None)
-                if _del_result == "success":
-                    st.success("✅ 생산 이력 전체 삭제 완료")
-                elif _del_result == "fail":
-                    st.error("❌ 삭제 실패")
-                for _lvl, _msg in st.session_state.pop("_delete_msgs", []):
-                    if _lvl == "warning": st.warning(_msg)
-                    elif _lvl == "error": st.error(_msg)
 
         # ─── 탭2: 감사 로그 ───────────────────────────────────────
         with del_tab2:
