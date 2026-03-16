@@ -2334,8 +2334,7 @@ elif curr_l == "조립 라인":
                 for _si, _sr in f_df_view.iterrows():
                     if _sr['상태'] in ["조립중", "수리 완료(재투입)"]:
                         st.session_state[_asm_chk_key][str(_si)] = True
-                        st.session_state[f"asm_cb_{curr_g}_{_si}"] = True  # 위젯 키 직접 갱신
-                st.session_state[_asm_search_cnt] += 1
+                st.session_state[_asm_search_cnt] += 1  # 키 변경 → 체크박스 새 키로 재렌더 → value= 적용
                 st.rerun()
             else:
                 f_df_view = f_df
@@ -2373,10 +2372,11 @@ elif curr_l == "조립 라인":
             for col, txt in zip(h, ["☑","기록 시간","모델","품목","시리얼","현장 제어"]):
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;'>{txt}</p>", unsafe_allow_html=True)
 
+            _asm_cb_ver = st.session_state[_asm_search_cnt]  # 스캔 시 변경 → 체크박스 강제 재렌더
             for idx, row in f_df_view.sort_values('시간', ascending=False).iterrows():
                 is_actionable = row['상태'] in ["조립중", "수리 완료(재투입)"]
                 r = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 2.0])
-                _ck = r[0].checkbox("", key=f"asm_cb_{curr_g}_{idx}",
+                _ck = r[0].checkbox("", key=f"asm_cb_{curr_g}_{idx}_{_asm_cb_ver}",
                     value=st.session_state[_asm_chk_key].get(str(idx), False),
                     disabled=not is_actionable, label_visibility="collapsed")
                 st.session_state[_asm_chk_key][str(idx)] = _ck
@@ -2570,8 +2570,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 if not matched_sn.empty:
                     for wi in matched_sn.index:
                         st.session_state[_wck_key][str(wi)] = True
-                        st.session_state[f"wck_{curr_g}_{curr_l}_{wi}"] = True  # 위젯 키 직접 갱신
-                    st.session_state[_wscan_cnt] += 1
+                    st.session_state[_wscan_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                     st.rerun()
                 else:
                     ws1.warning(f"**'{w_scan.strip()}'** — 대기 목록에 없습니다.")
@@ -2612,9 +2611,10 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     wc1, wc2 = st.columns([4, 1])
                     wc1.markdown(f"**{w_model}**" + (f"  `{w_pn}`" if w_pn else ""))
                     wc2.caption(f"{len(w_gdf)}대")
+                    _wcb_ver = st.session_state[_wscan_cnt]
                     for wi, (widx, wrow) in enumerate(w_gdf.iterrows()):
                         wr1, wr2, wr3 = st.columns([0.5, 3, 1.2])
-                        _wck = wr1.checkbox("", key=f"wck_{curr_g}_{curr_l}_{widx}",
+                        _wck = wr1.checkbox("", key=f"wck_{curr_g}_{curr_l}_{widx}_{_wcb_ver}",
                             value=st.session_state[_wck_key].get(str(widx), False),
                             label_visibility="collapsed")
                         st.session_state[_wck_key][str(widx)] = _wck
@@ -2661,8 +2661,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 else:
                     for _hi in f_df_view.index:
                         st.session_state[_hck_key][str(_hi)] = True
-                        st.session_state[f"hck_{curr_g}_{curr_l}_{_hi}"] = True  # 위젯 키 직접 갱신
-                    st.session_state[_hsrch_cnt] += 1
+                    st.session_state[_hsrch_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                     st.rerun()
                 f_df_view = f_df
             else:
@@ -2725,10 +2724,11 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;'>{txt}</p>",
                              unsafe_allow_html=True)
 
+            _hcb_ver = st.session_state[_hsrch_cnt]
             for idx, row in f_df_view.sort_values('시간', ascending=False).iterrows():
                 is_act = row['상태'] in ["검사중","포장중","수리 완료(재투입)"]
                 r = st.columns([0.4, 1.8, 1.8, 1.3, 1.6, 2.2])
-                _hck = r[0].checkbox("", key=f"hck_{curr_g}_{curr_l}_{idx}",
+                _hck = r[0].checkbox("", key=f"hck_{curr_g}_{curr_l}_{idx}_{_hcb_ver}",
                     value=st.session_state[_hck_key].get(str(idx), False),
                     disabled=not is_act, label_visibility="collapsed")
                 st.session_state[_hck_key][str(idx)] = _hck
@@ -3601,6 +3601,11 @@ elif curr_l == "생산 지표 관리":
     # ══════════════════════════════════════════════════════════════
     st.divider()
     st.markdown("<div class='section-title'>📅 생산 일정 관리</div>", unsafe_allow_html=True)
+    # 등록/삭제 결과 toast 표시
+    _sch_toast = st.session_state.pop("_sch_add_toast", None)
+    if _sch_toast:
+        st.success(_sch_toast)
+
     sch_tab1, sch_tab2, sch_tab3 = st.tabs(["➕ 직접 입력", "📂 엑셀 일괄 업로드", "📋 등록된 일정 관리"])
 
     with sch_tab2:
@@ -4002,22 +4007,44 @@ elif curr_l == "생산 지표 관리":
                 st.error(f"파일 파싱 오류: {e}")
 
     with sch_tab1:
+        # 반 선택을 폼 밖에 두어 모델/품목 목록이 즉시 반영되도록
+        sch_ban = st.selectbox("반 *", PRODUCTION_GROUPS, key="sch_form_ban")
+        _sch_models  = st.session_state.group_master_models.get(sch_ban, [])
+        _sch_all_pns = list(dict.fromkeys(
+            _pn for _m in _sch_models
+            for _pn in st.session_state.group_master_items.get(sch_ban, {}).get(_m, [])
+        ))
+
         with st.form("schedule_form"):
-            sb1, sb2 = st.columns(2)
-            sch_ban  = sb1.selectbox("반 *", PRODUCTION_GROUPS)
-            sc1, sc2, sc3 = st.columns(3)
-            sch_date  = sc1.date_input("날짜")
-            sch_cat   = sc2.selectbox("계획 유형 *", PLAN_CATEGORIES)
-            sch_model = sc3.text_input("모델명")
+            sc1, sc2 = st.columns(2)
+            sch_date = sc1.date_input("날짜")
+            sch_cat  = sc2.selectbox("계획 유형 *", PLAN_CATEGORIES)
+
+            sf1, sf2 = st.columns(2)
+            # 모델명 — 등록 목록 드롭박스 + 직접 입력 병행
+            _sm_opts  = [""] + _sch_models
+            sch_model_sel = sf1.selectbox("모델명 (등록 목록)", _sm_opts,
+                                          help="목록에서 선택하거나 아래에 직접 입력")
+            sch_model_txt = sf1.text_input("모델명 직접 입력", placeholder="목록에 없으면 여기 입력")
+
+            # P/N — 등록 목록 드롭박스 + 직접 입력 병행
+            _spn_opts = [""] + _sch_all_pns
+            sch_pn_sel = sf2.selectbox("P/N (등록 목록)", _spn_opts,
+                                       help="목록에서 선택하거나 아래에 직접 입력")
+            sch_pn_txt = sf2.text_input("P/N 직접 입력", placeholder="목록에 없으면 여기 입력")
+
             sc4, sc5 = st.columns(2)
-            sch_pn    = sc4.text_input("P/N (품목코드)")
-            sch_qty_str = sc5.text_input("조립수", value="0", placeholder="숫자 입력")
-            sch_note  = st.text_input("특이사항")
+            sch_qty_str = sc4.text_input("조립수", value="0", placeholder="숫자 입력")
+            sch_note    = sc5.text_input("특이사항")
+
             if st.form_submit_button("📅 일정 등록", use_container_width=True, type="primary"):
                 try:
                     sch_qty = max(0, int(sch_qty_str.strip() or "0"))
                 except ValueError:
                     sch_qty = 0
+                # 직접 입력 우선, 없으면 드롭박스 선택값
+                sch_model = sch_model_txt.strip() or sch_model_sel
+                sch_pn    = sch_pn_txt.strip()    or sch_pn_sel
                 if sch_model.strip() or sch_note.strip():
                     if insert_schedule({
                         '날짜': str(sch_date), '반': sch_ban,
@@ -4028,7 +4055,8 @@ elif curr_l == "생산 지표 관리":
                     }):
                         _clear_schedule_cache()
                         st.session_state.schedule_db = load_schedule()
-                        st.success("일정 등록 완료!"); st.rerun()
+                        st.session_state["_sch_add_toast"] = f"✅ [{sch_ban}] {sch_date} 일정 등록 완료"
+                        st.rerun()
                 else:
                     st.warning("모델명 또는 특이사항을 입력해주세요.")
 
@@ -4160,8 +4188,7 @@ elif curr_l == "OQC 라인":
             if not _oqc_in_matched.empty:
                 for _oi in _oqc_in_matched.index:
                     st.session_state[_oqc_in_ck_key][str(_oi)] = True
-                    st.session_state[f"oqc_in_cb_{_oi}"] = True
-                st.session_state[_oqc_in_sc_cnt] += 1
+                st.session_state[_oqc_in_sc_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                 st.rerun()
             else:
                 oi_c1.warning(f"**'{_oqc_in_scan.strip()}'** — 입고 대기 목록에 없습니다.")
@@ -4190,9 +4217,10 @@ elif curr_l == "OQC 라인":
         hh = st.columns([0.4, 2, 2, 1.5, 2, 1.5])
         for col, txt in zip(hh, ["☑", "시간", "모델", "반", "시리얼", "OQC 시작"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+        _oqc_in_cb_ver = st.session_state[_oqc_in_sc_cnt]
         for idx, row in packing_done.iterrows():
             rr = st.columns([0.4, 2, 2, 1.5, 2, 1.5])
-            _oqc_in_cb = rr[0].checkbox("", key=f"oqc_in_cb_{idx}",
+            _oqc_in_cb = rr[0].checkbox("", key=f"oqc_in_cb_{idx}_{_oqc_in_cb_ver}",
                 value=st.session_state[_oqc_in_ck_key].get(str(idx), False),
                 label_visibility="collapsed")
             st.session_state[_oqc_in_ck_key][str(idx)] = _oqc_in_cb
@@ -4234,8 +4262,7 @@ elif curr_l == "OQC 라인":
             if not _oqc_matched.empty:
                 for _oi in _oqc_matched.index:
                     st.session_state[_oqc_ck_key][str(_oi)] = True
-                    st.session_state[f"oqc_cb_{_oi}"] = True
-                st.session_state[_oqc_sc_cnt] += 1
+                st.session_state[_oqc_sc_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                 st.rerun()
             else:
                 os1.warning(f"**'{_oqc_scan.strip()}'** — OQC 검사 목록에 없습니다.")
@@ -4283,10 +4310,11 @@ elif curr_l == "OQC 라인":
         st.markdown("<hr style='margin:8px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
 
         # 개별 항목 목록 (체크박스 + 개별 판정)
+        _oqc_cb_ver = st.session_state[_oqc_sc_cnt]
         for idx, row in oqc_wait_list.iterrows():
             with st.container(border=True):
                 ic1, ic2, ic3, ic4, ic5 = st.columns([0.4, 2, 1.5, 1.5, 1.5])
-                _oqc_cb = ic1.checkbox("", key=f"oqc_cb_{idx}",
+                _oqc_cb = ic1.checkbox("", key=f"oqc_cb_{idx}_{_oqc_cb_ver}",
                     value=st.session_state[_oqc_ck_key].get(str(idx), False),
                     label_visibility="collapsed")
                 st.session_state[_oqc_ck_key][str(idx)] = _oqc_cb
@@ -4894,9 +4922,13 @@ elif curr_l == "마스터 관리":
                         st.error("비밀번호가 올바르지 않습니다.")
     else:
         st.markdown("<div class='section-title'>📋 반별 독립 모델/품목 설정</div>", unsafe_allow_html=True)
-        tabs = st.tabs([f"{g} 설정" for g in PRODUCTION_GROUPS])
+        _master_grp = st.radio("반 선택", PRODUCTION_GROUPS, horizontal=True,
+                               key="master_group_radio", label_visibility="hidden")
+        st.divider()
         for i, g_name in enumerate(PRODUCTION_GROUPS):
-            with tabs[i]:
+            if g_name != _master_grp:
+                continue
+            with st.container():
                 # ── 등록 ─────────────────────────────
                 c1, c2 = st.columns(2)
                 with c1:
