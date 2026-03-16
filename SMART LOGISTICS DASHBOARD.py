@@ -1386,6 +1386,7 @@ def show_inline_day_panel():
                                 변경사유=_reason_final, 사유상세=sch_detail.strip(),
                                 작업자=st.session_state.user_id
                             )
+                            _clear_schedule_cache()
                             st.session_state.schedule_db    = load_schedule()
                             st.session_state[save_done_key] = True
                             st.rerun()
@@ -1396,6 +1397,7 @@ def show_inline_day_panel():
                     st.rerun()
                 if c3.form_submit_button("🗑️ 삭제", use_container_width=True):
                     delete_schedule(sch_id)
+                    _clear_schedule_cache()
                     st.session_state.schedule_db    = load_schedule()
                     st.session_state.cal_action     = None
                     st.session_state[save_done_key] = False
@@ -1464,6 +1466,7 @@ def show_inline_day_panel():
                             '조립수': qty, '출하계획': '',
                             '특이사항': note_combined, '작성자': st.session_state.user_id
                         }):
+                            _clear_schedule_cache()
                             st.session_state.schedule_db = load_schedule()
                             st.session_state.cal_action       = "view_day"
                             st.session_state.cal_action_data  = selected_date
@@ -1561,6 +1564,7 @@ def show_inline_day_panel():
                                 ok = delete_schedule(int(row_id))
                                 st.session_state[confirm_key] = False
                                 if ok:
+                                    _clear_schedule_cache()
                                     st.session_state.schedule_db = load_schedule()
                                     st.session_state["_sch_del_toast"] = f"✅ [{model_v}] 일정이 삭제되었습니다."
                                 else:
@@ -3984,6 +3988,7 @@ elif curr_l == "생산 지표 관리":
                             progress_bar.progress(1.0)
                             status_text.text(f"✅ 등록 완료!")
                             
+                            _clear_schedule_cache()
                             st.session_state.schedule_db = load_schedule()
                             if success_cnt > 0:
                                 st.success(f"✅ 등록 완료: {success_cnt}건  |  건너뜀(중복): {skip_cnt}건" + (f"  |  실패: {fail_cnt}건" if fail_cnt else ""))
@@ -4021,6 +4026,7 @@ elif curr_l == "생산 지표 관리":
                         '조립수': sch_qty, '출하계획': '',
                         '특이사항': sch_note.strip(), '작성자': st.session_state.user_id
                     }):
+                        _clear_schedule_cache()
                         st.session_state.schedule_db = load_schedule()
                         st.success("일정 등록 완료!"); st.rerun()
                 else:
