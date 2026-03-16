@@ -2775,6 +2775,9 @@ elif curr_l == "생산 현황 리포트":
     db_g = db_v[db_v['반'] == curr_g]   # 현재 반 전체 (db_g NameError 방지)
 
     # ── 신규 제품 등록 ───────────────────────────────────────────────
+    _asm_reg_toast = st.session_state.pop("_asm_reg_toast", None)
+    if _asm_reg_toast:
+        st.success(_asm_reg_toast)
     st.markdown("<div class='section-title'>➕ 신규 제품 등록</div>", unsafe_allow_html=True)
     models_for_group = st.session_state.group_master_models.get(curr_g, [])
     items_for_group  = st.session_state.group_master_items.get(curr_g, {})
@@ -2804,7 +2807,7 @@ elif curr_l == "생산 현황 리포트":
             if insert_row(new_row):
                 insert_audit_log(시리얼=sn_clean, 모델=model_sel, 반=curr_g,
                     이전상태="", 이후상태="조립중", 작업자=st.session_state.user_id)
-                st.success(f"✅ [{sn_clean}] 등록 완료")
+                st.session_state["_asm_reg_toast"] = f"✅ [{sn_clean}] 등록 완료"
                 st.session_state.production_db = load_realtime_ledger()
                 st.rerun()
 
@@ -5379,6 +5382,10 @@ elif curr_l == "마스터 관리":
 
         st.markdown("<h4 style='color:#c8605a; font-weight:bold; margin:16px 0 10px 0;'>🗑️ 데이터 삭제 관리</h4>", unsafe_allow_html=True)
         st.caption("생산 이력, 감사 로그, 자재 시리얼, 생산 일정을 개별 또는 전체 삭제합니다.")
+        # ── 삭제 결과 toast (rerun 후 표시) ──────────────────────────
+        _del_mgr_toast = st.session_state.pop("_del_mgr_toast", None)
+        if _del_mgr_toast:
+            st.success(_del_mgr_toast)
 
         del_tab1, del_tab2, del_tab3, del_tab4, del_tab5, del_tab6, del_tab7 = st.tabs([
             "📦 생산 이력", "🔍 감사 로그", "🔩 자재 시리얼",
@@ -5497,7 +5504,7 @@ elif curr_l == "마스터 관리":
                     if _row_id and ar[6].button("🗑️", key=f"del_audit_{_row_id}", help="이 행 삭제"):
                         if delete_audit_log_row(_row_id):
                             st.cache_data.clear()
-                            st.success("삭제 완료"); st.rerun()
+                            st.session_state["_del_mgr_toast"] = "✅ 감사 로그 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 감사 로그가 없습니다.")
 
@@ -5515,7 +5522,7 @@ elif curr_l == "마스터 관리":
                     if delete_all_audit_log():
                         _clear_audit_cache()
                         st.session_state[_ck_audit_all] = False
-                        st.success("감사 로그 전체 삭제 완료"); st.rerun()
+                        st.session_state["_del_mgr_toast"] = "✅ 감사 로그 전체 삭제 완료"; st.rerun()
                 if _aa3.button("취소", key="del_audit_all_no", use_container_width=True):
                     st.session_state[_ck_audit_all] = False; st.rerun()
 
@@ -5561,7 +5568,7 @@ elif curr_l == "마스터 관리":
                     if _mid and mr[5].button("🗑️", key=f"del_mat_{_mid}", help="이 행 삭제"):
                         if delete_material_serial_row(_mid):
                             st.cache_data.clear()
-                            st.success("삭제 완료"); st.rerun()
+                            st.session_state["_del_mgr_toast"] = "✅ 자재 시리얼 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 자재 시리얼이 없습니다.")
 
@@ -5579,7 +5586,7 @@ elif curr_l == "마스터 관리":
                     if delete_all_material_serial():
                         load_material_serials.clear()
                         st.session_state[_ck_mat_all] = False
-                        st.success("자재 시리얼 전체 삭제 완료"); st.rerun()
+                        st.session_state["_del_mgr_toast"] = "✅ 자재 시리얼 전체 삭제 완료"; st.rerun()
                 if _ma3.button("취소", key="del_mat_all_no", use_container_width=True):
                     st.session_state[_ck_mat_all] = False; st.rerun()
 
@@ -5617,7 +5624,7 @@ elif curr_l == "마스터 관리":
                         if delete_schedule(int(_sid)):
                             _clear_schedule_cache()
                             st.session_state.schedule_db = load_schedule()
-                            st.success("삭제 완료"); st.rerun()
+                            st.session_state["_del_mgr_toast"] = "✅ 생산 일정 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 일정이 없습니다.")
 
@@ -5636,7 +5643,7 @@ elif curr_l == "마스터 관리":
                         _clear_schedule_cache()
                         st.session_state.schedule_db = load_schedule()
                         st.session_state[_ck_sch_all] = False
-                        st.success("생산 일정 전체 삭제 완료"); st.rerun()
+                        st.session_state["_del_mgr_toast"] = "✅ 생산 일정 전체 삭제 완료"; st.rerun()
                 if _sa3.button("취소", key="del_sch_all_no", use_container_width=True):
                     st.session_state[_ck_sch_all] = False; st.rerun()
 
@@ -5683,7 +5690,7 @@ elif curr_l == "마스터 관리":
                     if _plid and plr[7].button("🗑️", key=f"del_plog_{_plid}", help="이 행 삭제"):
                         if delete_plan_change_log_row(_plid):
                             st.cache_data.clear()
-                            st.success("삭제 완료"); st.rerun()
+                            st.session_state["_del_mgr_toast"] = "✅ 계획 변경 이력 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 계획 변경 이력이 없습니다.")
 
@@ -5701,7 +5708,7 @@ elif curr_l == "마스터 관리":
                     if delete_all_plan_change_log():
                         _clear_plan_cache()
                         st.session_state[_ck_plog_all] = False
-                        st.success("계획 변경 이력 전체 삭제 완료"); st.rerun()
+                        st.session_state["_del_mgr_toast"] = "✅ 계획 변경 이력 전체 삭제 완료"; st.rerun()
                 if _pla3.button("취소", key="del_plog_all_no", use_container_width=True):
                     st.session_state[_ck_plog_all] = False; st.rerun()
 
@@ -5745,7 +5752,7 @@ elif curr_l == "마스터 관리":
                     if _slid and slr[6].button("🗑️", key=f"del_slog_{_slid}", help="이 행 삭제"):
                         if delete_schedule_change_log_row(_slid):
                             st.cache_data.clear()
-                            st.success("삭제 완료"); st.rerun()
+                            st.session_state["_del_mgr_toast"] = "✅ 일정 변경 이력 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 일정 변경 이력이 없습니다.")
 
@@ -5763,7 +5770,7 @@ elif curr_l == "마스터 관리":
                     if delete_all_schedule_change_log():
                         st.cache_data.clear()
                         st.session_state[_ck_slog_all] = False
-                        st.success("일정 변경 이력 전체 삭제 완료"); st.rerun()
+                        st.session_state["_del_mgr_toast"] = "✅ 일정 변경 이력 전체 삭제 완료"; st.rerun()
                 if _sla3.button("취소", key="del_slog_all_no", use_container_width=True):
                     st.session_state[_ck_slog_all] = False; st.rerun()
 
@@ -5809,7 +5816,7 @@ elif curr_l == "마스터 관리":
                         if delete_production_plan_row(_p_ban, _p_wol):
                             _clear_plan_cache()
                             st.session_state.production_plan = load_production_plan()
-                            st.success(f"삭제 완료: {_p_ban} {_p_wol}")
+                            st.session_state["_del_mgr_toast"] = f"✅ 삭제 완료: {_p_ban} {_p_wol}"
                             st.rerun()
             else:
                 st.info("조건에 맞는 계획 수량이 없습니다.")
@@ -5831,7 +5838,7 @@ elif curr_l == "마스터 관리":
                         _clear_plan_cache()
                         st.session_state.production_plan = load_production_plan()
                         st.session_state[_ck_plan_all] = False
-                        st.success("월별 계획 수량 전체 삭제 완료"); st.rerun()
+                        st.session_state["_del_mgr_toast"] = "✅ 월별 계획 수량 전체 삭제 완료"; st.rerun()
                 if _ppa3.button("취소", key="del_plan_all_no", use_container_width=True):
                     st.session_state[_ck_plan_all] = False; st.rerun()
 
