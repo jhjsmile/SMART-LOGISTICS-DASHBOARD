@@ -2289,6 +2289,7 @@ elif curr_l == "조립 라인":
 
     st.divider()
     db_v = st.session_state.production_db
+    db_g = db_v[db_v['반'] == curr_g]                                       # 현재 반 전체
     f_df = db_v[(db_v['반'] == curr_g) & (db_v['라인'] == "조립 라인")]
 
     # ── 모델/품목별 수량 카운트 + 생산 이력 ─────────────────────────
