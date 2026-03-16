@@ -1416,32 +1416,61 @@ def show_inline_day_panel():
                 st.warning("일정 추가 권한이 없습니다.")
                 return
 
+            # ── 반 선택 (폼 외부 — 변경 시 모델/품목 목록 즉시 갱신) ──
+            _add_ban_key = "sch_add_ban_sel"
+            if _add_ban_key not in st.session_state:
+                st.session_state[_add_ban_key] = PRODUCTION_GROUPS[0]
+            ban = st.selectbox("반 *", PRODUCTION_GROUPS, key=_add_ban_key)
+
+            _ban_models  = st.session_state.group_master_models.get(ban, [])
+            _ban_all_pns = list(dict.fromkeys(
+                _pn for _m in _ban_models
+                for _pn in st.session_state.group_master_items.get(ban, {}).get(_m, [])
+            ))
+
             with st.form("add_sch_form_inline"):
-                ban   = st.selectbox("반 *", PRODUCTION_GROUPS)
-                cat   = st.selectbox("계획 유형 *", PLAN_CATEGORIES)
+                cat = st.selectbox("계획 유형 *", PLAN_CATEGORIES)
                 fa1, fa2 = st.columns(2)
-                model = fa1.text_input("모델명 *")
-                pn    = fa2.text_input("P/N (품목코드)")
+
+                # 모델명 — 등록 목록 드롭박스 + 직접 입력 병행
+                _m_opts = [""] + _ban_models
+                model_sel = fa1.selectbox("모델명 (등록 목록)", _m_opts,
+                                          help="목록에서 선택하거나 아래에 직접 입력")
+                model_txt = fa1.text_input("모델명 직접 입력", placeholder="목록에 없으면 여기 입력")
+
+                # P/N — 등록 목록 드롭박스 + 직접 입력 병행
+                _pn_opts = [""] + _ban_all_pns
+                pn_sel = fa2.selectbox("P/N (등록 목록)", _pn_opts,
+                                       help="목록에서 선택하거나 아래에 직접 입력")
+                pn_txt = fa2.text_input("P/N 직접 입력", placeholder="목록에 없으면 여기 입력")
+
                 qty_str = st.text_input("조립수", value="0", placeholder="숫자 입력")
-                note  = st.text_input("특이사항")
-                etc   = st.text_input("기타")
+                note    = st.text_input("특이사항")
+                etc     = st.text_input("기타")
+
                 if st.form_submit_button("✅ 등록", use_container_width=True, type="primary"):
                     try:
                         qty = max(0, int(qty_str.strip() or "0"))
                     except ValueError:
                         qty = 0
+                    # 직접 입력 우선, 없으면 드롭박스 선택값
+                    model = model_txt.strip() or model_sel
+                    pn    = pn_txt.strip()    or pn_sel
                     if model.strip() or note.strip():
                         note_combined = " / ".join(filter(None, [note.strip(), etc.strip()]))
                         if insert_schedule({
                             '날짜': selected_date, '반': ban,
-                            '카테고리': cat, 'pn': pn.strip(), '모델명': model.strip(),
+                            '카테고리': cat, 'pn': pn, '모델명': model,
                             '조립수': qty, '출하계획': '',
                             '특이사항': note_combined, '작성자': st.session_state.user_id
                         }):
                             st.session_state.schedule_db = load_schedule()
-                            st.session_state.cal_action  = "view_day"
-                            st.session_state.cal_action_data = selected_date
+                            st.session_state.cal_action       = "view_day"
+                            st.session_state.cal_action_data  = selected_date
+                            st.session_state["_sch_add_toast"] = f"✅ [{ban}] {selected_date} 일정 등록 완료"
                             st.rerun()
+                        # 실패 시: insert_schedule() 내부에서 st.error() 호출됨
+                        # rerun 없이 폼 유지 → 에러 메시지가 폼 안에 표시됨
                     else:
                         st.warning("모델명 또는 특이사항을 입력해주세요.")
             return
@@ -1451,6 +1480,9 @@ def show_inline_day_panel():
         day_data = sch_df[sch_df['날짜'] == selected_date] if not sch_df.empty else pd.DataFrame()
 
         # rerun 후 toast 메시지 표시
+        _add_toast = st.session_state.pop("_sch_add_toast", None)
+        if _add_toast:
+            st.success(_add_toast)
         _del_toast = st.session_state.pop("_sch_del_toast", None)
         if _del_toast:
             if "✅" in _del_toast:
@@ -4855,12 +4887,6 @@ elif curr_l == "마스터 관리":
                     else:
                         st.error("비밀번호가 올바르지 않습니다.")
     else:
-        # 등록/삭제 후 rerun 이전에 저장된 메시지 표시
-        _mreg = st.session_state.pop("_master_reg_msg", None)
-        if _mreg:
-            if _mreg[0] == "success": st.success(_mreg[1])
-            else: st.warning(_mreg[1])
-
         st.markdown("<div class='section-title'>📋 반별 독립 모델/품목 설정</div>", unsafe_allow_html=True)
         tabs = st.tabs([f"{g} 설정" for g in PRODUCTION_GROUPS])
         for i, g_name in enumerate(PRODUCTION_GROUPS):
@@ -4883,10 +4909,9 @@ elif curr_l == "마스터 관리":
                                         added.append(nm)
                                     else: skipped.append(nm)
                                 if added:
-                                    st.session_state["_master_reg_msg"] = ("success", f"✅ 등록 완료: {', '.join(added)}")
+                                    st.success(f"✅ 등록 완료: {', '.join(added)}")
                                 elif skipped:
-                                    st.session_state["_master_reg_msg"] = ("warning", f"⚠️ 이미 존재: {', '.join(skipped)}")
-                                st.rerun()
+                                    st.warning(f"⚠️ 이미 존재: {', '.join(skipped)}")
                             else: st.warning("모델명을 입력해주세요.")
                 with c2:
                     with st.container(border=True):
@@ -4907,10 +4932,9 @@ elif curr_l == "마스터 관리":
                                             added.append(ni)
                                         else: skipped.append(ni)
                                     if added:
-                                        st.session_state["_master_reg_msg"] = ("success", f"✅ 등록 완료: {', '.join(added)}")
+                                        st.success(f"✅ 등록 완료: {', '.join(added)}")
                                     elif skipped:
-                                        st.session_state["_master_reg_msg"] = ("warning", f"⚠️ 이미 존재: {', '.join(skipped)}")
-                                    st.rerun()
+                                        st.warning(f"⚠️ 이미 존재: {', '.join(skipped)}")
                                 else: st.warning("품목코드를 입력해주세요.")
                         else:
                             st.warning("모델을 먼저 등록하세요.")
