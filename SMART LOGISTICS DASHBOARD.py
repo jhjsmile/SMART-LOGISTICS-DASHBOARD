@@ -1,4 +1,3 @@
-
 # ═══════════════════════════════════════════════════════════════
 # 🔒 보안 개선 사항 (v24.2)
 # ═══════════════════════════════════════════════════════════════
@@ -1904,6 +1903,7 @@ def _do_batch_entry(sn_list, curr_line):
                         '상태': _next_status, '작업자': st.session_state.user_id})
         insert_audit_log(시리얼=sn, 모델=_model, 반=_ban,
             이전상태=_prev_status, 이후상태=_next_status, 작업자=st.session_state.user_id)
+    _clear_production_cache()                              # ← 캐시 초기화 (누락 버그 수정)
     st.session_state.production_db = load_realtime_ledger()
 
 # 캘린더 인라인 패널 → 캘린더 렌더링 직후에 호출 (아래 메인 현황판 섹션 참조)
@@ -2373,6 +2373,7 @@ elif curr_l == "조립 라인":
                             insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                 이전상태=_r['상태'], 이후상태='검사대기', 작업자=st.session_state.user_id)
                     st.session_state[_asm_chk_key] = {}
+                    _clear_production_cache()              # ← 캐시 초기화 (누락 버그 수정)
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
                 if ba3.button("🚫 일괄 불량", key=f"bulk_ng_{curr_g}", use_container_width=True):
@@ -2385,6 +2386,7 @@ elif curr_l == "조립 라인":
                             insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                 이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
                     st.session_state[_asm_chk_key] = {}
+                    _clear_production_cache()              # ← 캐시 초기화 (누락 버그 수정)
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
 
@@ -2407,6 +2409,7 @@ elif curr_l == "조립 라인":
                     if is_actionable:
                         b1, b2 = st.columns(2)
                         if b1.button("✅", key=f"ok_{idx}", use_container_width=True, help="완료"):
+                            _clear_production_cache()                          # ← 캐시 초기화 (누락 버그 수정)
                             update_row(row['시리얼'], {'상태':'검사대기','시간':get_now_kst_str()})
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태='검사대기', 작업자=st.session_state.user_id)
@@ -2414,6 +2417,7 @@ elif curr_l == "조립 라인":
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
                         if b2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량"):
+                            _clear_production_cache()                          # ← 캐시 초기화 (누락 버그 수정)
                             update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str(),
                                 '증상': f'불량입고출처: 조립 라인'})
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
@@ -2765,6 +2769,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
                         if c2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량"):
+                            _clear_production_cache()                          # ← 캐시 초기화 (누락 버그 수정)
                             update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str(),
                                 '증상': f'불량입고출처: {curr_l}'})
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
@@ -2823,6 +2828,7 @@ elif curr_l == "생산 현황 리포트":
                 insert_audit_log(시리얼=sn_clean, 모델=model_sel, 반=curr_g,
                     이전상태="", 이후상태="조립중", 작업자=st.session_state.user_id)
                 st.session_state["_asm_reg_toast"] = f"✅ [{sn_clean}] 등록 완료"
+                _clear_production_cache()                  # ← 캐시 초기화 (누락 버그 수정)
                 st.session_state.production_db = load_realtime_ledger()
                 st.rerun()
 
