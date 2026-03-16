@@ -2771,6 +2771,9 @@ elif curr_l in ["검사 라인", "포장 라인"]:
 
 elif curr_l == "생산 현황 리포트":
 
+    db_v = st.session_state.production_db
+    db_g = db_v[db_v['반'] == curr_g]   # 현재 반 전체 (db_g NameError 방지)
+
     # ── 신규 제품 등록 ───────────────────────────────────────────────
     st.markdown("<div class='section-title'>➕ 신규 제품 등록</div>", unsafe_allow_html=True)
     models_for_group = st.session_state.group_master_models.get(curr_g, [])
@@ -6337,4 +6340,3 @@ elif curr_l == "관리자 매뉴얼":
 #   pytest tests/ --cov=. --cov-report=html
 #
 # =================================================================
-
