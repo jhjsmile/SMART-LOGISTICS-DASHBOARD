@@ -596,7 +596,7 @@ def verify_pw(plain: str, hashed: str) -> bool:
     if _BCRYPT_AVAILABLE and hashed.startswith("$2"):
         try:
             return _bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
-        except Exception:
+        except (ValueError, AttributeError):
             return False
     # SHA-256 fallback (기존 계정 호환)
     return hashlib.sha256(plain.encode("utf-8")).hexdigest() == hashed
@@ -686,6 +686,14 @@ def _clear_audit_cache() -> None:
     """감사 로그 캐시 초기화"""
     load_audit_log.clear()
 
+def _clear_all_cache() -> None:
+    """전체 캐시 일괄 초기화"""
+    _clear_production_cache()
+    _clear_schedule_cache()
+    _clear_plan_cache()
+    _clear_master_cache()
+    _clear_audit_cache()
+
 def keep_supabase_alive() -> None:
     try:
         get_supabase().table("production").select("id").limit(1).execute()
@@ -703,8 +711,10 @@ def get_now_kst_str() -> str:
 
 def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
     """입고 대기 수량이 증가하면 가운데 팝업 알림 + 사운드를 출력한다."""
+    import html as _html_mod
     prev = st.session_state.get(notif_key, -1)
     if curr_cnt > 0 and curr_cnt > prev:
+        _safe_label = _html_mod.escape(str(label))
         st.components.v1.html(f"""
         <script>
         (function(){{
@@ -753,7 +763,7 @@ def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
             box.innerHTML =
                 '<div style="font-size:3.5rem;margin-bottom:12px;">📥</div>'
                 + '<div style="font-size:1.6rem;font-weight:800;color:#1a1a2e;margin-bottom:8px;">입고 대기 알림</div>'
-                + '<div style="font-size:1.05rem;color:#2E75B6;font-weight:600;margin-bottom:8px;">{label}</div>'
+                + '<div style="font-size:1.05rem;color:#2E75B6;font-weight:600;margin-bottom:8px;">{_safe_label}</div>'
                 + '<div style="font-size:2.6rem;font-weight:900;color:#c8605a;margin-bottom:28px;">{curr_cnt}건 도착!</div>'
                 + '<button id="sld_notif_btn" style="background:#2E75B6;color:#fff;border:none;border-radius:10px;padding:14px 44px;font-size:1.15rem;cursor:pointer;font-weight:700;">✅ 확인</button>';
 
@@ -774,7 +784,6 @@ def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
     _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','작업자']
     try:
         sb = get_supabase()
-        from datetime import date, timedelta
         cutoff = (date.today().replace(day=1) -
                   timedelta(days=(months-1)*28)).strftime('%Y-%m-%d')
         try:
@@ -1550,7 +1559,7 @@ def show_inline_day_panel():
                     ship_v  = _esc(r.get('출하계획', ''))
                     note_v  = _esc(r.get('특이사항', ''))
                     try: qty_v = int(float(r.get('조립수', 0))) if r.get('조립수') not in (None,'','nan') else 0
-                    except: qty_v = 0
+                    except (ValueError, TypeError): qty_v = 0
                     qty_str  = f"{qty_v}대" if qty_v else "-"
                     ship_str = ship_v if ship_v and ship_v != 'nan' else "-"
                     note_str = f" ⚠️ {note_v}" if note_v and note_v not in ('', 'nan') else ""
@@ -1667,20 +1676,29 @@ if 'user_db' not in st.session_state:
         if result.data:
             # DB에서 로드 성공
             import json as _json
-            st.session_state.user_db = {
-                user['username']: {
+            _user_db = {}
+            for user in result.data:
+                _entry = {
                     'pw_hash': user['password_hash'],
                     'role': user['role'],
-                    **({'custom_permissions': _json.loads(user['custom_permissions'])}
-                       if user.get('custom_permissions') else {})
                 }
-                for user in result.data
-            }
+                if user.get('custom_permissions'):
+                    try:
+                        _entry['custom_permissions'] = _json.loads(user['custom_permissions'])
+                    except (_json.JSONDecodeError, ValueError):
+                        pass  # 잘못된 JSON은 무시하고 커스텀 권한 없이 로그인 허용
+                _user_db[user['username']] = _entry
+            st.session_state.user_db = _user_db
         else:
-            # DB에 데이터 없으면 기본값 (환경변수에서)
-            st.session_state.user_db = {
-                "admin": {"pw_hash": st.secrets.get("default_users", {}).get("admin_hash", hash_pw("CHANGE_ME_NOW")), "role": "admin"},
-            }
+            # DB에 데이터 없으면 secrets.toml의 해시 사용 (기본 패스워드 사용 금지)
+            _admin_hash = st.secrets.get("default_users", {}).get("admin_hash")
+            if _admin_hash:
+                st.session_state.user_db = {
+                    "admin": {"pw_hash": _admin_hash, "role": "admin"},
+                }
+            else:
+                st.session_state.user_db = {}
+                st.sidebar.error("❌ DB에 사용자 없음 & secrets에 admin_hash 미설정: [default_users] admin_hash를 추가하세요.")
     except Exception as e:
         # Supabase 연결 실패 시 임시 계정 (경고 표시)
         # 보안: 평문 비밀번호 하드코딩 제거 → secrets.toml 또는 환경변수에서 해시 로드
@@ -2396,7 +2414,8 @@ elif curr_l == "조립 라인":
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;'>{txt}</p>", unsafe_allow_html=True)
 
             _asm_cb_ver = st.session_state[_asm_search_cnt]  # 스캔 시 변경 → 체크박스 강제 재렌더
-            for idx, row in f_df_view.sort_values('시간', ascending=False).iterrows():
+            for row in f_df_view.sort_values('시간', ascending=False).reset_index().to_dict('records'):
+                idx = row['index']
                 is_actionable = row['상태'] in ["조립중", "수리 완료(재투입)"]
                 r = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 2.0])
                 _ck = r[0].checkbox("", key=f"asm_cb_{curr_g}_{idx}_{_asm_cb_ver}",
@@ -2637,7 +2656,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     wc1.markdown(f"**{w_model}**" + (f"  `{w_pn}`" if w_pn else ""))
                     wc2.caption(f"{len(w_gdf)}대")
                     _wcb_ver = st.session_state[_wscan_cnt]
-                    for wi, (widx, wrow) in enumerate(w_gdf.iterrows()):
+                    for wrow in w_gdf.reset_index().to_dict('records'):
+                        widx = wrow['index']
                         wr1, wr2, wr3 = st.columns([0.5, 3, 1.2])
                         _wck = wr1.checkbox("", key=f"wck_{curr_g}_{curr_l}_{widx}_{_wcb_ver}",
                             value=st.session_state[_wck_key].get(str(widx), False),
@@ -2743,7 +2763,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                              unsafe_allow_html=True)
 
             _hcb_ver = st.session_state[_hsrch_cnt]
-            for idx, row in f_df_view.sort_values('시간', ascending=False).iterrows():
+            for row in f_df_view.sort_values('시간', ascending=False).reset_index().to_dict('records'):
+                idx = row['index']
                 is_act = row['상태'] in ["검사중","포장중","수리 완료(재투입)"]
                 r = st.columns([0.4, 1.8, 1.8, 1.3, 1.6, 2.2])
                 _hck = r[0].checkbox("", key=f"hck_{curr_g}_{curr_l}_{idx}_{_hcb_ver}",
@@ -3144,12 +3165,11 @@ elif curr_l == "생산 지표 관리":
     period     = fc1.radio("기간", ["오늘","이번 주","이번 달"], horizontal=True, key="dash_period")
     ban_filter = fc2.radio("반", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="dash_ban")
 
-    from datetime import date as _date, timedelta as _td
-    _today = _date.today()
+    _today = date.today()
     if period == "오늘":
         date_from = date_to_d = today_str
     elif period == "이번 주":
-        _mon = _today - _td(days=_today.weekday())
+        _mon = _today - timedelta(days=_today.weekday())
         date_from = _mon.strftime('%Y-%m-%d'); date_to_d = today_str
     else:
         date_from = today_str[:7] + "-01"; date_to_d = today_str
@@ -3376,9 +3396,8 @@ elif curr_l == "생산 지표 관리":
             st.caption("반/월별 목표 수량을 입력합니다. 변경 시 사유를 선택하면 이력이 자동 기록됩니다.")
             pl1, pl2, pl3 = st.columns([1.5, 1.5, 1.2])
             p_ban  = pl1.selectbox("반", PRODUCTION_GROUPS, key="plan_ban")
-            from datetime import date as _d2
             # Bug fix: 28일 단위 대신 월 단위로 정확히 역산 (Python modulo 활용)
-            _today2 = _d2.today()
+            _today2 = date.today()
             _months = []
             for i in range(6):
                 _mo = (_today2.month - 1 - i) % 12 + 1
@@ -3418,8 +3437,7 @@ elif curr_l == "생산 지표 관리":
     plan_map_now = st.session_state.production_plan  # {반_YYYY-MM: 계획수량}
 
     # 최근 6개월 목록 (Bug fix: 28일 단위 대신 월 단위로 정확히 역산)
-    from datetime import date as _d3
-    _td3 = _d3.today()
+    _td3 = date.today()
     months_list = []
     for i in range(5, -1, -1):
         _mo3 = (_td3.month - 1 - i) % 12 + 1
@@ -3825,7 +3843,6 @@ elif curr_l == "생산 지표 관리":
         if uploaded_file:
             try:
                 import openpyxl, io as _io, re as _re
-                from datetime import datetime as _dt
 
                 raw = uploaded_file.read()
                 wb  = openpyxl.load_workbook(_io.BytesIO(raw), data_only=True)
@@ -3866,7 +3883,7 @@ elif curr_l == "생산 지표 관리":
                                 continue
                             # 날짜 처리 (datetime / 문자열 / 숫자 모두 대응)
                             date_str = None
-                            if isinstance(date_val, _dt):
+                            if isinstance(date_val, datetime):
                                 date_str = date_val.strftime('%Y-%m-%d')
                             elif hasattr(date_val, 'strftime'):  # date 객체
                                 date_str = date_val.strftime('%Y-%m-%d')
@@ -3879,8 +3896,7 @@ elif curr_l == "생산 지표 관리":
                             elif isinstance(date_val, (int, float)):
                                 # 엑셀 시리얼 날짜 변환
                                 try:
-                                    from datetime import date as _date
-                                    date_str = (_date(1899, 12, 30) + __import__('datetime').timedelta(days=int(date_val))).strftime('%Y-%m-%d')
+                                    date_str = (date(1899, 12, 30) + timedelta(days=int(date_val))).strftime('%Y-%m-%d')
                                 except Exception:
                                     pass
                             if not date_str:
@@ -3914,7 +3930,7 @@ elif curr_l == "생산 지표 관리":
 
                         if not ban and not model and not date_val: continue
                         if not model and not note: continue
-                        if isinstance(date_val, _dt):
+                        if isinstance(date_val, datetime):
                             date_str = date_val.strftime('%Y-%m-%d')
                         elif isinstance(date_val, str) and len(date_val) == 10:
                             date_str = date_val
@@ -4724,7 +4740,7 @@ elif curr_l == "OQC 라인":
                                file_name="자재시리얼_양식.xlsx",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                key="mat_tmpl_dl")
-        except: st.caption("양식 다운로드 기능 준비 중")
+        except Exception: st.caption("양식 다운로드 기능 준비 중")
 
         mat_file = st.file_uploader("자재 시리얼 엑셀 업로드", type=["xlsx","xls"], key="mat_xl_upload")
         if mat_file:
@@ -5264,7 +5280,7 @@ elif curr_l == "마스터 관리":
                     db_export['시간_dt'] = pd.to_datetime(db_export['시간'])
                     db_export = db_export[(db_export['시간_dt'].dt.date >= start_date) & (db_export['시간_dt'].dt.date <= end_date)]
                     db_export = db_export.drop(columns=['시간_dt'])
-                except: pass
+                except (TypeError, KeyError): pass
             st.caption(f"📋 조회 결과: **{len(db_export)}건**")
             st.download_button("📥 CSV 다운로드",
                 db_export.to_csv(index=False).encode('utf-8-sig'),
@@ -5502,7 +5518,7 @@ elif curr_l == "마스터 관리":
                     res = get_supabase().table("audit_log").select("*").order("시간", desc=True).limit(500).execute()
                     return pd.DataFrame(res.data) if res.data else pd.DataFrame(
                         columns=['id','시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
-                except: return pd.DataFrame(columns=['id','시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+                except Exception: return pd.DataFrame(columns=['id','시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
 
             audit_df = _load_audit_all()
             st.caption(f"현재 **{len(audit_df)}건** (최대 500건 표시)")
@@ -5565,7 +5581,7 @@ elif curr_l == "마스터 관리":
                     res = get_supabase().table("material_serial").select("*").order("시간", desc=True).limit(500).execute()
                     return pd.DataFrame(res.data) if res.data else pd.DataFrame(
                         columns=['id','시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
-                except: return pd.DataFrame(columns=['id','시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+                except Exception: return pd.DataFrame(columns=['id','시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
 
             mat_df = _load_mat_all()
             st.caption(f"현재 **{len(mat_df)}건** (최대 500건 표시)")
