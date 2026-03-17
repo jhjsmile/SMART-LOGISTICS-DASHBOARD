@@ -2835,20 +2835,19 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             _sn_search_qp = hs1.text_input("🔍 시리얼 스캔/검색",
                 placeholder="스캔 또는 입력 → 자동 체크", key=_hsrch_key)
 
+            f_df_view = f_df
             if _sn_search_qp.strip():
                 _actionable = f_df[f_df['상태'].isin(["검사중","포장중","수리 완료(재투입)"])]
-                f_df_view = _actionable[_actionable['시리얼'].str.contains(
+                _search_result = _actionable[_actionable['시리얼'].str.contains(
                     _sn_search_qp.strip(), case=False, na=False)]
-                if f_df_view.empty:
+                if _search_result.empty:
                     hs1.warning(f"**'{_sn_search_qp.strip()}'** — 처리 가능한 시리얼이 없습니다.")
                 else:
+                    f_df_view = _search_result
                     for _hi in f_df_view.index:
                         st.session_state[_hck_key][str(_hi)] = True
                     st.session_state[_hsrch_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                     st.rerun()
-                f_df_view = f_df
-            else:
-                f_df_view = f_df
 
             _h_checked = [k for k,v in st.session_state[_hck_key].items() if v]
             if _h_checked:
@@ -3683,7 +3682,7 @@ elif curr_l == "생산 지표 관리":
                     plan_key = f"{p_ban}_{p_month}"
                     st.session_state.production_plan[plan_key] = int(p_qty)
                     _clear_plan_cache()
-                    st.success(f"✅ {p_ban} / {p_month} → {p_qty:,}대 저장 완료")
+                    st.toast(f"✅ {p_ban} / {p_month} → {p_qty:,}대 저장 완료")
                     st.rerun()
 
     # ── 월별 달성률 그래프 ────────────────────────────────────────
@@ -4307,9 +4306,9 @@ elif curr_l == "생산 지표 관리":
                             _clear_schedule_cache()
                             st.session_state.schedule_db = load_schedule()
                             if success_cnt > 0:
-                                st.success(f"✅ 등록 완료: {success_cnt}건  |  건너뜀(중복): {skip_cnt}건" + (f"  |  실패: {fail_cnt}건" if fail_cnt else ""))
+                                st.toast(f"✅ 등록 완료: {success_cnt}건  |  건너뜀(중복): {skip_cnt}건" + (f"  |  실패: {fail_cnt}건" if fail_cnt else ""))
                             if fail_rows:
-                                st.error("등록 실패 행:\n" + "\n".join(fail_rows))
+                                st.toast("등록 실패 행:\n" + "\n".join(fail_rows), icon="🚨")
                             st.rerun()
                 else:
                     st.warning("파싱된 일정이 없습니다. 파일 형식을 확인해주세요.")
@@ -4745,7 +4744,7 @@ elif curr_l == "OQC 라인":
                 with st.container(border=True):
                     hc1, hc2 = st.columns([8, 1])
                     hc1.markdown(f"📋 **제품 전체 이력** — `{sn}`")
-                    if hc2.button("✖ 닫기", key=f"oqc_hist_close_{idx2}"):
+                    if hc2.button("✖ 닫기", key=f"oqc_hist_close_{_i}"):
                         st.session_state[_hist_key] = False
                         st.rerun()
 
@@ -5397,7 +5396,7 @@ elif curr_l == "마스터 관리":
                         st.session_state.group_master_items[g_name]  = {}
                         delete_all_master_by_group(g_name)
                         st.session_state[all_master_ck] = False
-                        st.success(f"{g_name} 모델/품목 전체 삭제 완료")
+                        st.toast(f"{g_name} 모델/품목 전체 삭제 완료")
                         st.rerun()
                     if am3.button("취소", key=f"del_all_m_no_{g_name}", use_container_width=True):
                         st.session_state[all_master_ck] = False
@@ -5429,7 +5428,7 @@ elif curr_l == "마스터 관리":
                                     # DB 제거
                                     delete_model_from_master(g_name, del_model)
                                     st.session_state[del_m_ck] = False
-                                    st.success(f"[{del_model}] 삭제 완료")
+                                    st.toast(f"[{del_model}] 삭제 완료")
                                     st.rerun()
                                 if dm2.button("취소", key=f"del_m_no_{g_name}", use_container_width=True):
                                     st.session_state[del_m_ck] = False
@@ -5459,7 +5458,7 @@ elif curr_l == "마스터 관리":
                                         st.session_state.group_master_items[g_name][di_model].remove(del_item)
                                         delete_item_from_master(g_name, di_model, del_item)
                                         st.session_state[del_i_ck] = False
-                                        st.success(f"[{del_item}] 삭제 완료")
+                                        st.toast(f"[{del_item}] 삭제 완료")
                                         st.rerun()
                                     if di2.button("취소", key=f"del_i_no_{g_name}", use_container_width=True):
                                         st.session_state[del_i_ck] = False
@@ -5600,9 +5599,9 @@ elif curr_l == "마스터 관리":
                             try:
                                 get_supabase().table("users").delete().eq(
                                     "username", confirm_target).execute()
-                                st.success(f"✅ [{confirm_target}] 계정 삭제 완료")
+                                st.toast(f"✅ [{confirm_target}] 계정 삭제 완료")
                             except Exception as _e:
-                                st.warning(f"메모리 삭제 완료, DB 삭제 실패: {_e}")
+                                st.toast(f"메모리 삭제 완료, DB 삭제 실패: {_e}", icon="⚠️")
                             st.session_state["del_user_confirm"] = False
                             st.session_state["del_user_target"] = ""
                             st.rerun()
@@ -5674,16 +5673,15 @@ elif curr_l == "마스터 관리":
                 final = ["(선택)"] + deduped + ["기타 (직접 입력)"]
                 st.session_state[ss_key] = final
                 if save_app_setting(ss_key, final):
-                    st.success(f"✅ {label} 저장 완료 ({len(deduped)}개 항목) — DB 반영됨")
+                    st.toast(f"✅ {label} 저장 완료 ({len(deduped)}개 항목) — DB 반영됨")
                 else:
-                    st.success(f"✅ {label} 저장 완료 ({len(deduped)}개 항목)")
-                    st.caption("DB 저장 실패 — 앱 재시작 시 초기화될 수 있습니다.")
+                    st.toast(f"✅ {label} 저장 완료 ({len(deduped)}개 항목) — DB 저장 실패, 앱 재시작 시 초기화될 수 있습니다.", icon="⚠️")
                 st.rerun()
             if ec2.button(f"↩️ 기본값 복원", key=f"dd_reset_{tab_key}", use_container_width=True):
                 default_val = _DD_DEFAULTS.get(ss_key, [])
                 st.session_state[ss_key] = default_val
                 save_app_setting(ss_key, default_val)
-                st.success("기본값으로 복원됩니다.")
+                st.toast("기본값으로 복원됩니다.")
                 st.rerun()
             st.caption(f"현재 {len(editable)}개 항목 등록됨 (선택·직접입력 제외)")
 
@@ -5816,7 +5814,7 @@ elif curr_l == "마스터 관리":
                         if delete_production_row_by_sn(row['시리얼']):
                             _clear_production_cache()
                             st.session_state.production_db = load_realtime_ledger()
-                            st.success(f"삭제 완료: {row['시리얼']}")
+                            st.toast(f"삭제 완료: {row['시리얼']}")
                             st.rerun()
                 if len(prod_df) > 200:
                     st.caption(f"※ 최대 200건만 표시. 필터로 범위를 좁혀주세요.")
@@ -6261,7 +6259,7 @@ elif curr_l == "마스터 관리":
                 if delete_all_rows():
                     st.session_state.production_db = load_realtime_ledger()
                     st.session_state.confirm_reset = False
-                    st.success("전체 데이터가 초기화되었습니다.")
+                    st.toast("전체 데이터가 초기화되었습니다.")
                     st.rerun()
             if cc3.button("취소", use_container_width=True):
                 st.session_state.confirm_reset = False
