@@ -4774,13 +4774,24 @@ elif curr_l == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 분석 및 수리 조치</h2>", unsafe_allow_html=True)
     db = st.session_state.production_db
 
-    # 반 선택
-    sel_group = st.radio("조회 반 선택", ["전체"] + PRODUCTION_GROUPS, horizontal=True,
-                         key="defect_group_radio")
-    if sel_group == "전체":
-        target_groups = PRODUCTION_GROUPS
+    # 사용자가 접근 가능한 반 계산
+    # "조립 라인" 등 전체 권한이면 모든 반, "조립 라인::제조2반" 등 반별 권한이면 해당 반만
+    _has_global_line = any(p in allowed_nav for p in ["조립 라인", "검사 라인", "포장 라인"])
+    if _has_global_line:
+        _accessible_groups = PRODUCTION_GROUPS
     else:
-        target_groups = [sel_group]
+        _accessible_groups = [g for g in PRODUCTION_GROUPS if any(f"::{g}" in nav for nav in allowed_nav)]
+        if not _accessible_groups:
+            _accessible_groups = PRODUCTION_GROUPS  # master/admin 등 fallback
+
+    # 반 선택 UI: 접근 가능한 반이 1개면 선택 UI 숨기고 자동 적용
+    if len(_accessible_groups) == 1:
+        target_groups = _accessible_groups
+        st.caption(f"📍 조회 반: **{_accessible_groups[0]}**")
+    else:
+        sel_group = st.radio("조회 반 선택", ["전체"] + _accessible_groups, horizontal=True,
+                             key="defect_group_radio")
+        target_groups = _accessible_groups if sel_group == "전체" else [sel_group]
 
     # 요약 카드 (선택된 반별)
     card_cols = st.columns(len(target_groups))
