@@ -3073,85 +3073,102 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     st.caption("자재 없음 — 스캔하거나 ➕ 추가 버튼을 누르세요")
 
 elif curr_l == "생산 현황 리포트":
+    st.markdown("<h2 class='centered-title'>📊 생산 현황 리포트</h2>", unsafe_allow_html=True)
 
-    db_v = st.session_state.production_db
-    db_g = db_v[db_v['반'] == curr_g]   # 현재 반 전체 (db_g NameError 방지)
+    v_group = st.radio("조회 범위", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="prod_report_grp")
+    df_rpt = st.session_state.production_db.copy()
+    if v_group != "전체":
+        df_rpt = df_rpt[df_rpt['반'] == v_group]
 
-    # ── 신규 제품 등록 ───────────────────────────────────────────────
-    _asm_reg_toast = st.session_state.pop("_asm_reg_toast", None)
-    if _asm_reg_toast:
-        st.success(_asm_reg_toast)
-    st.markdown("<div class='section-title'>➕ 신규 제품 등록</div>", unsafe_allow_html=True)
-    models_for_group = st.session_state.group_master_models.get(curr_g, [])
-    items_for_group  = st.session_state.group_master_items.get(curr_g, {})
+    if not df_rpt.empty:
+        # ── KPI ──────────────────────────────────────────────────────
+        _rpt_done    = df_rpt[(df_rpt['라인'] == '포장 라인') & (df_rpt['상태'] == '완료')]
+        _rpt_ing     = df_rpt[df_rpt['상태'].isin(['조립중','검사대기','검사중','OQC대기','OQC중','포장중','출하승인'])]
+        _rpt_defect  = df_rpt[df_rpt['상태'].str.contains('불량|부적합', na=False)]
+        kp1, kp2, kp3, kp4 = st.columns(4)
+        kp1.metric("📥 총 투입",      f"{len(df_rpt)} EA")
+        kp2.metric("✅ 최종 완료",    f"{len(_rpt_done)} EA")
+        kp3.metric("⚙️ 진행 중",     f"{len(_rpt_ing)} EA")
+        kp4.metric("🚫 불량/부적합", f"{len(_rpt_defect)} 건")
+        st.divider()
 
-    with st.form("asm_register_form", clear_on_submit=True):
-        fc1, fc2, fc3 = st.columns([2, 2, 1.5])
-        sn_input  = fc1.text_input("시리얼 번호 *", placeholder="예: SN20260301001")
-        model_sel = fc2.selectbox("모델 *", ["(선택)"] + models_for_group)
-        # items_for_group 값은 list이므로 첫 번째 값만 기본값으로 사용 (Bug fix: list → str)
-        _pn_raw   = items_for_group.get(model_sel, []) if model_sel != "(선택)" else []
-        auto_pn   = _pn_raw[0] if isinstance(_pn_raw, list) and _pn_raw else (str(_pn_raw) if _pn_raw else "")
-        pn_input  = fc3.text_input("품목코드", value=auto_pn)
-        submitted  = st.form_submit_button("✅ 등록", use_container_width=True, type="primary")
+        # ── 차트 행 1: 상태별 분포 + 모델별 비중 ─────────────────────
+        cc1, cc2 = st.columns([1.8, 1.2])
+        with cc1:
+            _st_cnt = df_rpt.groupby('상태').size().reset_index(name='수량').sort_values('수량', ascending=False)
+            _fig_st = px.bar(_st_cnt, x='상태', y='수량', color='상태',
+                             title="<b>현재 상태별 제품 분포</b>", template="plotly_white")
+            _fig_st.update_layout(showlegend=False, margin=dict(t=40, b=20))
+            _fig_st.update_yaxes(dtick=1)
+            st.plotly_chart(_fig_st, use_container_width=True)
+        with cc2:
+            _md_cnt = df_rpt.groupby('모델').size().reset_index(name='수량')
+            _fig_md = px.pie(_md_cnt, values='수량', names='모델', hole=0.45,
+                             title="<b>모델별 생산 비중</b>")
+            _fig_md.update_layout(margin=dict(t=40, b=20))
+            st.plotly_chart(_fig_md, use_container_width=True)
 
-    if submitted:
-        sn_clean = sn_input.strip()
-        if not sn_clean:
-            st.error("시리얼 번호를 입력해주세요.")
-        elif model_sel == "(선택)":
-            st.error("모델을 선택해주세요.")
-        else:
-            new_row = {
-                "시간": get_now_kst_str(), "반": curr_g, "라인": "조립 라인",
-                "모델": model_sel,
-                "품목코드": pn_input.strip(), "시리얼": sn_clean,
-                "상태": "조립중", "증상": "", "수리": "",
-                "작업자": st.session_state.user_id
-            }
-            if insert_row(new_row):
-                insert_audit_log(시리얼=sn_clean, 모델=model_sel, 반=curr_g,
-                    이전상태="", 이후상태="조립중", 작업자=st.session_state.user_id)
-                st.session_state["_asm_reg_toast"] = f"✅ [{sn_clean}] 등록 완료"
-                _clear_production_cache()                  # ← 캐시 초기화 (누락 버그 수정)
-                st.session_state.production_db = load_realtime_ledger()
-                st.rerun()
+        # ── 차트 행 2: 반별/공정별 완료 + 일자별 투입 추이 ───────────
+        cc3, cc4 = st.columns([1.2, 1.8])
+        with cc3:
+            if v_group == "전체":
+                _ban_done = df_rpt[df_rpt['상태'] == '완료'].groupby('반').size().reset_index(name='완료')
+                if not _ban_done.empty:
+                    _fig_ban = px.bar(_ban_done, x='반', y='완료', color='반',
+                                      title="<b>반별 완료 수량</b>", template="plotly_white")
+                    _fig_ban.update_layout(showlegend=False, margin=dict(t=40, b=20))
+                    st.plotly_chart(_fig_ban, use_container_width=True)
+                else:
+                    st.info("완료 데이터 없음")
+            else:
+                _ln_cnt = df_rpt.groupby('라인').size().reset_index(name='수량')
+                _fig_ln = px.bar(_ln_cnt, x='라인', y='수량', color='라인',
+                                 title=f"<b>{v_group} 공정별 현황</b>", template="plotly_white")
+                _fig_ln.update_layout(showlegend=False, margin=dict(t=40, b=20))
+                _fig_ln.update_yaxes(dtick=1)
+                st.plotly_chart(_fig_ln, use_container_width=True)
+        with cc4:
+            try:
+                _df_trend = df_rpt.copy()
+                _df_trend['날짜'] = pd.to_datetime(_df_trend['시간'], errors='coerce').dt.date
+                _daily = _df_trend.groupby('날짜').size().reset_index(name='수량').dropna().sort_values('날짜')
+                if not _daily.empty:
+                    _fig_tr = px.line(_daily, x='날짜', y='수량', markers=True,
+                                      title="<b>일자별 생산 투입 추이</b>", template="plotly_white")
+                    _fig_tr.update_traces(line_color='#2471a3', marker_color='#2471a3')
+                    _fig_tr.update_layout(margin=dict(t=40, b=20))
+                    st.plotly_chart(_fig_tr, use_container_width=True)
+                else:
+                    st.info("추이 데이터 없음")
+            except Exception:
+                st.info("추이 차트 데이터 처리 중 오류")
 
-    st.divider()
+        st.divider()
 
-    # ── 조립 중 목록 ─────────────────────────────────────────────────
-    st.markdown("<div class='section-title'>🔧 조립 진행 중</div>", unsafe_allow_html=True)
-    ing_df = db_g[db_g['상태'] == '조립중'].sort_values('시간', ascending=False)
+        # ── 불량 현황 차트 ────────────────────────────────────────────
+        if not _rpt_defect.empty:
+            st.markdown("<div class='section-title'>🚫 불량/부적합 현황</div>", unsafe_allow_html=True)
+            cc5, cc6 = st.columns(2)
+            with cc5:
+                _ng_model = _rpt_defect.groupby('모델').size().reset_index(name='건수')
+                _fig_ng = px.bar(_ng_model, x='모델', y='건수', color='모델',
+                                 title="<b>모델별 불량 건수</b>", template="plotly_white")
+                _fig_ng.update_layout(showlegend=False, margin=dict(t=40, b=20))
+                st.plotly_chart(_fig_ng, use_container_width=True)
+            with cc6:
+                _ng_state = _rpt_defect.groupby('상태').size().reset_index(name='건수')
+                _fig_ngs = px.pie(_ng_state, values='건수', names='상태', hole=0.4,
+                                  title="<b>불량 유형 분포</b>")
+                _fig_ngs.update_layout(margin=dict(t=40, b=20))
+                st.plotly_chart(_fig_ngs, use_container_width=True)
+            st.divider()
 
-    if not ing_df.empty:
-        hh = st.columns([2, 2, 2, 1.5])
-        for col, txt in zip(hh, ["등록 시간", "모델", "시리얼", "조립 완료"]):
-            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-        # 성능: iterrows → enumerate + to_dict('records')
-        for idx, row in enumerate(ing_df.to_dict('records')):
-            rr = st.columns([2, 2, 2, 1.5])
-            rr[0].caption(str(row.get('시간', ''))[:16])
-            rr[1].write(row.get('모델', ''))
-            rr[2].markdown(f"`{row.get('시리얼', '')}`")
-            if rr[3].button("✔ 조립 완료", key=f"asm_done_{idx}", use_container_width=True, type="primary"):
-                _clear_production_cache()
-                update_row(row['시리얼'], {'상태': '검사대기', '시간': get_now_kst_str()})
-                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
-                    이전상태='조립중', 이후상태='검사대기', 작업자=st.session_state.user_id)
-                st.session_state.production_db = load_realtime_ledger()
-                st.rerun()
-    else:
-        st.info("조립 진행 중인 제품이 없습니다.")
-
-    st.divider()
-
-    with st.expander("📋 최근 등록 이력 (최근 20건)", expanded=False):
-        hist = db_g[db_g['라인'] == '조립 라인'].sort_values('시간', ascending=False).head(20)
-        if not hist.empty:
-            st.dataframe(hist[['시간', '모델', '시리얼', '상태', '작업자']].reset_index(drop=True),
+        # ── 이력 테이블 ───────────────────────────────────────────────
+        with st.expander("📋 전체 이력 테이블", expanded=False):
+            st.dataframe(df_rpt.sort_values('시간', ascending=False).reset_index(drop=True),
                          use_container_width=True, hide_index=True)
-        else:
-            st.info("이력이 없습니다.")
+    else:
+        st.info("조회 가능한 데이터가 없습니다.")
 
 # ── 검사 라인 ────────────────────────────────────────────────────
 elif curr_l == "검사 라인":
@@ -3341,34 +3358,6 @@ elif curr_l == "포장 라인":
                          use_container_width=True, hide_index=True)
         else:
             st.info("완료된 제품이 없습니다.")
-
-elif curr_l == "생산 현황 리포트":
-    st.markdown("<h2 class='centered-title'>📊 생산 운영 통합 모니터링</h2>", unsafe_allow_html=True)
-    v_group = st.radio("조회 범위", ["전체"] + PRODUCTION_GROUPS, horizontal=True)
-    df = st.session_state.production_db.copy()
-    if v_group != "전체": df = df[df['반'] == v_group]
-
-    if not df.empty:
-        c1,c2,c3,c4 = st.columns(4)
-        c1.metric("총 투입",      f"{len(df)} EA")
-        c2.metric("최종 생산",    f"{len(df[(df['라인']=='포장 라인')&(df['상태']=='완료')])} EA")
-        c3.metric("현재 작업 중", f"{len(df[df['상태'].isin(['조립중','검사중','포장중'])])} EA")
-        c4.metric("품질 이슈",    f"{len(df[df['상태'].str.contains('불량',na=False)])} 건")
-        st.divider()
-        cl, cr = st.columns([1.8, 1.2])
-        with cl:
-            fig_b = px.bar(df.groupby('라인').size().reset_index(name='수량'),
-                           x='라인', y='수량', color='라인',
-                           title="<b>[공정 단계별 제품 분포]</b>", template="plotly_white")
-            fig_b.update_yaxes(dtick=1)
-            st.plotly_chart(fig_b, use_container_width=True)
-        with cr:
-            fig_p = px.pie(df.groupby('모델').size().reset_index(name='수량'),
-                           values='수량', names='모델', hole=0.5, title="<b>[생산 모델별 비중]</b>")
-            st.plotly_chart(fig_p, use_container_width=True)
-        st.dataframe(df.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
-    else:
-        st.info("조회 가능한 데이터가 없습니다.")
 
 # ── 생산 지표 관리 ─────────────────────────────────────────────────
 elif curr_l == "생산 지표 관리":
