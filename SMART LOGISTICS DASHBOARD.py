@@ -178,6 +178,7 @@ STATUS_STYLE = {
     '조립중':   ('#f0f0f0','#3d3530','#c8b89a','🔧'),
     '수리 완료(재투입)': ('#f0e8d4','#5a4020','#c8a87a','♻️'),
     '불량 처리 중': ('#fde8e7','#7a2e2a','#e87e7a','🚫'),
+    '교체됨':      ('#e8e8f4','#3a3a6a','#9a9ad8','🔁'),
 }
 
 # ── 상태별 배경색 (STATE_CLR / STATE_CLR2 공통 상수, 두 곳에서 재사용) ──
@@ -194,6 +195,7 @@ STATUS_BG = {
     'OQC중':            '#ddeeff',
     '출하승인':         '#d4f0e2',
     '부적합(OQC)':      '#fde8e7',
+    '교체됨':           '#e8e8f4',
 }
 
 st.markdown("""
@@ -2585,6 +2587,106 @@ elif curr_l == "조립 라인":
             else:
                 st.warning("모델과 메인 S/N을 모두 입력해주세요.")
 
+    # ── 기존 제품 자재 시리얼 추가 ────────────────────────────────────
+    with st.expander("🔩 기존 제품 자재 시리얼 추가 등록", expanded=False):
+        st.caption("메인 S/N을 입력하면 기존 등록된 자재를 조회하고 누락된 자재를 추가할 수 있습니다.")
+
+        _add_mat_sn_cnt_key = f"add_mat_sn_cnt_{curr_g}"
+        if _add_mat_sn_cnt_key not in st.session_state:
+            st.session_state[_add_mat_sn_cnt_key] = 0
+        _add_main_sn_key = f"add_main_sn_{curr_g}_{st.session_state[_add_mat_sn_cnt_key]}"
+        add_main_sn = st.text_input("🔍 메인 S/N 조회", placeholder="기존 등록된 메인 S/N 입력", key=_add_main_sn_key)
+
+        if add_main_sn.strip():
+            _exist_row = db_v[db_v['시리얼'] == add_main_sn.strip()]
+            if _exist_row.empty:
+                st.warning(f"⚠️ 등록되지 않은 S/N입니다: **{add_main_sn.strip()}**")
+            else:
+                _er = _exist_row.iloc[0]
+                st.success(f"✅ 등록 확인: **{_er['모델']}** `{_er['품목코드']}` — 상태: {_er['상태']}")
+
+                existing_mats = load_material_serials(add_main_sn.strip())
+                if not existing_mats.empty:
+                    st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 4px 0;'>기존 등록 자재: <b>{len(existing_mats)}개</b></p>", unsafe_allow_html=True)
+                    emh1, emh2 = st.columns([2, 4])
+                    emh1.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>자재명</p>", unsafe_allow_html=True)
+                    emh2.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>자재 S/N</p>", unsafe_allow_html=True)
+                    for _, mat_r in existing_mats.iterrows():
+                        emc1, emc2 = st.columns([2, 4])
+                        emc1.caption(mat_r.get('자재명', ''))
+                        emc2.caption(f"`{mat_r.get('자재시리얼', '')}`")
+                else:
+                    st.info("기존 등록된 자재 시리얼이 없습니다.")
+
+                st.divider()
+                st.markdown("<p style='font-size:0.85rem;font-weight:700;color:#5a4f45;margin:0 0 6px 0;'>➕ 자재 추가 등록</p>", unsafe_allow_html=True)
+
+                _add_mat_list_key = f"add_mat_list_{curr_g}"
+                if _add_mat_list_key not in st.session_state:
+                    st.session_state[_add_mat_list_key] = []
+                _add_scan_cnt_key = f"add_scan_cnt_{curr_g}"
+                if _add_scan_cnt_key not in st.session_state:
+                    st.session_state[_add_scan_cnt_key] = 0
+
+                asc1, asc2, asc3 = st.columns([2, 3, 1])
+                add_sel_mat_name = asc1.selectbox("자재명 선택", MAT_NAME_OPTIONS, key=f"add_mat_nm_sel_{curr_g}")
+                _add_scan_field_key = f"add_scan_sn_{curr_g}_{st.session_state[_add_scan_cnt_key]}"
+                add_scan_input = asc2.text_input("자재 S/N 스캔", placeholder="바코드 스캔 → 자동 추가 (Enter)", key=_add_scan_field_key)
+                asc2.caption("💡 스캐너로 스캔하면 Enter가 자동 입력됩니다")
+
+                if add_scan_input.strip():
+                    _already = any(m["자재시리얼"] == add_scan_input.strip() for m in st.session_state[_add_mat_list_key])
+                    if not _already:
+                        st.session_state[_add_mat_list_key].append({"자재명": add_sel_mat_name, "자재시리얼": add_scan_input.strip()})
+                    else:
+                        st.toast(f"⚠️ 이미 추가된 자재 S/N: {add_scan_input.strip()}", icon="⚠️")
+                    st.session_state[_add_scan_cnt_key] += 1
+                    st.rerun()
+
+                if asc3.button("➕ 추가", key=f"add_mat_manual_{curr_g}", use_container_width=True):
+                    st.session_state[_add_mat_list_key].append({"자재명": add_sel_mat_name, "자재시리얼": ""})
+                    st.rerun()
+
+                add_mat_list_now = st.session_state[_add_mat_list_key]
+                if add_mat_list_now:
+                    st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 2px 0;'>추가 예정 자재: <b>{len(add_mat_list_now)}개</b></p>", unsafe_allow_html=True)
+                    add_updated_list = []
+                    _add_should_rerun = False
+                    for ami, amat in enumerate(add_mat_list_now):
+                        alc1, alc2, alc3 = st.columns([2, 4, 1])
+                        anew_name = alc1.selectbox("", MAT_NAME_OPTIONS,
+                            index=MAT_NAME_OPTIONS.index(amat["자재명"]) if amat["자재명"] in MAT_NAME_OPTIONS else 0,
+                            key=f"add_mat_nm_{curr_g}_{ami}", label_visibility="collapsed")
+                        anew_sn = alc2.text_input("", value=amat["자재시리얼"],
+                            key=f"add_mat_sv_{curr_g}_{ami}", label_visibility="collapsed",
+                            placeholder="S/N 직접 입력 또는 스캔")
+                        if not alc3.button("🗑", key=f"add_mat_del_{curr_g}_{ami}", help="삭제"):
+                            add_updated_list.append({"자재명": anew_name, "자재시리얼": anew_sn})
+                        else:
+                            _add_should_rerun = True
+                    st.session_state[_add_mat_list_key] = add_updated_list
+                    if _add_should_rerun:
+                        st.rerun()
+
+                    if st.button("💾 자재 시리얼 추가 저장", key=f"add_mat_save_{curr_g}", type="primary", use_container_width=True):
+                        valid_add_mats = [m for m in st.session_state[_add_mat_list_key] if m["자재시리얼"].strip()]
+                        if valid_add_mats:
+                            if insert_material_serials(
+                                메인시리얼=add_main_sn.strip(), 모델=_er['모델'],
+                                반=curr_g, 자재목록=valid_add_mats,
+                                작업자=st.session_state.user_id
+                            ):
+                                st.session_state[_add_mat_list_key] = []
+                                st.session_state[_add_mat_sn_cnt_key] += 1
+                                st.session_state[_add_scan_cnt_key] = 0
+                                st.cache_data.clear()
+                                st.toast(f"✅ {len(valid_add_mats)}개 자재 시리얼 추가 완료", icon="✅")
+                                st.rerun()
+                        else:
+                            st.warning("추가할 자재 시리얼을 입력해주세요.")
+                else:
+                    st.caption("자재 없음 — 스캔하거나 ➕ 추가 버튼을 누르세요")
+
 
 # ── 검사 / 포장 라인 ─────────────────────────────────────────────
 elif curr_l in ["검사 라인", "포장 라인"]:
@@ -4869,6 +4971,13 @@ elif curr_l == "불량 공정":
                 else:
                     v_a = action_sel
 
+                # 교체 시리얼 입력 (선택)
+                replace_sn = st.text_input(
+                    "🔄 교체 시리얼 (선택)",
+                    placeholder="기존 불량품 대신 새 S/N으로 교체 시 입력 (없으면 비워두세요)",
+                    key=f"rep_{idx}"
+                )
+
                 c_f, c_b = st.columns([3, 1])
                 img = c_f.file_uploader("사진 첨부", type=['jpg','png'], key=f"i_{idx}")
                 c_b.markdown("<div class='button-spacer'></div>", unsafe_allow_html=True)
@@ -4876,19 +4985,58 @@ elif curr_l == "불량 공정":
                     if v_c and v_a:
                         _clear_production_cache()
                         img_link = f" [사진: {upload_img_to_drive(img, row['시리얼'])}]" if img else ""
-                        update_row(row['시리얼'], {
-                            '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
-                            '증상': v_c, '수리': v_a + img_link
-                        })
-                        # 감사 로그 기록
-                        insert_audit_log(
-                            시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
-                            이전상태="불량 처리 중", 이후상태="수리 완료(재투입)",
-                            작업자=st.session_state.user_id,
-                            비고=f"원인:{v_c} / 조치:{v_a}"
-                        )
-                        st.session_state.production_db = load_realtime_ledger()
-                        st.rerun()
+                        _rep_sn = replace_sn.strip()
+                        if _rep_sn:
+                            # 교체 시리얼이 이미 등록된 S/N인지 확인
+                            _rep_exist = st.session_state.production_db[
+                                st.session_state.production_db['시리얼'] == _rep_sn
+                            ]
+                            if not _rep_exist.empty:
+                                st.warning(f"⚠️ 교체 시리얼이 이미 등록되어 있습니다: **{_rep_sn}**")
+                            else:
+                                # 기존 불량 S/N → 교체됨 처리
+                                update_row(row['시리얼'], {
+                                    '상태': "교체됨", '시간': get_now_kst_str(),
+                                    '증상': v_c, '수리': f"교체처리({_rep_sn}){img_link}"
+                                })
+                                insert_audit_log(
+                                    시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                                    이전상태="불량 처리 중", 이후상태="교체됨",
+                                    작업자=st.session_state.user_id,
+                                    비고=f"원인:{v_c} / 교체S/N:{_rep_sn}"
+                                )
+                                # 새 교체 S/N → 조립중으로 신규 등록
+                                insert_row({
+                                    '시간': get_now_kst_str(), '반': row['반'],
+                                    '라인': row.get('라인', '조립 라인'),
+                                    '모델': row['모델'], '품목코드': row['품목코드'],
+                                    '시리얼': _rep_sn, '상태': '조립중',
+                                    '증상': f"교체투입(구S/N:{row['시리얼']})",
+                                    '수리': '', '작업자': st.session_state.user_id
+                                })
+                                insert_audit_log(
+                                    시리얼=_rep_sn, 모델=row['모델'], 반=row['반'],
+                                    이전상태="-", 이후상태="조립중",
+                                    작업자=st.session_state.user_id,
+                                    비고=f"교체투입 (구S/N:{row['시리얼']})"
+                                )
+                                st.session_state.production_db = load_realtime_ledger()
+                                st.toast(f"✅ 교체 완료: {row['시리얼']} → {_rep_sn}", icon="✅")
+                                st.rerun()
+                        else:
+                            # 교체 없이 수리 완료(재투입)
+                            update_row(row['시리얼'], {
+                                '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
+                                '증상': v_c, '수리': v_a + img_link
+                            })
+                            insert_audit_log(
+                                시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                                이전상태="불량 처리 중", 이후상태="수리 완료(재투입)",
+                                작업자=st.session_state.user_id,
+                                비고=f"원인:{v_c} / 조치:{v_a}"
+                            )
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.rerun()
                     else:
                         st.warning("불량 원인과 수리 조치를 모두 선택해주세요.")
     if not has_any:
