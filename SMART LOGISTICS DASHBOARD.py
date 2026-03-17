@@ -1246,6 +1246,20 @@ def load_material_serials(메인시리얼: str = "") -> pd.DataFrame:
     except Exception:
         return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
 
+@st.cache_data(ttl=60)
+def load_material_serials_bulk(serials: tuple) -> pd.DataFrame:
+    """여러 메인시리얼에 대한 자재 시리얼을 한 번에 조회 (N+1 방지)"""
+    if not serials:
+        return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+    try:
+        sb  = get_supabase()
+        res = sb.table("material_serial").select("*").in_("메인시리얼", list(serials)).order("시간", desc=False).execute()
+        if res.data:
+            return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
+        return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+    except Exception:
+        return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+
 def search_material_by_sn(자재시리얼: str) -> pd.DataFrame:
     """자재 S/N으로 메인 S/N 역추적"""
     try:
@@ -2416,6 +2430,9 @@ elif curr_l == "조립 라인":
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;'>{txt}</p>", unsafe_allow_html=True)
 
             _asm_cb_ver = st.session_state[_asm_search_cnt]  # 스캔 시 변경 → 체크박스 강제 재렌더
+            # 자재 시리얼 일괄 조회 (N+1 방지)
+            _asm_bulk_sns = tuple(f_df_view['시리얼'].unique().tolist())
+            _asm_bulk_mats = load_material_serials_bulk(_asm_bulk_sns) if _asm_bulk_sns else pd.DataFrame()
             for row in f_df_view.sort_values('시간', ascending=False).reset_index().to_dict('records'):
                 idx = row['index']
                 is_actionable = row['상태'] in ["조립중", "수리 완료(재투입)"]
@@ -2425,7 +2442,10 @@ elif curr_l == "조립 라인":
                     disabled=not is_actionable, label_visibility="collapsed")
                 st.session_state[_asm_chk_key][str(idx)] = _ck
                 r[1].caption(str(row['시간'])[:16]); r[2].caption(row['모델'])
-                r[3].caption(row['품목코드']); r[4].caption(f"`{row['시리얼']}`")
+                r[3].caption(row['품목코드'])
+                _asm_mc = len(_asm_bulk_mats[_asm_bulk_mats['메인시리얼'] == row['시리얼']]) if not _asm_bulk_mats.empty else 0
+                _asm_mat_badge = f"  🔩{_asm_mc}" if _asm_mc > 0 else "  ⚠️"
+                r[4].caption(f"`{row['시리얼']}`{_asm_mat_badge}")
                 with r[5]:
                     if is_actionable:
                         b1, b2 = st.columns(2)
@@ -2866,6 +2886,9 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                              unsafe_allow_html=True)
 
             _hcb_ver = st.session_state[_hsrch_cnt]
+            # 자재 시리얼 일괄 조회 (N+1 방지)
+            _hist_bulk_sns = tuple(f_df_view['시리얼'].unique().tolist())
+            _hist_bulk_mats = load_material_serials_bulk(_hist_bulk_sns) if _hist_bulk_sns else pd.DataFrame()
             for row in f_df_view.sort_values('시간', ascending=False).reset_index().to_dict('records'):
                 idx = row['index']
                 is_act = row['상태'] in ["검사중","포장중","수리 완료(재투입)"]
@@ -2877,7 +2900,9 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 r[1].caption(str(row['시간'])[:16])
                 r[2].caption(row['모델'])
                 r[3].caption(row['품목코드'])
-                r[4].caption(f"`{row['시리얼']}`")
+                _hist_mc = len(_hist_bulk_mats[_hist_bulk_mats['메인시리얼'] == row['시리얼']]) if not _hist_bulk_mats.empty else 0
+                _hist_mat_badge = f"  🔩{_hist_mc}" if _hist_mc > 0 else "  ⚠️"
+                r[4].caption(f"`{row['시리얼']}`{_hist_mat_badge}")
                 with r[5]:
                     if is_act:
                         btn_lbl = "검사 합격" if curr_l == "검사 라인" else "포장 완료"
@@ -2910,6 +2935,104 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             st.markdown(f"<div style='background:{bg2};color:{tc2};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc2};font-size:0.75rem;'>{ic2} {s2}</div>", unsafe_allow_html=True)
         else:
             st.info("해당 공정 내역이 없습니다.")
+
+    # ── 기존 제품 자재 시리얼 조회 / 추가 ────────────────────────────
+    MAT_NAME_OPTIONS_QL = st.session_state.get("dropdown_mat_name") or []
+    with st.expander("🔩 자재 시리얼 조회 / 추가 등록", expanded=False):
+        st.caption("메인 S/N을 입력하면 등록된 자재를 조회하고 누락된 자재를 추가할 수 있습니다.")
+
+        _ql_sn_cnt_key = f"ql_sn_cnt_{curr_g}_{curr_l}"
+        if _ql_sn_cnt_key not in st.session_state:
+            st.session_state[_ql_sn_cnt_key] = 0
+        ql_main_sn = st.text_input("🔍 메인 S/N 조회", placeholder="기존 등록된 메인 S/N 입력",
+                                   key=f"ql_main_sn_{curr_g}_{curr_l}_{st.session_state[_ql_sn_cnt_key]}")
+
+        if ql_main_sn.strip():
+            _ql_exist = db_s[db_s['시리얼'] == ql_main_sn.strip()]
+            if _ql_exist.empty:
+                st.warning(f"⚠️ 등록되지 않은 S/N입니다: **{ql_main_sn.strip()}**")
+            else:
+                _ql_er = _ql_exist.iloc[0]
+                st.success(f"✅ **{_ql_er['모델']}** `{_ql_er['품목코드']}` — 상태: {_ql_er['상태']}")
+
+                _ql_mats = load_material_serials(ql_main_sn.strip())
+                if not _ql_mats.empty:
+                    st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 4px 0;'>기존 등록 자재: <b>{len(_ql_mats)}개</b></p>", unsafe_allow_html=True)
+                    for _, _qm in _ql_mats.iterrows():
+                        qmc1, qmc2 = st.columns([2, 4])
+                        qmc1.caption(_qm.get('자재명', ''))
+                        qmc2.caption(f"`{_qm.get('자재시리얼', '')}`")
+                else:
+                    st.info("기존 등록된 자재 시리얼이 없습니다.")
+
+                st.divider()
+                st.markdown("<p style='font-size:0.85rem;font-weight:700;color:#5a4f45;margin:0 0 6px 0;'>➕ 자재 추가 등록</p>", unsafe_allow_html=True)
+
+                _ql_mat_list_key = f"ql_mat_list_{curr_g}_{curr_l}"
+                if _ql_mat_list_key not in st.session_state:
+                    st.session_state[_ql_mat_list_key] = []
+                _ql_scan_cnt_key = f"ql_scan_cnt_{curr_g}_{curr_l}"
+                if _ql_scan_cnt_key not in st.session_state:
+                    st.session_state[_ql_scan_cnt_key] = 0
+
+                qsc1, qsc2, qsc3 = st.columns([2, 3, 1])
+                ql_sel_mat = qsc1.selectbox("자재명 선택", MAT_NAME_OPTIONS_QL,
+                                            key=f"ql_mat_nm_sel_{curr_g}_{curr_l}")
+                ql_scan_input = qsc2.text_input("자재 S/N 스캔",
+                    placeholder="바코드 스캔 → 자동 추가 (Enter)",
+                    key=f"ql_scan_{curr_g}_{curr_l}_{st.session_state[_ql_scan_cnt_key]}")
+                qsc2.caption("💡 스캐너로 스캔하면 Enter가 자동 입력됩니다")
+
+                if ql_scan_input.strip():
+                    if not any(m["자재시리얼"] == ql_scan_input.strip() for m in st.session_state[_ql_mat_list_key]):
+                        st.session_state[_ql_mat_list_key].append({"자재명": ql_sel_mat, "자재시리얼": ql_scan_input.strip()})
+                    else:
+                        st.toast(f"⚠️ 이미 추가된 S/N: {ql_scan_input.strip()}", icon="⚠️")
+                    st.session_state[_ql_scan_cnt_key] += 1
+                    st.rerun()
+
+                if qsc3.button("➕ 추가", key=f"ql_mat_add_{curr_g}_{curr_l}", use_container_width=True):
+                    st.session_state[_ql_mat_list_key].append({"자재명": ql_sel_mat, "자재시리얼": ""})
+                    st.rerun()
+
+                ql_mat_list_now = st.session_state[_ql_mat_list_key]
+                if ql_mat_list_now:
+                    st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 2px 0;'>추가 예정: <b>{len(ql_mat_list_now)}개</b></p>", unsafe_allow_html=True)
+                    ql_updated = []
+                    _ql_rerun = False
+                    for qi, qmat in enumerate(ql_mat_list_now):
+                        qlc1, qlc2, qlc3 = st.columns([2, 4, 1])
+                        qn = qlc1.selectbox("", MAT_NAME_OPTIONS_QL,
+                            index=MAT_NAME_OPTIONS_QL.index(qmat["자재명"]) if qmat["자재명"] in MAT_NAME_OPTIONS_QL else 0,
+                            key=f"ql_nm_{curr_g}_{curr_l}_{qi}", label_visibility="collapsed")
+                        qs = qlc2.text_input("", value=qmat["자재시리얼"],
+                            key=f"ql_sv_{curr_g}_{curr_l}_{qi}", label_visibility="collapsed",
+                            placeholder="S/N 직접 입력 또는 스캔")
+                        if not qlc3.button("🗑", key=f"ql_del_{curr_g}_{curr_l}_{qi}", help="삭제"):
+                            ql_updated.append({"자재명": qn, "자재시리얼": qs})
+                        else:
+                            _ql_rerun = True
+                    st.session_state[_ql_mat_list_key] = ql_updated
+                    if _ql_rerun:
+                        st.rerun()
+
+                    if st.button("💾 자재 시리얼 추가 저장", key=f"ql_save_{curr_g}_{curr_l}",
+                                 type="primary", use_container_width=True):
+                        valid_ql_mats = [m for m in st.session_state[_ql_mat_list_key] if m["자재시리얼"].strip()]
+                        if valid_ql_mats:
+                            if insert_material_serials(메인시리얼=ql_main_sn.strip(),
+                                    모델=_ql_er['모델'], 반=curr_g,
+                                    자재목록=valid_ql_mats, 작업자=st.session_state.user_id):
+                                st.session_state[_ql_mat_list_key] = []
+                                st.session_state[_ql_sn_cnt_key] += 1
+                                st.session_state[_ql_scan_cnt_key] = 0
+                                st.cache_data.clear()
+                                st.toast(f"✅ {len(valid_ql_mats)}개 자재 시리얼 추가 완료", icon="✅")
+                                st.rerun()
+                        else:
+                            st.warning("추가할 자재 시리얼을 입력해주세요.")
+                else:
+                    st.caption("자재 없음 — 스캔하거나 ➕ 추가 버튼을 누르세요")
 
 elif curr_l == "생산 현황 리포트":
 
@@ -4474,6 +4597,9 @@ elif curr_l == "OQC 라인":
 
         # 개별 항목 목록 (체크박스 + 개별 판정)
         _oqc_cb_ver = st.session_state[_oqc_sc_cnt]
+        # 자재 시리얼 일괄 조회 (N+1 방지)
+        _oqc_bulk_sns = tuple(oqc_wait_list['시리얼'].unique().tolist())
+        _oqc_bulk_mats = load_material_serials_bulk(_oqc_bulk_sns) if _oqc_bulk_sns else pd.DataFrame()
         for idx, row in oqc_wait_list.iterrows():
             with st.container(border=True):
                 ic1, ic2, ic3, ic4, ic5 = st.columns([0.4, 2, 1.5, 1.5, 1.5])
@@ -4526,6 +4652,19 @@ elif curr_l == "OQC 라인":
                         st.session_state[_oqc_ck_key].pop(str(idx), None)
                         st.session_state.production_db = load_realtime_ledger()
                         st.rerun()
+
+                # ── 자재 시리얼 인라인 표시 ──
+                _sn_key = row.get('시리얼', '')
+                _row_mats = _oqc_bulk_mats[_oqc_bulk_mats['메인시리얼'] == _sn_key] if not _oqc_bulk_mats.empty else pd.DataFrame()
+                _mat_label = f"🔩 자재 시리얼 {len(_row_mats)}개 등록됨" if not _row_mats.empty else "🔩 자재 시리얼 미등록 ⚠️"
+                with st.expander(_mat_label, expanded=False):
+                    if not _row_mats.empty:
+                        for _, _rm in _row_mats.iterrows():
+                            rmc1, rmc2 = st.columns([2, 4])
+                            rmc1.caption(_rm.get('자재명', ''))
+                            rmc2.caption(f"`{_rm.get('자재시리얼', '')}`")
+                    else:
+                        st.caption("등록된 자재 시리얼이 없습니다.")
     else:
         st.info("OQC 검사 대기 중인 제품이 없습니다.")
 
