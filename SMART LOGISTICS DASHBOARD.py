@@ -2445,7 +2445,10 @@ elif curr_l == "조립 라인":
                 r[3].caption(row['품목코드'])
                 _asm_mc = len(_asm_bulk_mats[_asm_bulk_mats['메인시리얼'] == row['시리얼']]) if not _asm_bulk_mats.empty else 0
                 _asm_mat_badge = f"  🔩{_asm_mc}" if _asm_mc > 0 else "  ⚠️"
-                r[4].caption(f"`{row['시리얼']}`{_asm_mat_badge}")
+                _asm_tog_key = f"mat_tog_{row['시리얼']}_{curr_g}_asm"
+                if r[4].button(f"{row['시리얼']}{_asm_mat_badge}", key=f"sntog_asm_{idx}_{_asm_cb_ver}",
+                               use_container_width=True, help="클릭하여 자재 시리얼 조회"):
+                    st.session_state[_asm_tog_key] = not st.session_state.get(_asm_tog_key, False)
                 with r[5]:
                     if is_actionable:
                         b1, b2 = st.columns(2)
@@ -2473,6 +2476,18 @@ elif curr_l == "조립 라인":
                         else:
                             bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
                             st.markdown(f"<div style='background:{bg};color:{tc};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.75rem;'>{ic} {s}</div>", unsafe_allow_html=True)
+                # ── 자재 시리얼 토글 표시 ──
+                if st.session_state.get(_asm_tog_key, False):
+                    _asm_row_mats = _asm_bulk_mats[_asm_bulk_mats['메인시리얼'] == row['시리얼']] if not _asm_bulk_mats.empty else pd.DataFrame()
+                    with st.container(border=True):
+                        st.caption(f"🔩 자재 시리얼 — `{row['시리얼']}`")
+                        if not _asm_row_mats.empty:
+                            for _, _am in _asm_row_mats.iterrows():
+                                amc1, amc2 = st.columns([2, 4])
+                                amc1.caption(_am.get('자재명', ''))
+                                amc2.caption(f"`{_am.get('자재시리얼', '')}`")
+                        else:
+                            st.caption("등록된 자재 시리얼 없음")
     else:
         st.info("등록된 생산 내역이 없습니다.")
 
@@ -2902,7 +2917,10 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 r[3].caption(row['품목코드'])
                 _hist_mc = len(_hist_bulk_mats[_hist_bulk_mats['메인시리얼'] == row['시리얼']]) if not _hist_bulk_mats.empty else 0
                 _hist_mat_badge = f"  🔩{_hist_mc}" if _hist_mc > 0 else "  ⚠️"
-                r[4].caption(f"`{row['시리얼']}`{_hist_mat_badge}")
+                _hist_tog_key = f"mat_tog_{row['시리얼']}_{curr_g}_{curr_l}"
+                if r[4].button(f"{row['시리얼']}{_hist_mat_badge}", key=f"sntog_hist_{idx}_{_hcb_ver}",
+                               use_container_width=True, help="클릭하여 자재 시리얼 조회"):
+                    st.session_state[_hist_tog_key] = not st.session_state.get(_hist_tog_key, False)
                 with r[5]:
                     if is_act:
                         btn_lbl = "검사 합격" if curr_l == "검사 라인" else "포장 완료"
@@ -2933,6 +2951,18 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         else:
                             bg2,tc2,bc2,ic2 = STATUS_STYLE2.get(s2, ('#f5f2ec','#5a5048','#c8b89a','•'))
                             st.markdown(f"<div style='background:{bg2};color:{tc2};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc2};font-size:0.75rem;'>{ic2} {s2}</div>", unsafe_allow_html=True)
+                # ── 자재 시리얼 토글 표시 ──
+                if st.session_state.get(_hist_tog_key, False):
+                    _hist_row_mats = _hist_bulk_mats[_hist_bulk_mats['메인시리얼'] == row['시리얼']] if not _hist_bulk_mats.empty else pd.DataFrame()
+                    with st.container(border=True):
+                        st.caption(f"🔩 자재 시리얼 — `{row['시리얼']}`")
+                        if not _hist_row_mats.empty:
+                            for _, _hm in _hist_row_mats.iterrows():
+                                hmc1, hmc2 = st.columns([2, 4])
+                                hmc1.caption(_hm.get('자재명', ''))
+                                hmc2.caption(f"`{_hm.get('자재시리얼', '')}`")
+                        else:
+                            st.caption("등록된 자재 시리얼 없음")
         else:
             st.info("해당 공정 내역이 없습니다.")
 
@@ -4693,13 +4723,22 @@ elif curr_l == "OQC 라인":
         for col, txt in zip(rh, ["시간", "모델", "반", "시리얼", "결과", "비고", "이력"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
 
+        # 자재 시리얼 일괄 조회 (OQC 결과 이력)
+        _oqc_done_sns = tuple(oqc_done['시리얼'].unique().tolist())
+        _oqc_done_mats = load_material_serials_bulk(_oqc_done_sns) if _oqc_done_sns else pd.DataFrame()
         # 성능: iterrows → enumerate + to_dict('records') (idx2 → 순번 _i 로 교체)
         for _i, row in enumerate(oqc_done.to_dict('records')):
             rr2 = st.columns([1.8, 2, 1.5, 2.2, 1.5, 2.5, 1])
             rr2[0].caption(str(row.get('시간',''))[:16])
             rr2[1].write(row.get('모델',''))
             rr2[2].write(row.get('반',''))
-            rr2[3].markdown(f"`{row.get('시리얼','')}`")
+            _oqc_done_sn = row.get('시리얼','')
+            _oqc_done_mc = len(_oqc_done_mats[_oqc_done_mats['메인시리얼'] == _oqc_done_sn]) if not _oqc_done_mats.empty else 0
+            _oqc_done_tog = f"mat_tog_oqcdone_{_oqc_done_sn}_{_i}"
+            _oqc_done_badge = f"  🔩{_oqc_done_mc}" if _oqc_done_mc > 0 else "  ⚠️"
+            if rr2[3].button(f"{_oqc_done_sn}{_oqc_done_badge}", key=f"sntog_oqcd_{_i}",
+                             use_container_width=True, help="클릭하여 자재 시리얼 조회"):
+                st.session_state[_oqc_done_tog] = not st.session_state.get(_oqc_done_tog, False)
             결과 = row.get('상태','')
             if 결과 == '출하승인':
                 rr2[4].markdown("<span style='background:#d4f0e2;color:#1f6640;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>✅ 출하승인</span>", unsafe_allow_html=True)
@@ -4762,6 +4801,18 @@ elif curr_l == "OQC 라인":
                             st.markdown(f"- **{mr.get('자재명','')}** : `{mr.get('자재시리얼','')}`　<span style='color:#aaa;font-size:0.75rem;'>{mr.get('작업자','')}</span>", unsafe_allow_html=True)
                     else:
                         st.info("등록된 자재 시리얼 없음")
+            # ── 시리얼 클릭 자재 토글 표시 ──
+            if st.session_state.get(_oqc_done_tog, False):
+                _oqcd_row_mats = _oqc_done_mats[_oqc_done_mats['메인시리얼'] == _oqc_done_sn] if not _oqc_done_mats.empty else pd.DataFrame()
+                with st.container(border=True):
+                    st.caption(f"🔩 자재 시리얼 — `{_oqc_done_sn}`")
+                    if not _oqcd_row_mats.empty:
+                        for _, _dm in _oqcd_row_mats.iterrows():
+                            dmc1, dmc2 = st.columns([2, 4])
+                            dmc1.caption(_dm.get('자재명', ''))
+                            dmc2.caption(f"`{_dm.get('자재시리얼', '')}`")
+                    else:
+                        st.caption("등록된 자재 시리얼 없음")
     else:
         st.info("OQC 결과 이력이 없습니다.")
 
