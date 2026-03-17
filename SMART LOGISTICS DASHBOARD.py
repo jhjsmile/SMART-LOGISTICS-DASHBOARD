@@ -2976,8 +2976,12 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     st.session_state[_ql_scan_cnt_key] = 0
 
                 qsc1, qsc2, qsc3 = st.columns([2, 3, 1])
-                ql_sel_mat = qsc1.selectbox("자재명 선택", MAT_NAME_OPTIONS_QL,
-                                            key=f"ql_mat_nm_sel_{curr_g}_{curr_l}")
+                if MAT_NAME_OPTIONS_QL:
+                    ql_sel_mat = qsc1.selectbox("자재명 선택", MAT_NAME_OPTIONS_QL,
+                                                key=f"ql_mat_nm_sel_{curr_g}_{curr_l}")
+                else:
+                    ql_sel_mat = qsc1.text_input("자재명 입력", placeholder="예: PCB, 배터리",
+                                                 key=f"ql_mat_nm_txt_{curr_g}_{curr_l}")
                 ql_scan_input = qsc2.text_input("자재 S/N 스캔",
                     placeholder="바코드 스캔 → 자동 추가 (Enter)",
                     key=f"ql_scan_{curr_g}_{curr_l}_{st.session_state[_ql_scan_cnt_key]}")
@@ -3002,9 +3006,13 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     _ql_rerun = False
                     for qi, qmat in enumerate(ql_mat_list_now):
                         qlc1, qlc2, qlc3 = st.columns([2, 4, 1])
-                        qn = qlc1.selectbox("", MAT_NAME_OPTIONS_QL,
-                            index=MAT_NAME_OPTIONS_QL.index(qmat["자재명"]) if qmat["자재명"] in MAT_NAME_OPTIONS_QL else 0,
-                            key=f"ql_nm_{curr_g}_{curr_l}_{qi}", label_visibility="collapsed")
+                        if MAT_NAME_OPTIONS_QL:
+                            qn = qlc1.selectbox("", MAT_NAME_OPTIONS_QL,
+                                index=MAT_NAME_OPTIONS_QL.index(qmat["자재명"]) if qmat["자재명"] in MAT_NAME_OPTIONS_QL else 0,
+                                key=f"ql_nm_{curr_g}_{curr_l}_{qi}", label_visibility="collapsed")
+                        else:
+                            qn = qlc1.text_input("", value=qmat["자재명"],
+                                key=f"ql_nm_txt_{curr_g}_{curr_l}_{qi}", label_visibility="collapsed")
                         qs = qlc2.text_input("", value=qmat["자재시리얼"],
                             key=f"ql_sv_{curr_g}_{curr_l}_{qi}", label_visibility="collapsed",
                             placeholder="S/N 직접 입력 또는 스캔")
