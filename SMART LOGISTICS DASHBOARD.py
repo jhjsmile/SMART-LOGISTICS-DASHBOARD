@@ -2474,10 +2474,12 @@ elif curr_l == "조립 라인":
     _month_str = today_str[:7]
     _plan_map = st.session_state.get("production_plan", {})
     _monthly_plan = _plan_map.get(f"{curr_g}_{_month_str}", 0)
-    _done_month = len(f_df[
-        f_df['시간'].astype(str).str.startswith(_month_str) &
-        f_df['상태'].isin(['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료'])
-    ]) if not f_df.empty else 0
+    # 월간 완료: 포장 라인 최종 완료 기준 (생산 현황 리포트와 동일)
+    _done_month = len(db_g[
+        db_g['시간'].astype(str).str.startswith(_month_str) &
+        (db_g['라인'] == '포장 라인') &
+        (db_g['상태'] == '완료')
+    ]) if not db_g.empty else 0
     _month_pct = round(_done_month / _monthly_plan * 100, 1) if _monthly_plan > 0 else 0
     _today_dt = datetime.now(KST)
     # 남은수량·남은일수: 내일 이후 스케줄에 등록된 조립수 합산 기준 (지난 날 계획분 제외)
