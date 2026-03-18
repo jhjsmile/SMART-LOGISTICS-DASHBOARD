@@ -1266,11 +1266,6 @@ def insert_schedule(row: dict) -> bool:
         if '날짜' in clean_row and hasattr(clean_row['날짜'], 'strftime'):
             clean_row['날짜'] = clean_row['날짜'].strftime('%Y-%m-%d')
         get_supabase().table("production_schedule").insert(clean_row).execute()
-        # ── 일정 등록 텔레그램 알림 ──
-        _날짜 = clean_row.get('날짜', '')
-        _반   = clean_row.get('반', '')
-        _모델 = clean_row.get('모델명', '')
-        _send_telegram(f"🔔 <b>일정 등록</b>\n날짜: {_날짜}\n반: {_반}\n모델: {_모델}")
         # ── 일정 등록 시 해당 반 모델/품목 마스터 자동 등록 ──
         반   = str(clean_row.get('반', '')).strip()
         모델 = str(clean_row.get('모델명', '')).strip()
