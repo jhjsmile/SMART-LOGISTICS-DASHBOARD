@@ -2455,26 +2455,12 @@ curr_l = st.session_state.current_line
 # 관리자 호출 플로팅 버튼 (항상 표시)
 # =================================================================
 
-# query param으로 호출 수신 처리
-_acall_msg = st.query_params.get("admin_call_msg", "")
-if _acall_msg:
-    _caller = st.session_state.get("user_id", "미상")
-    _now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
-    _send_telegram(
-        f"🚨 <b>관리자 호출</b>\n"
-        f"작업자: {_caller}\n"
-        f"메시지: {_acall_msg}\n"
-        f"시각: {_now_str}"
-    )
-    st.session_state["_admin_call_sent"] = True
-    st.query_params.clear()
-    st.rerun()
+# 플로팅 버튼 + 모달 주입 — Telegram fetch 방식 (페이지 이동 없음)
+_adm_tg_token = _TELEGRAM_BOT_TOKEN
+_adm_tg_chat  = _TELEGRAM_CHAT_ID
+_adm_caller   = st.session_state.get("user_id", "미상")
 
-if st.session_state.pop("_admin_call_sent", False):
-    st.toast("✅ 관리자에게 호출을 전송했습니다.", icon="🚨")
-
-# 플로팅 버튼 + 모달 주입 (window.parent.document)
-st.components.v1.html("""
+st.components.v1.html(f"""
 <script>
 (function(){
     var pdoc = window.parent.document;
@@ -2577,20 +2563,44 @@ st.components.v1.html("""
         pdoc.getElementById('adm_modal_overlay').style.display = 'none';
         pdoc.getElementById('adm_msg_input').value = '';
     };
-    window.parent._admSubmit = function() {
+    var TG_TOKEN = {json.dumps(_adm_tg_token)};
+    var TG_CHAT  = {json.dumps(_adm_tg_chat)};
+    var CALLER   = {json.dumps(_adm_caller)};
+
+    window.parent._admSubmit = function() {{
         var msg = pdoc.getElementById('adm_msg_input').value.trim() || '(사유 없음)';
         window.parent._admClose();
-        var form = pdoc.createElement('form');
-        form.method = 'get';
-        form.action = window.parent.location.pathname;
-        var inp = pdoc.createElement('input');
-        inp.type = 'hidden';
-        inp.name = 'admin_call_msg';
-        inp.value = msg;
-        form.appendChild(inp);
-        pdoc.body.appendChild(form);
-        form.submit();
-    };
+
+        if (!TG_TOKEN || !TG_CHAT) {{
+            alert('텔레그램 설정이 없어 전송할 수 없습니다.');
+            return;
+        }}
+
+        var now = new Date().toLocaleString('ko-KR', {{timeZone: 'Asia/Seoul'}});
+        var text = '🚨 관리자 호출\\n작업자: ' + CALLER + '\\n메시지: ' + msg + '\\n시각: ' + now;
+
+        fetch('https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage', {{
+            method: 'POST',
+            headers: {{'Content-Type': 'application/json'}},
+            body: JSON.stringify({{chat_id: TG_CHAT, text: text, parse_mode: 'HTML'}})
+        }}).then(function(r) {{
+            if (r.ok) {{
+                /* 성공 토스트 */
+                var toast = pdoc.createElement('div');
+                toast.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);'
+                    + 'background:#1e8449;color:#fff;padding:12px 28px;border-radius:50px;'
+                    + 'font-weight:700;font-size:0.95rem;z-index:9999999;'
+                    + 'box-shadow:0 4px 16px rgba(0,0,0,0.3);animation:admPopIn 0.25s ease;';
+                toast.textContent = '✅ 관리자에게 호출을 전송했습니다';
+                pdoc.body.appendChild(toast);
+                setTimeout(function() {{ toast.remove(); }}, 3000);
+            }} else {{
+                alert('전송 실패. 텔레그램 설정을 확인해주세요.');
+            }}
+        }}).catch(function() {{
+            alert('네트워크 오류로 전송에 실패했습니다.');
+        }});
+    }};
 
     /* ── 모달 ── */
     var overlay = pdoc.createElement('div');
@@ -2610,13 +2620,13 @@ st.components.v1.html("""
     pdoc.body.appendChild(overlay);
 
     /* ── 이벤트 리스너 (inline onclick 대신) ── */
-    pdoc.getElementById('adm_submit_btn').addEventListener('click', function() { window.parent._admSubmit(); });
-    pdoc.getElementById('adm_cancel_btn').addEventListener('click', function() { window.parent._admClose(); });
-    pdoc.getElementById('adm_msg_input').addEventListener('keydown', function(e) {
+    pdoc.getElementById('adm_submit_btn').addEventListener('click', function() {{ window.parent._admSubmit(); }});
+    pdoc.getElementById('adm_cancel_btn').addEventListener('click', function() {{ window.parent._admClose(); }});
+    pdoc.getElementById('adm_msg_input').addEventListener('keydown', function(e) {{
         if (e.key === 'Enter') window.parent._admSubmit();
         if (e.key === 'Escape') window.parent._admClose();
-    });
-})();
+    }});
+}})();
 </script>
 """, height=0)
 
