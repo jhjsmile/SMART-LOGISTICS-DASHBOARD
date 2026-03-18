@@ -4879,7 +4879,22 @@ elif curr_l == "OQC 라인":
                 rr2[4].markdown("<span style='background:#d4f0e2;color:#1f6640;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>✅ 출하승인</span>", unsafe_allow_html=True)
             else:
                 rr2[4].markdown("<span style='background:#fde8e7;color:#7a2e2a;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>🚫 부적합</span>", unsafe_allow_html=True)
-            rr2[5].caption(row.get('수리',''))
+                if 결과 == '부적합(OQC)':
+                    if rr2[4].button("🔧 불량 공정 이관", key=f"oqc_send_defect_{_i}",
+                                     use_container_width=True, help="불량 공정으로 이관하여 수리/교체 처리"):
+                        _reason = row.get('증상', '') or row.get('수리', '').replace('사유:', '')
+                        _clear_production_cache()
+                        update_row(row['시리얼'], {
+                            '상태': '불량 처리 중',
+                            '시간': get_now_kst_str(),
+                            '증상': f"불량입고출처: OQC 라인 (부적합사유: {_reason})",
+                            '수리': f"OQC 부적합 판정 - 사유: {_reason}"
+                        })
+                        insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                            이전상태='부적합(OQC)', 이후상태='불량 처리 중',
+                            작업자=st.session_state.user_id, 비고=f"OQC 부적합 이관 - 사유: {_reason}")
+                        st.session_state.production_db = load_realtime_ledger()
+                        st.rerun()
 
             # 이력 버튼 → 해당 행 아래 인라인 expander로 표시
             _hist_key = f"oqc_hist_open_{_i}"
