@@ -790,17 +790,18 @@ def _inject_autofocus(label: str = None):
 _TELEGRAM_BOT_TOKEN = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
 _TELEGRAM_CHAT_ID   = st.secrets.get("TELEGRAM_CHAT_ID", "")
 
-def _send_telegram(message: str) -> None:
-    """텔레그램 메시지 전송 (백그라운드 스레드, 실패 시 무시)."""
+def _send_telegram(message: str) -> str:
+    """텔레그램 메시지 전송. 성공 시 'ok', 실패 시 오류 문자열 반환."""
     if not _TELEGRAM_BOT_TOKEN or not _TELEGRAM_CHAT_ID:
-        return
-    def _do_send():
-        try:
-            url = f"https://api.telegram.org/bot{_TELEGRAM_BOT_TOKEN}/sendMessage"
-            requests.post(url, json={"chat_id": _TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}, timeout=5)
-        except Exception:
-            pass
-    threading.Thread(target=_do_send, daemon=False).start()
+        return "secrets 없음 (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 미설정)"
+    try:
+        url = f"https://api.telegram.org/bot{_TELEGRAM_BOT_TOKEN}/sendMessage"
+        res = requests.post(url, json={"chat_id": _TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}, timeout=10)
+        if res.ok:
+            return "ok"
+        return f"HTTP {res.status_code}: {res.text}"
+    except Exception as e:
+        return str(e)
 
 
 def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
@@ -910,27 +911,24 @@ def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
             st.warning(f"데이터 로드 실패: {e}")
         return pd.DataFrame(columns=_EMPTY_COLS)
 
-def submit_help_request(requester: str, role: str, page: str, message: str) -> bool:
-    db_ok = False
+def submit_help_request(requester: str, role: str, page: str, message: str) -> tuple:
     try:
         get_supabase().table("help_requests").insert({
             "requester": requester, "role": role,
             "page": page, "message": message,
             "status": "open", "created_at": get_now_kst_str()
         }).execute()
-        db_ok = True
     except Exception:
         pass
-    # DB 실패 시에도 텔레그램으로 전송
     _now = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
-    _send_telegram(
+    _tg_result = _send_telegram(
         f"🆘 <b>관리자 도움 요청</b>\n"
         f"작업자: {requester}\n"
         f"페이지: {page}\n"
         f"내용: {message}\n"
         f"시각: {_now}"
     )
-    return True
+    return _tg_result == "ok", _tg_result
 
 @st.cache_data(ttl=20)
 def load_help_requests(status: str = "open") -> pd.DataFrame:
@@ -2205,7 +2203,7 @@ else:
                     placeholder="도움이 필요한 내용을 입력해 주세요.", height=80, label_visibility="collapsed")
                 if st.form_submit_button("📨 요청 전송", use_container_width=True, type="primary"):
                     if _help_msg.strip():
-                        _ok = submit_help_request(
+                        _ok, _tg_err = submit_help_request(
                             requester=st.session_state.user_id,
                             role=st.session_state.user_role,
                             page=st.session_state.current_line,
@@ -2215,7 +2213,7 @@ else:
                             st.session_state.help_sent = True
                             st.rerun()
                         else:
-                            st.error("전송 실패. 다시 시도해 주세요.")
+                            st.error(f"전송 실패: {_tg_err}")
                     else:
                         st.warning("내용을 입력해 주세요.")
 
