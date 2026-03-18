@@ -2460,11 +2460,12 @@ _adm_tg_token = _TELEGRAM_BOT_TOKEN
 _adm_tg_chat  = _TELEGRAM_CHAT_ID
 _adm_caller   = st.session_state.get("user_id", "미상")
 
+import json as _json
 _adm_vars_js = (
     f"<script>"
-    f"var _ADM_TG_TOKEN={json.dumps(_adm_tg_token)};"
-    f"var _ADM_TG_CHAT={json.dumps(_adm_tg_chat)};"
-    f"var _ADM_CALLER={json.dumps(_adm_caller)};"
+    f"var _ADM_TG_TOKEN={_json.dumps(_adm_tg_token)};"
+    f"var _ADM_TG_CHAT={_json.dumps(_adm_tg_chat)};"
+    f"var _ADM_CALLER={_json.dumps(_adm_caller)};"
     f"</script>"
 )
 _adm_main_js = """
