@@ -5572,14 +5572,22 @@ elif curr_l == "불량 공정":
                     else:
                         v_a = action_sel
 
-                    replace_sn = st.text_input(
-                        "🔄 교체 시리얼 (선택)",
-                        placeholder="기존 불량품 대신 새 S/N으로 교체 시 입력 (없으면 비워두세요)",
+                    rep_c1, rep_c2 = st.columns(2)
+                    target_sn = rep_c1.text_input(
+                        "🎯 교체되어야 할 대상 시리얼",
+                        value=row['시리얼'],
+                        placeholder="교체 대상 S/N 스캔/입력",
+                        key=f"target_{idx}"
+                    )
+                    replace_sn = rep_c2.text_input(
+                        "🔄 교체될 시리얼 (새 제품)",
+                        placeholder="새 S/N 스캔/입력 (없으면 비워두세요)",
                         key=f"rep_{idx}"
                     )
 
                     if st.button("✅ 확정", key=f"b_{idx}", type="primary", use_container_width=True):
                         if v_c and v_a:
+                            _target_sn = target_sn.strip() or row['시리얼']
                             _rep_sn = replace_sn.strip()
                             if _rep_sn:
                                 _fresh_db = load_realtime_ledger()
@@ -5587,12 +5595,12 @@ elif curr_l == "불량 공정":
                                 if not _rep_exist.empty:
                                     st.warning(f"⚠️ 교체 시리얼이 이미 등록되어 있습니다: **{_rep_sn}**")
                                 else:
-                                    update_row(row['시리얼'], {
+                                    update_row(_target_sn, {
                                         '상태': "교체됨", '시간': get_now_kst_str(),
                                         '증상': v_c, '수리': f"교체처리({_rep_sn})"
                                     })
                                     insert_audit_log(
-                                        시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                                        시리얼=_target_sn, 모델=row['모델'], 반=row['반'],
                                         이전상태="불량 처리 중", 이후상태="교체됨",
                                         작업자=st.session_state.user_id,
                                         비고=f"원인:{v_c} / 교체S/N:{_rep_sn}"
@@ -5602,18 +5610,18 @@ elif curr_l == "불량 공정":
                                         '라인': row.get('라인', '조립 라인'),
                                         '모델': row['모델'], '품목코드': row['품목코드'],
                                         '시리얼': _rep_sn, '상태': '조립중',
-                                        '증상': f"교체투입(구S/N:{row['시리얼']})",
+                                        '증상': f"교체투입(구S/N:{_target_sn})",
                                         '수리': '', '작업자': st.session_state.user_id
                                     })
                                     insert_audit_log(
                                         시리얼=_rep_sn, 모델=row['모델'], 반=row['반'],
                                         이전상태="-", 이후상태="조립중",
                                         작업자=st.session_state.user_id,
-                                        비고=f"교체투입 (구S/N:{row['시리얼']})"
+                                        비고=f"교체투입 (구S/N:{_target_sn})"
                                     )
                                     _clear_production_cache()
                                     st.session_state.production_db = load_realtime_ledger()
-                                    st.toast(f"✅ 교체 완료: {row['시리얼']} → {_rep_sn}", icon="✅")
+                                    st.toast(f"✅ 교체 완료: {_target_sn} → {_rep_sn}", icon="✅")
                                     st.rerun()
                             else:
                                 update_row(row['시리얼'], {
