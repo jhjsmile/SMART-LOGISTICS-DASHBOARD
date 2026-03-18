@@ -2727,14 +2727,18 @@ elif curr_l == "조립 라인":
 
     # 변경 감지: 마지막 확인 이후 등록된 일정
     last_seen_key = f"sch_last_seen_{curr_g}"
-    if last_seen_key not in st.session_state:
+    _first_load = last_seen_key not in st.session_state
+    if _first_load:
         st.session_state[last_seen_key] = ""
     sch_ids_now   = ",".join(sorted(str(i) for i in today_sch['id'].tolist())) if not today_sch.empty else ""
     has_new_sch   = (sch_ids_now != st.session_state[last_seen_key]) and not today_sch.empty
 
-    # 변경 알림 팝업
+    # 변경 알림 팝업 (최초 로드 시 또는 이미 전송한 경우 텔레그램 제외)
+    _tg_sent_key = f"sch_tg_sent_{curr_g}_{sch_ids_now}"
     if has_new_sch and not st.session_state.get(f"sch_popup_dismissed_{curr_g}", False):
-        _send_telegram(f"🔔 <b>오늘 일정 변경 알림</b>\n날짜: {today_str}\n반: {curr_g}\n일정: {len(today_sch)}건 등록/변경")
+        if not _first_load and not st.session_state.get(_tg_sent_key, False):
+            _send_telegram(f"🔔 <b>오늘 일정 변경 알림</b>\n날짜: {today_str}\n반: {curr_g}\n일정: {len(today_sch)}건 등록/변경")
+            st.session_state[_tg_sent_key] = True
         with st.container():
             st.warning(f"🔔 오늘 생산 일정이 등록/변경되었습니다!\n\n{today_str} 기준 **{curr_g}** 일정 **{len(today_sch)}건**이 있습니다. 아래에서 확인하세요.")
             ack_c1, ack_c2 = st.columns([3, 1])
