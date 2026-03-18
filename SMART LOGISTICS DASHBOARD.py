@@ -43,7 +43,7 @@ from modules.utils import (
 )
 from modules.auth import (
     hash_pw, verify_pw, get_master_pw_hash,
-    _parse_custom_perms, check_perm,
+    _parse_custom_perms, check_perm, _BCRYPT_AVAILABLE,
 )
 from modules.database import (
     get_supabase, keep_supabase_alive,
@@ -195,45 +195,6 @@ ROLE_LABELS = {
 PERM_ACTIONS       = ["read", "write", "edit"]
 PERM_ACTION_LABELS = {"read": "읽기", "write": "쓰기", "edit": "수정"}
 
-def _parse_custom_perms(raw):
-    """커스텀 권한 파싱 — 구형(list) / 신형(dict{"pages":…,"levels":…}) 모두 지원.
-    Returns (pages: list | None, levels: dict[str, set])
-      pages  — 네비게이션에 표시할 메뉴 키 목록 (None = 역할 기본값 사용)
-      levels — {메뉴키: {"read","write","edit"} 의 부분집합}
-    """
-    if raw is None:
-        return None, {}
-    if isinstance(raw, list):
-        # 구형: 전 메뉴 전체 권한
-        return raw, {p: set(PERM_ACTIONS) for p in raw}
-    if isinstance(raw, dict) and "pages" in raw:
-        pages  = raw.get("pages", [])
-        levels = {k: set(v) for k, v in raw.get("levels", {}).items()}
-        for p in pages:
-            if p not in levels and not any(p.startswith(k + "::") for k in levels):
-                levels[p] = set(PERM_ACTIONS)
-        return pages, levels
-    return None, {}
-
-def check_perm(page_key: str, action: str = "read") -> bool:
-    """현재 로그인 사용자의 페이지·동작 권한 확인.
-    page_key: 메뉴명 또는 "라인::반" 형식
-    action  : "read" | "write" | "edit"
-    Returns True if allowed.
-    """
-    role = st.session_state.get("user_role")
-    if role in ("master", "admin"):
-        return True
-    levels = st.session_state.get("user_permission_levels", {})
-    if not levels:
-        return True   # 커스텀 레벨 미설정 → 기본 허용 (nav 접근으로 이미 제어됨)
-    if page_key in levels:
-        return action in levels[page_key]
-    # 상위 키 적용 (예: "조립 라인" → "조립 라인::제조1반"에도 적용)
-    for key, actions in levels.items():
-        if page_key.startswith(key + "::"):
-            return action in actions
-    return True   # levels에 없는 키 → 기본 허용
 
 SCHEDULE_COLORS = {
     "조립계획": "#7eb8e8",
