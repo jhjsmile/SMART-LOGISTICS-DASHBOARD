@@ -2481,8 +2481,18 @@ elif curr_l == "조립 라인":
     _month_remain = max(_monthly_plan - _done_month, 0)
     _month_pct = round(_done_month / _monthly_plan * 100, 1) if _monthly_plan > 0 else 0
     _today_dt = datetime.now(KST)
-    _days_in_month = calendar.monthrange(_today_dt.year, _today_dt.month)[1]
-    _remain_days = _days_in_month - _today_dt.day
+    # 남은일수: 달력 기준이 아닌 스케줄에 등록된 내일 이후 조립 계획 일수 기준
+    _tomorrow_str = (_today_dt + timedelta(days=1)).strftime('%Y-%m-%d')
+    if not sch_all.empty:
+        _future_sch_days = sch_all[
+            (sch_all['날짜'] >= _tomorrow_str) &
+            (sch_all['날짜'].str.startswith(_month_str)) &
+            (sch_all['반'] == curr_g) &
+            (sch_all['카테고리'] == '조립계획')
+        ]['날짜'].nunique()
+    else:
+        _future_sch_days = 0
+    _remain_days = _future_sch_days
     _daily_required = round(_month_remain / _remain_days, 1) if _remain_days > 0 else _month_remain
 
     if _plan_qty > 0 or _monthly_plan > 0:
