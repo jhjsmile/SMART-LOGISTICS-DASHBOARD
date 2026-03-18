@@ -755,6 +755,20 @@ if "supabase_alive_checked" not in st.session_state:
 def get_now_kst_str() -> str:
     return datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
 
+def _inject_autofocus():
+    """스캔 입력 후 재렌더 시 첫 번째 활성 text input에 자동 포커스 (JS 주입)."""
+    import streamlit.components.v1 as components
+    components.html(
+        "<script>(function(){function f(){var els=window.parent.document"
+        ".querySelectorAll('input[type=text]');for(var i=0;i<els.length;i++)"
+        "{var e=els[i];if(!e.disabled&&!e.readOnly&&e.offsetParent!==null)"
+        "{e.focus();return true;}}return false;}"
+        "if(!f()){setTimeout(function(){if(!f())setTimeout(f,200);},80);}})();"
+        "</script>",
+        height=0,
+        scrolling=False,
+    )
+
 def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
     """입고 대기 수량이 증가하면 가운데 팝업 알림 + 사운드를 출력한다."""
     import html as _html_mod
@@ -2447,6 +2461,8 @@ elif curr_l == "조립 라인":
             _asm_search_key = f"sn_search_{curr_g}_{st.session_state[_asm_search_cnt]}"
             sc1, sc2 = st.columns([2, 2])
             sn_search = sc1.text_input("🔍 시리얼 검색", placeholder="S/N 스캔 또는 입력...", key=_asm_search_key)
+            if st.session_state.pop("_autofocus_after_rerun", None) == _asm_search_key:
+                _inject_autofocus()
             if sn_search.strip():
                 f_df_view = f_df[f_df['시리얼'].str.contains(sn_search.strip(), case=False, na=False)]
                 if f_df_view.empty:
@@ -2455,6 +2471,7 @@ elif curr_l == "조립 라인":
                 _wip_mask = f_df_view['상태'].isin(["조립중", "수리 완료(재투입)"])
                 for _si in f_df_view.index[_wip_mask]:
                     st.session_state[_asm_chk_key][str(_si)] = True
+                st.session_state["_autofocus_after_rerun"] = f"sn_search_{curr_g}_{st.session_state[_asm_search_cnt] + 1}"
                 st.session_state[_asm_search_cnt] += 1  # 키 변경 → 체크박스 새 키로 재렌더 → value= 적용
                 st.rerun()
             else:
@@ -2818,12 +2835,15 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             ws1, ws2 = st.columns([3, 3])
             w_scan = ws1.text_input("🔍 시리얼 스캔/검색", placeholder="스캔 또는 입력 → 자동 체크",
                                     key=_wscan_key)
+            if st.session_state.pop("_autofocus_after_rerun", None) == _wscan_key:
+                _inject_autofocus()
             if w_scan.strip():
                 matched_sn = wait_list[wait_list['시리얼'].str.contains(
                     w_scan.strip(), case=False, na=False)]
                 if not matched_sn.empty:
                     for wi in matched_sn.index:
                         st.session_state[_wck_key][str(wi)] = True
+                    st.session_state["_autofocus_after_rerun"] = f"wscan_{curr_g}_{curr_l}_{st.session_state[_wscan_cnt] + 1}"
                     st.session_state[_wscan_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                     st.rerun()
                 else:
@@ -2908,6 +2928,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             hs1, hs2 = st.columns([3, 3])
             _sn_search_qp = hs1.text_input("🔍 시리얼 스캔/검색",
                 placeholder="스캔 또는 입력 → 자동 체크", key=_hsrch_key)
+            if st.session_state.pop("_autofocus_after_rerun", None) == _hsrch_key:
+                _inject_autofocus()
 
             f_df_view = f_df
             if _sn_search_qp.strip():
@@ -2920,6 +2942,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     f_df_view = _search_result
                     for _hi in f_df_view.index:
                         st.session_state[_hck_key][str(_hi)] = True
+                    st.session_state["_autofocus_after_rerun"] = f"hsrch_{curr_g}_{curr_l}_{st.session_state[_hsrch_cnt] + 1}"
                     st.session_state[_hsrch_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                     st.rerun()
 
@@ -4574,12 +4597,15 @@ elif curr_l == "OQC 라인":
         oi_c1, _ = st.columns([3, 3])
         _oqc_in_scan = oi_c1.text_input("🔍 시리얼 스캔/검색", placeholder="스캔 또는 입력 → 자동 체크",
                                          key=_oqc_in_sc_key)
+        if st.session_state.pop("_autofocus_after_rerun", None) == _oqc_in_sc_key:
+            _inject_autofocus()
         if _oqc_in_scan.strip():
             _oqc_in_matched = packing_done[packing_done['시리얼'].str.contains(
                 _oqc_in_scan.strip(), case=False, na=False)]
             if not _oqc_in_matched.empty:
                 for _oi in _oqc_in_matched.index:
                     st.session_state[_oqc_in_ck_key][str(_oi)] = True
+                st.session_state["_autofocus_after_rerun"] = f"oqc_in_sc_{st.session_state[_oqc_in_sc_cnt] + 1}"
                 st.session_state[_oqc_in_sc_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                 st.rerun()
             else:
@@ -4650,12 +4676,15 @@ elif curr_l == "OQC 라인":
         os1, _ = st.columns([3, 3])
         _oqc_scan = os1.text_input("🔍 시리얼 스캔/검색", placeholder="스캔 또는 입력 → 자동 체크",
                                     key=_oqc_sc_key)
+        if st.session_state.pop("_autofocus_after_rerun", None) == _oqc_sc_key:
+            _inject_autofocus()
         if _oqc_scan.strip():
             _oqc_matched = oqc_wait_list[oqc_wait_list['시리얼'].str.contains(
                 _oqc_scan.strip(), case=False, na=False)]
             if not _oqc_matched.empty:
                 for _oi in _oqc_matched.index:
                     st.session_state[_oqc_ck_key][str(_oi)] = True
+                st.session_state["_autofocus_after_rerun"] = f"oqc_sc_{st.session_state[_oqc_sc_cnt] + 1}"
                 st.session_state[_oqc_sc_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                 st.rerun()
             else:
