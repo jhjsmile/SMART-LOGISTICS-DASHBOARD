@@ -2846,6 +2846,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 반=curr_g, 이전상태=_prev_s, 이후상태=_next_s,
                                 작업자=st.session_state.user_id)
                     st.session_state[_wck_key] = {}
+                    st.session_state[_wscan_cnt] += 1  # 체크박스 키 리셋
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
                 if wba3.button("☐ 선택 해제", key=f"wait_unck_{curr_g}_{curr_l}",
@@ -2938,6 +2939,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                     이전상태=_r['상태'], 이후상태=_ok_s, 작업자=st.session_state.user_id)
                     st.session_state[_hck_key] = {}
+                    st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
                 if hba3.button("🚫 일괄 불량", key=f"hist_bulk_ng_{curr_g}_{curr_l}",
@@ -2953,6 +2955,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                     이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
                     st.session_state[_hck_key] = {}
+                    st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
                 if hba4.button("☐", key=f"hist_unck_{curr_g}_{curr_l}",
@@ -4666,6 +4669,7 @@ elif curr_l == "OQC 라인":
                         insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
                             이전상태='OQC중', 이후상태='출하승인', 작업자=st.session_state.user_id)
                 st.session_state[_oqc_ck_key] = {}
+                st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                 st.session_state.production_db = load_realtime_ledger()
                 st.rerun()
             _bulk_defect = ob3.selectbox("부적합 사유", OQC_DEFECT_REASONS,
@@ -4687,6 +4691,7 @@ elif curr_l == "OQC 라인":
                                 이전상태='OQC중', 이후상태='부적합(OQC)',
                                 작업자=st.session_state.user_id, 비고=f"사유:{_dflt}")
                     st.session_state[_oqc_ck_key] = {}
+                    st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
 
