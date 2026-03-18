@@ -2462,6 +2462,53 @@ elif curr_l == "조립 라인":
     db_g = db_v[db_v['반'] == curr_g]                                       # 현재 반 전체
     f_df = db_v[(db_v['반'] == curr_g) & (db_v['라인'] == "조립 라인")]
 
+    # ── 🎯 오늘의 목표 달성 현황 ─────────────────────────────────
+    _plan_qty = int(today_sch['조립수'].apply(lambda x: int(float(x)) if str(x) not in ('','nan','None') else 0).sum()) if not today_sch.empty else 0
+    _done_today = len(f_df[
+        f_df['시간'].astype(str).str.startswith(today_str) &
+        f_df['상태'].isin(['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료'])
+    ]) if not f_df.empty else 0
+    _wip_today  = len(f_df[f_df['시간'].astype(str).str.startswith(today_str) & f_df['상태'].isin(['조립중','수리 완료(재투입)'])]) if not f_df.empty else 0
+
+    if _plan_qty > 0:
+        _pct = min(int(_done_today / _plan_qty * 100), 100)
+        _remain = max(_plan_qty - _done_today, 0)
+        if _pct >= 100:
+            _bar_color = "#28a745"; _msg = "🎉 목표 달성! 수고하셨습니다!"; _emoji = "🏆"
+        elif _pct >= 80:
+            _bar_color = "#28a745"; _msg = f"💪 거의 다 왔어요! {_remain}개만 더!"; _emoji = "🔥"
+        elif _pct >= 50:
+            _bar_color = "#ffc107"; _msg = f"👍 절반 넘었어요! {_remain}개 남았어요!"; _emoji = "⚡"
+        else:
+            _bar_color = "#e67e22"; _msg = f"🚀 파이팅! 목표까지 {_remain}개 남았어요!"; _emoji = "💡"
+
+        st.markdown(f"""
+        <div style='background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);
+                    border-radius:16px;padding:24px 28px;margin-bottom:16px;
+                    border:1px solid #2E75B6;'>
+            <div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;'>
+                <span style='color:#fff;font-size:1.1rem;font-weight:700;'>🎯 오늘의 목표 달성 현황</span>
+                <span style='color:#aaa;font-size:0.85rem;'>{today_str}</span>
+            </div>
+            <div style='display:flex;align-items:flex-end;gap:8px;margin-bottom:10px;'>
+                <span style='color:{_bar_color};font-size:3.2rem;font-weight:900;line-height:1;'>{_done_today}</span>
+                <span style='color:#aaa;font-size:1.1rem;margin-bottom:8px;'>/ {_plan_qty} EA</span>
+                <span style='color:{_bar_color};font-size:2rem;font-weight:800;margin-bottom:4px;margin-left:12px;'>{_pct}%</span>
+                <span style='font-size:1.8rem;margin-bottom:4px;'>{_emoji}</span>
+            </div>
+            <div style='background:#333;border-radius:8px;height:18px;overflow:hidden;margin-bottom:10px;'>
+                <div style='background:{_bar_color};width:{_pct}%;height:100%;border-radius:8px;
+                            transition:width 0.5s ease;'></div>
+            </div>
+            <div style='display:flex;justify-content:space-between;align-items:center;'>
+                <span style='color:#ccc;font-size:0.95rem;'>{_msg}</span>
+                <span style='color:#aaa;font-size:0.82rem;'>작업 중: {_wip_today}개</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.info(f"📋 오늘({today_str}) 등록된 조립 계획이 없습니다. 일정을 등록하면 달성 현황이 표시됩니다.", icon="ℹ️")
+
     # ── 모델/품목별 수량 카운트 + 생산 이력 ─────────────────────────
     if not f_df.empty:
         with st.expander(f"📊 {curr_g} 조립 라인 수량 현황", expanded=True):
