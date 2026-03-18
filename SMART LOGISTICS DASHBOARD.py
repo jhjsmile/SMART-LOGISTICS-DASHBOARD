@@ -911,15 +911,26 @@ def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
         return pd.DataFrame(columns=_EMPTY_COLS)
 
 def submit_help_request(requester: str, role: str, page: str, message: str) -> bool:
+    db_ok = False
     try:
         get_supabase().table("help_requests").insert({
             "requester": requester, "role": role,
             "page": page, "message": message,
             "status": "open", "created_at": get_now_kst_str()
         }).execute()
-        return True
+        db_ok = True
     except Exception:
-        return False
+        pass
+    # DB 실패 시에도 텔레그램으로 전송
+    _now = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
+    _send_telegram(
+        f"🆘 <b>관리자 도움 요청</b>\n"
+        f"작업자: {requester}\n"
+        f"페이지: {page}\n"
+        f"내용: {message}\n"
+        f"시각: {_now}"
+    )
+    return True
 
 @st.cache_data(ttl=20)
 def load_help_requests(status: str = "open") -> pd.DataFrame:
