@@ -1,0 +1,46 @@
+name: 생산 시스템 모니터링 봇
+
+on:
+  schedule:
+    # 매 5분마다 실행 (UTC 기준 — KST = UTC+9)
+    - cron: "*/5 * * * *"
+  # 수동 실행도 가능
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: monitor/requirements.txt
+
+      - name: 의존성 설치
+        run: pip install -r monitor/requirements.txt
+
+      # 이전 실행의 상태 파일 복원 (중복 알림 방지)
+      - name: 이전 상태 복원
+        uses: actions/cache@v4
+        with:
+          path: monitor/monitor_state.json
+          key: monitor-state-${{ github.run_id }}
+          restore-keys: |
+            monitor-state-
+
+      - name: 모니터링 실행
+        working-directory: monitor
+        env:
+          SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          STUCK_HOURS:        ${{ vars.STUCK_HOURS || '8' }}
+        run: python monitor.py --once
