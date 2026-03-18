@@ -899,7 +899,9 @@ def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
                      .execute())
         if res.data:
             df = pd.DataFrame(res.data)
-            df = df.drop(columns=[c for c in ['id','created_at','deleted_at','deleted_by'] if c in df.columns])
+            if 'created_at' in df.columns:
+                df = df.rename(columns={'created_at': '투입일'})
+            df = df.drop(columns=[c for c in ['id','deleted_at','deleted_by'] if c in df.columns])
             return df.fillna("")
         return pd.DataFrame(columns=_EMPTY_COLS)
     except Exception as e:
@@ -3329,7 +3331,9 @@ elif curr_l == "생산 현황 리포트":
         with cc4:
             try:
                 _df_trend = df_rpt.copy()
-                _df_trend['날짜'] = pd.to_datetime(_df_trend['시간'], errors='coerce').dt.date
+                # 투입일(created_at) 기준 - 없으면 시간 컬럼 fallback
+                _date_col = '투입일' if '투입일' in _df_trend.columns else '시간'
+                _df_trend['날짜'] = pd.to_datetime(_df_trend[_date_col], errors='coerce').dt.date
                 _daily = _df_trend.groupby('날짜').size().reset_index(name='수량').dropna().sort_values('날짜')
                 if not _daily.empty:
                     _fig_tr = px.line(_daily, x='날짜', y='수량', markers=True,
