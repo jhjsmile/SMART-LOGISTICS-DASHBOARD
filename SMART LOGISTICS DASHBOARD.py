@@ -19,6 +19,9 @@
 
 
 import re
+import os
+import threading
+import requests
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -31,6 +34,9 @@ from streamlit_autorefresh import st_autorefresh
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 # =================================================================
@@ -781,12 +787,33 @@ def _inject_autofocus(label: str = None):
         )
     components.html(js, height=0, scrolling=False)
 
+# =================================================================
+# 텔레그램 알림
+# =================================================================
+_TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+_TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+def _send_telegram(message: str) -> None:
+    """텔레그램 메시지 전송 (백그라운드 스레드, 실패 시 무시)."""
+    if not _TELEGRAM_BOT_TOKEN or not _TELEGRAM_CHAT_ID:
+        return
+    def _do_send():
+        try:
+            url = f"https://api.telegram.org/bot{_TELEGRAM_BOT_TOKEN}/sendMessage"
+            requests.post(url, json={"chat_id": _TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}, timeout=5)
+        except Exception:
+            pass
+    threading.Thread(target=_do_send, daemon=True).start()
+
+
 def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
     """입고 대기 수량이 증가하면 가운데 팝업 알림 + 사운드를 출력한다."""
     import html as _html_mod
     prev = st.session_state.get(notif_key, -1)
     if curr_cnt > 0 and curr_cnt > prev:
         _safe_label = _html_mod.escape(str(label))
+        now_str = datetime.now(KST).strftime('%Y-%m-%d %H:%M')
+        _send_telegram(f"📥 <b>입고 대기 알림</b>\n라인: {label}\n수량: {curr_cnt}건\n시각: {now_str}")
         st.components.v1.html(f"""
         <script>
         (function(){{
@@ -2381,6 +2408,7 @@ elif curr_l == "조립 라인":
 
     # 변경 알림 팝업
     if has_new_sch and not st.session_state.get(f"sch_popup_dismissed_{curr_g}", False):
+        _send_telegram(f"🔔 <b>오늘 일정 변경 알림</b>\n날짜: {today_str}\n반: {curr_g}\n일정: {len(today_sch)}건 등록/변경")
         with st.container():
             st.warning(f"🔔 오늘 생산 일정이 등록/변경되었습니다!\n\n{today_str} 기준 **{curr_g}** 일정 **{len(today_sch)}건**이 있습니다. 아래에서 확인하세요.")
             ack_c1, ack_c2 = st.columns([3, 1])
