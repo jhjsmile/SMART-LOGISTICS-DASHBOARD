@@ -800,7 +800,7 @@ def _send_telegram(message: str) -> None:
             requests.post(url, json={"chat_id": _TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}, timeout=5)
         except Exception:
             pass
-    threading.Thread(target=_do_send, daemon=True).start()
+    threading.Thread(target=_do_send, daemon=False).start()
 
 
 def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
