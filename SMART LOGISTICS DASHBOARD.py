@@ -149,6 +149,50 @@ ROLE_LABELS = {
     "oqc_team":       "🏅 OQC 품질팀",
 }
 
+# ── 권한 레벨 (읽기 / 쓰기 / 수정) ─────────────────────────────
+PERM_ACTIONS       = ["read", "write", "edit"]
+PERM_ACTION_LABELS = {"read": "읽기", "write": "쓰기", "edit": "수정"}
+
+def _parse_custom_perms(raw):
+    """커스텀 권한 파싱 — 구형(list) / 신형(dict{"pages":…,"levels":…}) 모두 지원.
+    Returns (pages: list | None, levels: dict[str, set])
+      pages  — 네비게이션에 표시할 메뉴 키 목록 (None = 역할 기본값 사용)
+      levels — {메뉴키: {"read","write","edit"} 의 부분집합}
+    """
+    if raw is None:
+        return None, {}
+    if isinstance(raw, list):
+        # 구형: 전 메뉴 전체 권한
+        return raw, {p: set(PERM_ACTIONS) for p in raw}
+    if isinstance(raw, dict) and "pages" in raw:
+        pages  = raw.get("pages", [])
+        levels = {k: set(v) for k, v in raw.get("levels", {}).items()}
+        for p in pages:
+            if p not in levels and not any(p.startswith(k + "::") for k in levels):
+                levels[p] = set(PERM_ACTIONS)
+        return pages, levels
+    return None, {}
+
+def check_perm(page_key: str, action: str = "read") -> bool:
+    """현재 로그인 사용자의 페이지·동작 권한 확인.
+    page_key: 메뉴명 또는 "라인::반" 형식
+    action  : "read" | "write" | "edit"
+    Returns True if allowed.
+    """
+    role = st.session_state.get("user_role")
+    if role in ("master", "admin"):
+        return True
+    levels = st.session_state.get("user_permission_levels", {})
+    if not levels:
+        return True   # 커스텀 레벨 미설정 → 기본 허용 (nav 접근으로 이미 제어됨)
+    if page_key in levels:
+        return action in levels[page_key]
+    # 상위 키 적용 (예: "조립 라인" → "조립 라인::제조1반"에도 적용)
+    for key, actions in levels.items():
+        if page_key.startswith(key + "::"):
+            return action in actions
+    return True   # levels에 없는 키 → 기본 허용
+
 SCHEDULE_COLORS = {
     "조립계획": "#7eb8e8",
     "포장계획": "#7ec8a0",
@@ -815,13 +859,30 @@ def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
         return pd.DataFrame(columns=_EMPTY_COLS)
 
 def insert_row(row: dict) -> bool:
+    sn = row.get('시리얼', '')
+    sb = get_supabase()
     try:
-        get_supabase().table("production").insert(row).execute()
+        sb.table("production").insert(row).execute()
         return True
     except Exception as e:
         err_str = str(e)
         if "23505" in err_str or "duplicate key" in err_str or "already exists" in err_str:
-            sn = row.get('시리얼', '')
+            # ── Soft-delete / 오래된 데이터 여부 확인 ─────────────────
+            # DB에 동일 시리얼이 존재하지만 화면에 안 보이는 케이스:
+            #   1) 전체 초기화(soft-delete)로 deleted_at이 채워진 경우
+            #   2) 3개월 날짜 필터 밖(오래된 데이터)인 경우
+            # → soft-deleted 레코드이면 hard-delete 후 재등록 허용
+            try:
+                existing = sb.table("production").select("시리얼,deleted_at").eq("시리얼", sn).execute()
+                if existing.data:
+                    rec = existing.data[0]
+                    if rec.get("deleted_at"):  # soft-delete된 레코드
+                        sb.table("production").delete().eq("시리얼", sn).execute()
+                        sb.table("production").insert(row).execute()
+                        return True
+            except Exception:
+                pass
+            # 화면에 보이는 활성 레코드와 충돌 → 진짜 중복
             st.error(f"⚠️ 이미 등록된 시리얼입니다: **{sn}**\n\n동일한 S/N이 이미 생산 이력에 존재합니다. 시리얼을 확인해주세요.")
         else:
             st.error(f"등록 실패: {e}")
@@ -1358,7 +1419,7 @@ def show_inline_day_panel():
     if not action or not action_data:
         return
 
-    can_edit = st.session_state.user_role in CALENDAR_EDIT_ROLES
+    can_edit = st.session_state.user_role in CALENDAR_EDIT_ROLES and check_perm("생산 지표 관리", "edit")
     sch_df   = st.session_state.schedule_db
 
     # ── 패널 컨테이너 ─────────────────────────────────────────
@@ -1743,10 +1804,12 @@ if 'master_synced' not in st.session_state:
     sync_master_to_session()
     st.session_state.master_synced = True
 
-if 'login_status'        not in st.session_state: st.session_state.login_status        = False
-if 'user_role'           not in st.session_state: st.session_state.user_role           = None
-if 'user_id'             not in st.session_state: st.session_state.user_id             = None
-if 'admin_authenticated' not in st.session_state: st.session_state.admin_authenticated = False
+if 'login_status'            not in st.session_state: st.session_state.login_status            = False
+if 'user_role'               not in st.session_state: st.session_state.user_role               = None
+if 'user_id'                 not in st.session_state: st.session_state.user_id                 = None
+if 'admin_authenticated'     not in st.session_state: st.session_state.admin_authenticated     = False
+if 'user_custom_permissions' not in st.session_state: st.session_state.user_custom_permissions = None
+if 'user_permission_levels'  not in st.session_state: st.session_state.user_permission_levels  = {}
 if 'selected_group'      not in st.session_state: st.session_state.selected_group      = "제조2반"
 if 'current_line'        not in st.session_state: st.session_state.current_line        = "현황판"
 if 'confirm_target'      not in st.session_state: st.session_state.confirm_target      = None
@@ -1795,8 +1858,11 @@ if not st.session_state.login_status:
                         st.stop()
                     st.session_state.user_id       = in_id
                     st.session_state.user_role     = _role
-                    # ✨ 커스텀 권한 적용
-                    st.session_state.user_custom_permissions = user_info.get("custom_permissions", None)
+                    # ✨ 커스텀 권한 적용 (nav 접근 목록 + 읽기/쓰기/수정 레벨)
+                    _raw_perms = user_info.get("custom_permissions", None)
+                    _pages, _levels = _parse_custom_perms(_raw_perms)
+                    st.session_state.user_custom_permissions = _pages   # None = 역할 기본값 사용
+                    st.session_state.user_permission_levels  = _levels
                     # 데이터 로드 전에 login_status를 False로 유지 → 로드 중 st.warning() 억제
                     st.session_state.production_db = load_realtime_ledger()
                     st.session_state.schedule_db   = load_schedule()
@@ -2251,7 +2317,7 @@ if curr_l == "현황판":
 
     # 캘린더
     st.markdown("<div class='section-title'>📅 생산 일정 캘린더</div>", unsafe_allow_html=True)
-    if st.session_state.user_role in CALENDAR_EDIT_ROLES:
+    if st.session_state.user_role in CALENDAR_EDIT_ROLES and check_perm("생산 지표 관리", "edit"):
         st.caption("✏️ 날짜 버튼 클릭 → 일정 상세/추가/수정/삭제")
     else:
         st.caption("👁️ 조회만 가능합니다.")
@@ -2398,7 +2464,8 @@ elif curr_l == "조립 라인":
             if checked_idxs:
                 ba1, ba2, ba3 = st.columns([2, 1, 1])
                 ba1.markdown(f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(checked_idxs)}개 선택됨</span>", unsafe_allow_html=True)
-                if ba2.button("✅ 일괄 완료", key=f"bulk_ok_{curr_g}", type="primary", use_container_width=True):
+                if ba2.button("✅ 일괄 완료", key=f"bulk_ok_{curr_g}", type="primary", use_container_width=True,
+                             disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
                     for ci in checked_idxs:
                         ci_int = int(ci)
                         if ci_int in f_df.index:
@@ -2410,7 +2477,8 @@ elif curr_l == "조립 라인":
                     _clear_production_cache()              # ← 캐시 초기화 (누락 버그 수정)
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
-                if ba3.button("🚫 일괄 불량", key=f"bulk_ng_{curr_g}", use_container_width=True):
+                if ba3.button("🚫 일괄 불량", key=f"bulk_ng_{curr_g}", use_container_width=True,
+                             disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
                     for ci in checked_idxs:
                         ci_int = int(ci)
                         if ci_int in f_df.index:
@@ -2835,20 +2903,19 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             _sn_search_qp = hs1.text_input("🔍 시리얼 스캔/검색",
                 placeholder="스캔 또는 입력 → 자동 체크", key=_hsrch_key)
 
+            f_df_view = f_df
             if _sn_search_qp.strip():
                 _actionable = f_df[f_df['상태'].isin(["검사중","포장중","수리 완료(재투입)"])]
-                f_df_view = _actionable[_actionable['시리얼'].str.contains(
+                _search_result = _actionable[_actionable['시리얼'].str.contains(
                     _sn_search_qp.strip(), case=False, na=False)]
-                if f_df_view.empty:
+                if _search_result.empty:
                     hs1.warning(f"**'{_sn_search_qp.strip()}'** — 처리 가능한 시리얼이 없습니다.")
                 else:
+                    f_df_view = _search_result
                     for _hi in f_df_view.index:
                         st.session_state[_hck_key][str(_hi)] = True
                     st.session_state[_hsrch_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                     st.rerun()
-                f_df_view = f_df
-            else:
-                f_df_view = f_df
 
             _h_checked = [k for k,v in st.session_state[_hck_key].items() if v]
             if _h_checked:
@@ -2857,7 +2924,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 hba1.markdown(f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(_h_checked)}개 선택됨</span>",
                               unsafe_allow_html=True)
                 if hba2.button(f"✅ 일괄 {btn_lbl}", key=f"hist_bulk_ok_{curr_g}_{curr_l}",
-                               type="primary", use_container_width=True):
+                               type="primary", use_container_width=True,
+                               disabled=not check_perm(f"{curr_l}::{curr_g}", "write")):
                     _clear_production_cache()
                     _ok_s  = 'OQC대기' if curr_l == '검사 라인' else '완료'
                     _prv_s = '검사중'  if curr_l == '검사 라인' else '포장중'
@@ -3644,7 +3712,7 @@ elif curr_l == "생산 지표 관리":
     ]
 
     # 입력 폼 (관리자 전용)
-    if st.session_state.user_role in CALENDAR_EDIT_ROLES:
+    if st.session_state.user_role in CALENDAR_EDIT_ROLES and check_perm("생산 지표 관리", "write"):
         with st.expander("⚙️ 월 계획 수량 입력 / 변경", expanded=False):
             st.caption("반/월별 목표 수량을 입력합니다. 변경 시 사유를 선택하면 이력이 자동 기록됩니다.")
             pl1, pl2, pl3 = st.columns([1.5, 1.5, 1.2])
@@ -3683,7 +3751,7 @@ elif curr_l == "생산 지표 관리":
                     plan_key = f"{p_ban}_{p_month}"
                     st.session_state.production_plan[plan_key] = int(p_qty)
                     _clear_plan_cache()
-                    st.success(f"✅ {p_ban} / {p_month} → {p_qty:,}대 저장 완료")
+                    st.toast(f"✅ {p_ban} / {p_month} → {p_qty:,}대 저장 완료")
                     st.rerun()
 
     # ── 월별 달성률 그래프 ────────────────────────────────────────
@@ -4307,9 +4375,9 @@ elif curr_l == "생산 지표 관리":
                             _clear_schedule_cache()
                             st.session_state.schedule_db = load_schedule()
                             if success_cnt > 0:
-                                st.success(f"✅ 등록 완료: {success_cnt}건  |  건너뜀(중복): {skip_cnt}건" + (f"  |  실패: {fail_cnt}건" if fail_cnt else ""))
+                                st.toast(f"✅ 등록 완료: {success_cnt}건  |  건너뜀(중복): {skip_cnt}건" + (f"  |  실패: {fail_cnt}건" if fail_cnt else ""))
                             if fail_rows:
-                                st.error("등록 실패 행:\n" + "\n".join(fail_rows))
+                                st.toast("등록 실패 행:\n" + "\n".join(fail_rows), icon="🚨")
                             st.rerun()
                 else:
                     st.warning("파싱된 일정이 없습니다. 파일 형식을 확인해주세요.")
@@ -4586,7 +4654,8 @@ elif curr_l == "OQC 라인":
             ob1, ob2, ob3, ob4 = st.columns([2, 1.2, 1.5, 0.8])
             ob1.markdown(f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(_oqc_checked)}개 선택됨</span>",
                          unsafe_allow_html=True)
-            if ob2.button("✅ 일괄 합격", key="oqc_bulk_ok", type="primary", use_container_width=True):
+            if ob2.button("✅ 일괄 합격", key="oqc_bulk_ok", type="primary", use_container_width=True,
+                          disabled=not check_perm("OQC 라인", "write")):
                 _clear_production_cache()
                 for _oi in _oqc_checked:
                     _oi_int = int(_oi)
@@ -4601,7 +4670,8 @@ elif curr_l == "OQC 라인":
                 st.rerun()
             _bulk_defect = ob3.selectbox("부적합 사유", OQC_DEFECT_REASONS,
                                          key="oqc_bulk_defect", label_visibility="collapsed")
-            if ob4.button("🚫 부적합", key="oqc_bulk_ng", use_container_width=True):
+            if ob4.button("🚫 부적합", key="oqc_bulk_ng", use_container_width=True,
+                          disabled=not check_perm("OQC 라인", "write")):
                 _dflt = _bulk_defect if _bulk_defect not in ["(선택)", "", None] else ""
                 if not _dflt:
                     st.warning("⚠️ 부적합 사유를 먼저 선택해주세요.")
@@ -4745,7 +4815,7 @@ elif curr_l == "OQC 라인":
                 with st.container(border=True):
                     hc1, hc2 = st.columns([8, 1])
                     hc1.markdown(f"📋 **제품 전체 이력** — `{sn}`")
-                    if hc2.button("✖ 닫기", key=f"oqc_hist_close_{idx2}"):
+                    if hc2.button("✖ 닫기", key=f"oqc_hist_close_{_i}"):
                         st.session_state[_hist_key] = False
                         st.rerun()
 
@@ -5397,7 +5467,7 @@ elif curr_l == "마스터 관리":
                         st.session_state.group_master_items[g_name]  = {}
                         delete_all_master_by_group(g_name)
                         st.session_state[all_master_ck] = False
-                        st.success(f"{g_name} 모델/품목 전체 삭제 완료")
+                        st.toast(f"{g_name} 모델/품목 전체 삭제 완료")
                         st.rerun()
                     if am3.button("취소", key=f"del_all_m_no_{g_name}", use_container_width=True):
                         st.session_state[all_master_ck] = False
@@ -5429,7 +5499,7 @@ elif curr_l == "마스터 관리":
                                     # DB 제거
                                     delete_model_from_master(g_name, del_model)
                                     st.session_state[del_m_ck] = False
-                                    st.success(f"[{del_model}] 삭제 완료")
+                                    st.toast(f"[{del_model}] 삭제 완료")
                                     st.rerun()
                                 if dm2.button("취소", key=f"del_m_no_{g_name}", use_container_width=True):
                                     st.session_state[del_m_ck] = False
@@ -5459,7 +5529,7 @@ elif curr_l == "마스터 관리":
                                         st.session_state.group_master_items[g_name][di_model].remove(del_item)
                                         delete_item_from_master(g_name, di_model, del_item)
                                         st.session_state[del_i_ck] = False
-                                        st.success(f"[{del_item}] 삭제 완료")
+                                        st.toast(f"[{del_item}] 삭제 완료")
                                         st.rerun()
                                     if di2.button("취소", key=f"del_i_no_{g_name}", use_container_width=True):
                                         st.session_state[del_i_ck] = False
@@ -5500,38 +5570,56 @@ elif curr_l == "마스터 관리":
             
             with user_tab2:
                 st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>🔑 사용자별 개별 권한 부여</p>", unsafe_allow_html=True)
-                
+
                 # 등록된 사용자 목록
                 user_list = list(st.session_state.user_db.keys())
                 if user_list:
                     selected_user = st.selectbox("사용자 선택", user_list, key="perm_user_select")
-                    current_role = st.session_state.user_db[selected_user].get("role", "assembly_team")
-                    
+                    current_role  = st.session_state.user_db[selected_user].get("role", "assembly_team")
+
                     st.caption(f"현재 역할: **{current_role}**")
-                    st.caption("체크된 메뉴에만 접근 가능합니다.")
-                    
-                    # 현재 사용자의 커스텀 권한 가져오기 (없으면 기본 역할 권한)
-                    current_perms = st.session_state.user_db[selected_user].get("custom_permissions", None)
-                    if current_perms is None:
-                        current_perms = ROLES.get(current_role, [])
-                    
-                    # 일반 메뉴 (반별 구분 없음)
+                    st.caption("📖 읽기 — 페이지 열람  /  ✏️ 쓰기 — 신규 등록·처리  /  🔧 수정 — 기존 데이터 변경·삭제")
+
+                    # ── 현재 커스텀 권한 파싱 (없으면 역할 기본값) ───────────
+                    _raw = st.session_state.user_db[selected_user].get("custom_permissions", None)
+                    _cur_pages, _cur_levels = _parse_custom_perms(_raw)
+                    if _cur_pages is None:
+                        _cur_pages  = ROLES.get(current_role, [])
+                        _cur_levels = {p: set(PERM_ACTIONS) for p in _cur_pages}
+
+                    selected_pages  = []   # 최종 접근 가능 페이지 목록
+                    selected_levels = {}   # {page_key: [action, ...]}
+
+                    # ── 일반 메뉴 권한 (읽기/쓰기/수정 각각 체크) ───────────
+                    st.markdown("**일반 메뉴 권한:**")
                     _general_menus = ["생산 지표 관리", "OQC 라인", "생산 현황 리포트", "불량 공정",
                                       "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼"]
 
-                    st.markdown("**접근 가능 메뉴:**")
+                    _gh = st.columns([2.2, 0.7, 0.7, 0.7])
+                    _gh[0].markdown("**메뉴**")
+                    for _ai, _al in enumerate(["읽기", "쓰기", "수정"]):
+                        _gh[_ai + 1].markdown(f"**{_al}**")
 
-                    # 일반 메뉴 체크박스 (2열)
-                    selected_perms = []
-                    _gcols = st.columns(2)
-                    for _gi, menu in enumerate(_general_menus):
-                        if _gcols[_gi % 2].checkbox(menu, value=(menu in current_perms),
-                                                     key=f"perm_{selected_user}_{menu}"):
-                            selected_perms.append(menu)
+                    for _menu in _general_menus:
+                        _gr = st.columns([2.2, 0.7, 0.7, 0.7])
+                        _gr[0].write(_menu)
+                        _menu_levels = _cur_levels.get(_menu, set())
+                        _has_access  = _menu in _cur_pages
+                        _checked = {}
+                        for _ai, _act in enumerate(PERM_ACTIONS):
+                            _checked[_act] = _gr[_ai + 1].checkbox(
+                                "", value=(_has_access and _act in _menu_levels),
+                                key=f"perm_{selected_user}_{_menu}_{_act}",
+                                label_visibility="collapsed"
+                            )
+                        # 읽기 체크 = 페이지 접근 허용
+                        if _checked["read"]:
+                            selected_pages.append(_menu)
+                            selected_levels[_menu] = [a for a, v in _checked.items() if v]
 
-                    # 제조 라인 — 반별 체크 그리드
+                    # ── 제조 라인 — 반별 접근 체크 (기존 그리드 유지) ────────
                     st.markdown("**📍 제조 라인 접근 (반별 선택):**")
-                    st.caption("각 반(班)별로 접근 가능한 라인을 개별 선택합니다.")
+                    st.caption("각 반(班)별로 접근 가능한 라인을 선택합니다.")
                     _line_types = ["조립 라인", "검사 라인", "포장 라인"]
                     _lh = st.columns([1.5, 1, 1, 1])
                     _lh[0].markdown("**반**")
@@ -5542,24 +5630,64 @@ elif curr_l == "마스터 관리":
                         _rc[0].write(_group)
                         for _li, _lt in enumerate(_line_types):
                             _pk = f"{_lt}::{_group}"
-                            # 구형("조립 라인" = 전 반 허용) 또는 신형("조립 라인::제조1반") 모두 체크 ON
-                            _chk = (_pk in current_perms) or (_lt in current_perms)
+                            _chk = (_pk in _cur_pages) or (_lt in _cur_pages)
                             if _rc[_li + 1].checkbox("", value=_chk,
                                                       key=f"perm_{selected_user}_{_group}_{_lt}",
                                                       label_visibility="collapsed"):
-                                selected_perms.append(_pk)
+                                selected_pages.append(_pk)
 
+                    # ── 제조 라인 동작 권한 (라인 유형별 읽기/쓰기/수정) ─────
+                    st.markdown("**📍 제조 라인 동작 권한:**")
+                    st.caption("위에서 접근을 허용한 라인에서 수행 가능한 동작을 설정합니다.")
+
+                    _ldh = st.columns([1.5, 0.7, 0.7, 0.7])
+                    _ldh[0].markdown("**라인**")
+                    for _ai, _al in enumerate(["읽기", "쓰기", "수정"]):
+                        _ldh[_ai + 1].markdown(f"**{_al}**")
+
+                    for _lt in _line_types:
+                        _ldr = st.columns([1.5, 0.7, 0.7, 0.7])
+                        _ldr[0].write(_lt)
+                        # 이 라인 유형에 접근 권한이 있는지 확인
+                        _lt_has_access = any(
+                            f"{_lt}::{g}" in selected_pages for g in PRODUCTION_GROUPS
+                        )
+                        # 현재 레벨: 부모키(_lt) 우선, 없으면 서브키에서 검색
+                        _lt_cur_levels = _cur_levels.get(_lt, None)
+                        if _lt_cur_levels is None:
+                            for _k, _v in _cur_levels.items():
+                                if _k.startswith(_lt + "::"):
+                                    _lt_cur_levels = _v
+                                    break
+                        if _lt_cur_levels is None:
+                            _lt_cur_levels = set(PERM_ACTIONS) if _lt_has_access else set()
+
+                        _lt_checked = {}
+                        for _ai, _act in enumerate(PERM_ACTIONS):
+                            _lt_checked[_act] = _ldr[_ai + 1].checkbox(
+                                "", value=(_lt_has_access and _act in _lt_cur_levels),
+                                key=f"perm_{selected_user}_{_lt}_lvl_{_act}",
+                                label_visibility="collapsed",
+                                disabled=not _lt_has_access
+                            )
+                        _lt_result = [a for a, v in _lt_checked.items() if v]
+                        if _lt_result:
+                            selected_levels[_lt] = _lt_result
+
+                    # ── 저장 / 복원 ───────────────────────────────────────────
                     perm_col1, perm_col2 = st.columns(2)
-                    if perm_col1.button("💾 권한 저장", key="save_custom_perm", use_container_width=True, type="primary"):
-                        st.session_state.user_db[selected_user]["custom_permissions"] = selected_perms
+                    if perm_col1.button("💾 권한 저장", key="save_custom_perm",
+                                        use_container_width=True, type="primary"):
+                        _new_perm = {"pages": selected_pages, "levels": selected_levels}
+                        st.session_state.user_db[selected_user]["custom_permissions"] = _new_perm
                         try:
                             import json
                             get_supabase().table("users").update(
-                                {"custom_permissions": json.dumps(selected_perms, ensure_ascii=False)}
+                                {"custom_permissions": json.dumps(_new_perm, ensure_ascii=False)}
                             ).eq("username", selected_user).execute()
-                            st.success(f"✅ [{selected_user}] 권한 저장 완료 ({len(selected_perms)}개 메뉴) — DB 반영됨")
+                            st.success(f"✅ [{selected_user}] 권한 저장 완료 ({len(selected_pages)}개 메뉴) — DB 반영됨")
                         except Exception as _e:
-                            st.success(f"✅ [{selected_user}] 권한 저장 완료 ({len(selected_perms)}개 메뉴)")
+                            st.success(f"✅ [{selected_user}] 권한 저장 완료 ({len(selected_pages)}개 메뉴)")
                             st.caption(f"DB 저장 실패 (세션에만 적용): {_e}")
 
                     if perm_col2.button("↩️ 기본 권한 복원", key="reset_custom_perm", use_container_width=True):
@@ -5600,9 +5728,9 @@ elif curr_l == "마스터 관리":
                             try:
                                 get_supabase().table("users").delete().eq(
                                     "username", confirm_target).execute()
-                                st.success(f"✅ [{confirm_target}] 계정 삭제 완료")
+                                st.toast(f"✅ [{confirm_target}] 계정 삭제 완료")
                             except Exception as _e:
-                                st.warning(f"메모리 삭제 완료, DB 삭제 실패: {_e}")
+                                st.toast(f"메모리 삭제 완료, DB 삭제 실패: {_e}", icon="⚠️")
                             st.session_state["del_user_confirm"] = False
                             st.session_state["del_user_target"] = ""
                             st.rerun()
@@ -5674,16 +5802,15 @@ elif curr_l == "마스터 관리":
                 final = ["(선택)"] + deduped + ["기타 (직접 입력)"]
                 st.session_state[ss_key] = final
                 if save_app_setting(ss_key, final):
-                    st.success(f"✅ {label} 저장 완료 ({len(deduped)}개 항목) — DB 반영됨")
+                    st.toast(f"✅ {label} 저장 완료 ({len(deduped)}개 항목) — DB 반영됨")
                 else:
-                    st.success(f"✅ {label} 저장 완료 ({len(deduped)}개 항목)")
-                    st.caption("DB 저장 실패 — 앱 재시작 시 초기화될 수 있습니다.")
+                    st.toast(f"✅ {label} 저장 완료 ({len(deduped)}개 항목) — DB 저장 실패, 앱 재시작 시 초기화될 수 있습니다.", icon="⚠️")
                 st.rerun()
             if ec2.button(f"↩️ 기본값 복원", key=f"dd_reset_{tab_key}", use_container_width=True):
                 default_val = _DD_DEFAULTS.get(ss_key, [])
                 st.session_state[ss_key] = default_val
                 save_app_setting(ss_key, default_val)
-                st.success("기본값으로 복원됩니다.")
+                st.toast("기본값으로 복원됩니다.")
                 st.rerun()
             st.caption(f"현재 {len(editable)}개 항목 등록됨 (선택·직접입력 제외)")
 
@@ -5816,7 +5943,7 @@ elif curr_l == "마스터 관리":
                         if delete_production_row_by_sn(row['시리얼']):
                             _clear_production_cache()
                             st.session_state.production_db = load_realtime_ledger()
-                            st.success(f"삭제 완료: {row['시리얼']}")
+                            st.toast(f"삭제 완료: {row['시리얼']}")
                             st.rerun()
                 if len(prod_df) > 200:
                     st.caption(f"※ 최대 200건만 표시. 필터로 범위를 좁혀주세요.")
@@ -6261,7 +6388,7 @@ elif curr_l == "마스터 관리":
                 if delete_all_rows():
                     st.session_state.production_db = load_realtime_ledger()
                     st.session_state.confirm_reset = False
-                    st.success("전체 데이터가 초기화되었습니다.")
+                    st.toast("전체 데이터가 초기화되었습니다.")
                     st.rerun()
             if cc3.button("취소", use_container_width=True):
                 st.session_state.confirm_reset = False
