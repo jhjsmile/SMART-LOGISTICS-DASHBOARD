@@ -867,30 +867,22 @@ def insert_row(row: dict) -> bool:
     except Exception as e:
         err_str = str(e)
         if "23505" in err_str or "duplicate key" in err_str or "already exists" in err_str:
-            # ── Soft-delete / 오래된 데이터 여부 확인 ─────────────────
-            # DB에 동일 시리얼이 존재하지만 화면에 안 보이는 케이스:
-            #   1) 전체 초기화(soft-delete)로 deleted_at이 채워진 경우
-            #   2) 3개월 날짜 필터 밖(오래된 데이터)인 경우
-            # → soft-deleted 레코드이면 hard-delete 후 재등록 허용
+            # ── 화면에 실제로 보이는 레코드인지 확인 ─────────────────────
+            # production_db는 3개월 필터 + deleted_at IS NULL 적용된 현재 화면 데이터
+            # → 화면에 없으면 soft-deleted 또는 날짜 밖 레코드이므로 재등록 허용
+            prod_db = st.session_state.get('production_db', pd.DataFrame())
+            if not prod_db.empty and sn in prod_db['시리얼'].values:
+                # 화면에 보이는 활성 레코드와 충돌 → 진짜 중복
+                st.error(f"⚠️ 이미 등록된 시리얼입니다: **{sn}**\n\n동일한 S/N이 이미 생산 이력에 존재합니다. 시리얼을 확인해주세요.")
+                return False
+            # 화면에 없는 레코드 → hard-delete 후 재등록
             try:
-                existing = sb.table("production").select("시리얼,deleted_at,시간").eq("시리얼", sn).execute()
-                if existing.data:
-                    rec = existing.data[0]
-                    if rec.get("deleted_at"):  # soft-delete된 레코드
-                        sb.table("production").delete().eq("시리얼", sn).execute()
-                        sb.table("production").insert(row).execute()
-                        return True
-                    # 3개월 날짜 필터 밖(오래된 데이터) → 화면에 안 보이므로 재등록 허용
-                    cutoff = (date.today().replace(day=1) - timedelta(days=2*28)).strftime('%Y-%m-%d')
-                    rec_time = str(rec.get("시간", ""))
-                    if rec_time and rec_time < cutoff:
-                        sb.table("production").delete().eq("시리얼", sn).execute()
-                        sb.table("production").insert(row).execute()
-                        return True
-            except Exception:
-                pass
-            # 화면에 보이는 활성 레코드와 충돌 → 진짜 중복
-            st.error(f"⚠️ 이미 등록된 시리얼입니다: **{sn}**\n\n동일한 S/N이 이미 생산 이력에 존재합니다. 시리얼을 확인해주세요.")
+                sb.table("production").delete().eq("시리얼", sn).execute()
+                sb.table("production").insert(row).execute()
+                return True
+            except Exception as e2:
+                st.error(f"등록 실패: {e2}")
+                return False
         else:
             st.error(f"등록 실패: {e}")
         return False
