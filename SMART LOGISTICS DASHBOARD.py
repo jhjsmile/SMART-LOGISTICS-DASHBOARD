@@ -827,7 +827,6 @@ def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
     if curr_cnt > 0 and curr_cnt > prev:
         _safe_label = _html_mod.escape(str(label))
         now_str = datetime.now(KST).strftime('%Y-%m-%d %H:%M')
-        _send_telegram(f"📥 <b>입고 대기 알림</b>\n라인: {label}\n수량: {curr_cnt}건\n시각: {now_str}")
         st.components.v1.html(f"""
         <script>
         (function(){{
@@ -2734,12 +2733,8 @@ elif curr_l == "조립 라인":
     sch_ids_now   = ",".join(sorted(str(i) for i in today_sch['id'].tolist())) if not today_sch.empty else ""
     has_new_sch   = (sch_ids_now != st.session_state[last_seen_key]) and not today_sch.empty
 
-    # 변경 알림 팝업 (최초 로드 시 또는 이미 전송한 경우 텔레그램 제외)
-    _tg_cache_key = f"sch_{curr_g}_{today_str}_{sch_ids_now}"
+    # 변경 알림 팝업
     if has_new_sch and not st.session_state.get(f"sch_popup_dismissed_{curr_g}", False):
-        if not _first_load and _tg_cache_key not in _TG_SENT_CACHE:
-            _send_telegram(f"🔔 <b>오늘 일정 변경 알림</b>\n날짜: {today_str}\n반: {curr_g}\n일정: {len(today_sch)}건 등록/변경")
-            _TG_SENT_CACHE.add(_tg_cache_key)
         with st.container():
             st.warning(f"🔔 오늘 생산 일정이 등록/변경되었습니다!\n\n{today_str} 기준 **{curr_g}** 일정 **{len(today_sch)}건**이 있습니다. 아래에서 확인하세요.")
             ack_c1, ack_c2 = st.columns([3, 1])
