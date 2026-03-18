@@ -2486,7 +2486,7 @@ st.components.v1.html("""
     s.textContent = `
         #adm_float_btn {
             position: fixed;
-            bottom: 28px;
+            bottom: 70px;
             right: 28px;
             z-index: 999990;
             background: #e74c3c;
