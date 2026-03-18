@@ -2572,6 +2572,19 @@ st.components.v1.html("""
     };
     pdoc.body.appendChild(btn);
 
+    /* ── 함수를 parent window에 등록 ── */
+    window.parent._admClose = function() {
+        pdoc.getElementById('adm_modal_overlay').style.display = 'none';
+        pdoc.getElementById('adm_msg_input').value = '';
+    };
+    window.parent._admSubmit = function() {
+        var msg = pdoc.getElementById('adm_msg_input').value.trim() || '(사유 없음)';
+        var url = new URL(window.parent.location.href);
+        url.searchParams.set('admin_call_msg', msg);
+        window.parent._admClose();
+        window.parent.location.href = url.toString();
+    };
+
     /* ── 모달 ── */
     var overlay = pdoc.createElement('div');
     overlay.id = 'adm_modal_overlay';
@@ -2582,34 +2595,21 @@ st.components.v1.html("""
             <div style="font-size:0.85rem;color:#888;margin-bottom:2px;">호출 사유를 입력하세요 (선택)</div>
             <input id="adm_msg_input" type="text" placeholder="예: 라인 이상, 자재 부족, 품질 문제..." maxlength="100"/>
             <div class="adm_btn_row">
-                <button class="adm_submit_btn" onclick="admSubmit()">📣 호출하기</button>
-                <button class="adm_cancel_btn" onclick="admClose()">취소</button>
+                <button id="adm_submit_btn" class="adm_submit_btn">📣 호출하기</button>
+                <button id="adm_cancel_btn" class="adm_cancel_btn">취소</button>
             </div>
         </div>
     `;
     pdoc.body.appendChild(overlay);
 
-    /* ── Enter 키 지원 ── */
+    /* ── 이벤트 리스너 (inline onclick 대신) ── */
+    pdoc.getElementById('adm_submit_btn').addEventListener('click', function() { window.parent._admSubmit(); });
+    pdoc.getElementById('adm_cancel_btn').addEventListener('click', function() { window.parent._admClose(); });
     pdoc.getElementById('adm_msg_input').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') admSubmit();
-        if (e.key === 'Escape') admClose();
+        if (e.key === 'Enter') window.parent._admSubmit();
+        if (e.key === 'Escape') window.parent._admClose();
     });
 })();
-
-function admClose() {
-    var pdoc = window.parent.document;
-    pdoc.getElementById('adm_modal_overlay').style.display = 'none';
-    pdoc.getElementById('adm_msg_input').value = '';
-}
-
-function admSubmit() {
-    var pdoc = window.parent.document;
-    var msg = pdoc.getElementById('adm_msg_input').value.trim() || '(사유 없음)';
-    var url = new URL(window.parent.location.href);
-    url.searchParams.set('admin_call_msg', msg);
-    admClose();
-    window.parent.location.href = url.toString();
-}
 </script>
 """, height=0)
 
