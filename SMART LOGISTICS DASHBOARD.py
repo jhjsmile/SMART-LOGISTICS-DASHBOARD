@@ -5585,7 +5585,8 @@ elif curr_l == "불량 공정":
                         key=f"rep_{idx}"
                     )
 
-                    if st.button("✅ 확정", key=f"b_{idx}", type="primary", use_container_width=True):
+                    _btn_col, _ = st.columns([1, 2])
+                    if _btn_col.button("✅ 확정", key=f"b_{idx}", type="primary", use_container_width=True):
                         if v_c and v_a:
                             _target_sn = target_sn.strip() or row['시리얼']
                             _rep_sn = replace_sn.strip()
