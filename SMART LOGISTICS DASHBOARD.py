@@ -3331,10 +3331,11 @@ elif curr_l == "생산 현황 리포트":
         with cc4:
             try:
                 _df_trend = df_rpt.copy()
-                # 투입일(created_at) 기준 - 없으면 시간 컬럼 fallback
+                # 투입일(created_at) 기준 - 없으면 시간 컬럼 fallback, KST 변환 후 날짜 문자열 사용
                 _date_col = '투입일' if '투입일' in _df_trend.columns else '시간'
-                _df_trend['날짜'] = pd.to_datetime(_df_trend[_date_col], errors='coerce').dt.date
-                _daily = _df_trend.groupby('날짜').size().reset_index(name='수량').dropna().sort_values('날짜')
+                _parsed = pd.to_datetime(_df_trend[_date_col], errors='coerce', utc=True)
+                _df_trend['날짜'] = _parsed.dt.tz_convert('Asia/Seoul').dt.strftime('%Y-%m-%d')
+                _daily = _df_trend[_df_trend['날짜'].notna() & (_df_trend['날짜'] != '')].groupby('날짜').size().reset_index(name='수량').sort_values('날짜')
                 if not _daily.empty:
                     _fig_tr = px.line(_daily, x='날짜', y='수량', markers=True,
                                       title="<b>일자별 생산 투입 추이</b>", template="plotly_white")
