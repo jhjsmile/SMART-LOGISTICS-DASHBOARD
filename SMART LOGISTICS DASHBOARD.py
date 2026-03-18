@@ -3601,14 +3601,14 @@ elif curr_l == "생산 지표 관리":
     # ── 상단 필터 (한 줄, 컴팩트) ─────────────────────────────────
     st.markdown("<div class='db-title'>📡 생산 지표 관리</div>", unsafe_allow_html=True)
     fc1, fc2, _sp = st.columns([2, 2.5, 3])
-    period     = fc1.radio("기간", ["오늘","이번 주","이번 달"], horizontal=True, key="dash_period")
+    period     = fc1.radio("기간", ["월간","주간","현재"], horizontal=True, key="dash_period")
     ban_filter = fc2.radio("반", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="dash_ban")
 
     _today = date.today()
-    if period == "오늘":
+    if period == "현재":
         date_from = date_to_d = today_str
         plan_date_to = today_str
-    elif period == "이번 주":
+    elif period == "주간":
         _mon = _today - timedelta(days=_today.weekday())
         _fri = _mon + timedelta(days=4)
         date_from = _mon.strftime('%Y-%m-%d'); date_to_d = today_str
