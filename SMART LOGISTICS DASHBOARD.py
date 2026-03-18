@@ -1266,6 +1266,11 @@ def insert_schedule(row: dict) -> bool:
         if '날짜' in clean_row and hasattr(clean_row['날짜'], 'strftime'):
             clean_row['날짜'] = clean_row['날짜'].strftime('%Y-%m-%d')
         get_supabase().table("production_schedule").insert(clean_row).execute()
+        # ── 일정 등록 텔레그램 알림 ──
+        _날짜 = clean_row.get('날짜', '')
+        _반   = clean_row.get('반', '')
+        _모델 = clean_row.get('모델명', '')
+        _send_telegram(f"🔔 <b>일정 등록</b>\n날짜: {_날짜}\n반: {_반}\n모델: {_모델}")
         # ── 일정 등록 시 해당 반 모델/품목 마스터 자동 등록 ──
         반   = str(clean_row.get('반', '')).strip()
         모델 = str(clean_row.get('모델명', '')).strip()
@@ -2734,12 +2739,8 @@ elif curr_l == "조립 라인":
     sch_ids_now   = ",".join(sorted(str(i) for i in today_sch['id'].tolist())) if not today_sch.empty else ""
     has_new_sch   = (sch_ids_now != st.session_state[last_seen_key]) and not today_sch.empty
 
-    # 변경 알림 팝업 (최초 로드 시 또는 이미 전송한 경우 텔레그램 제외)
-    _tg_cache_key = f"sch_{curr_g}_{today_str}_{sch_ids_now}"
+    # 변경 알림 팝업
     if has_new_sch and not st.session_state.get(f"sch_popup_dismissed_{curr_g}", False):
-        if not _first_load and _tg_cache_key not in _TG_SENT_CACHE:
-            _send_telegram(f"🔔 <b>오늘 일정 변경 알림</b>\n날짜: {today_str}\n반: {curr_g}\n일정: {len(today_sch)}건 등록/변경")
-            _TG_SENT_CACHE.add(_tg_cache_key)
         with st.container():
             st.warning(f"🔔 오늘 생산 일정이 등록/변경되었습니다!\n\n{today_str} 기준 **{curr_g}** 일정 **{len(today_sch)}건**이 있습니다. 아래에서 확인하세요.")
             ack_c1, ack_c2 = st.columns([3, 1])
