@@ -6495,6 +6495,40 @@ elif curr_l == "마스터 관리":
 
         st.divider()
 
+        # ── 상태 되돌리기 ────────────────────────────────────────
+        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin:16px 0 10px 0;'>↩️ 제품 상태 수동 변경 (관리자 전용)</h4>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.caption("실수로 잘못 처리된 제품의 상태를 되돌리거나 직접 변경합니다.")
+            _all_states = ['조립중', '검사대기', '검사중', 'OQC대기', 'OQC중', '출하승인', '포장대기', '포장중', '완료', '불량 처리 중', '수리 완료(재투입)']
+            _rb_col1, _rb_col2 = st.columns([2, 1])
+            _rb_sn = _rb_col1.text_input("시리얼 번호 입력", placeholder="예) SN-20240101-001", key="rollback_sn")
+            _rb_target = _rb_col2.selectbox("변경할 상태", _all_states, key="rollback_target")
+
+            if _rb_sn:
+                _rb_df = st.session_state.production_db
+                _rb_match = _rb_df[_rb_df['시리얼'] == _rb_sn.strip()] if not _rb_df.empty else pd.DataFrame()
+                if not _rb_match.empty:
+                    _rb_row = _rb_match.iloc[0]
+                    st.info(f"현재 상태: **{_rb_row['상태']}** | 모델: {_rb_row.get('모델','')} | 반: {_rb_row.get('반','')}")
+                    if st.button("✅ 상태 변경 실행", key="rollback_exec", type="primary"):
+                        _prev_s = _rb_row['상태']
+                        if update_row(_rb_sn.strip(), {'상태': _rb_target, '시간': get_now_kst_str()}):
+                            insert_audit_log(
+                                시리얼=_rb_sn.strip(), 모델=_rb_row.get('모델',''), 반=_rb_row.get('반',''),
+                                이전상태=_prev_s, 이후상태=_rb_target,
+                                작업자=st.session_state.user_id, 비고="관리자 수동 상태 변경"
+                            )
+                            _clear_production_cache()
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.success(f"✅ [{_rb_sn}] {_prev_s} → {_rb_target} 변경 완료")
+                            st.rerun()
+                        else:
+                            st.error("변경 실패. 시리얼 번호를 확인해주세요.")
+                else:
+                    st.warning("해당 시리얼 번호를 찾을 수 없습니다.")
+
+        st.divider()
+
         # 기존 전체 초기화 버튼 (하위 호환)
         st.markdown("<p style='color:#8a7f72;font-size:0.85rem;'>⚠️ 아래는 생산 이력만 초기화하는 기존 버튼입니다. 위 탭을 이용하세요.</p>", unsafe_allow_html=True)
         # 초기화 버튼 - 2단계 확인
