@@ -875,10 +875,9 @@ def insert_row(row: dict) -> bool:
                 # 화면에 보이는 활성 레코드와 충돌 → 진짜 중복
                 st.error(f"⚠️ 이미 등록된 시리얼입니다: **{sn}**\n\n동일한 S/N이 이미 생산 이력에 존재합니다. 시리얼을 확인해주세요.")
                 return False
-            # 화면에 없는 레코드 → hard-delete 후 재등록
+            # 화면에 없는 레코드 (soft-deleted / 날짜 필터 밖) → upsert로 덮어쓰기
             try:
-                sb.table("production").delete().eq("시리얼", sn).execute()
-                sb.table("production").insert(row).execute()
+                sb.table("production").upsert(row, on_conflict="시리얼").execute()
                 return True
             except Exception as e2:
                 st.error(f"등록 실패: {e2}")
