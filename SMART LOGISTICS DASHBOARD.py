@@ -859,13 +859,30 @@ def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
         return pd.DataFrame(columns=_EMPTY_COLS)
 
 def insert_row(row: dict) -> bool:
+    sn = row.get('시리얼', '')
+    sb = get_supabase()
     try:
-        get_supabase().table("production").insert(row).execute()
+        sb.table("production").insert(row).execute()
         return True
     except Exception as e:
         err_str = str(e)
         if "23505" in err_str or "duplicate key" in err_str or "already exists" in err_str:
-            sn = row.get('시리얼', '')
+            # ── Soft-delete / 오래된 데이터 여부 확인 ─────────────────
+            # DB에 동일 시리얼이 존재하지만 화면에 안 보이는 케이스:
+            #   1) 전체 초기화(soft-delete)로 deleted_at이 채워진 경우
+            #   2) 3개월 날짜 필터 밖(오래된 데이터)인 경우
+            # → soft-deleted 레코드이면 hard-delete 후 재등록 허용
+            try:
+                existing = sb.table("production").select("시리얼,deleted_at").eq("시리얼", sn).execute()
+                if existing.data:
+                    rec = existing.data[0]
+                    if rec.get("deleted_at"):  # soft-delete된 레코드
+                        sb.table("production").delete().eq("시리얼", sn).execute()
+                        sb.table("production").insert(row).execute()
+                        return True
+            except Exception:
+                pass
+            # 화면에 보이는 활성 레코드와 충돌 → 진짜 중복
             st.error(f"⚠️ 이미 등록된 시리얼입니다: **{sn}**\n\n동일한 S/N이 이미 생산 이력에 존재합니다. 시리얼을 확인해주세요.")
         else:
             st.error(f"등록 실패: {e}")
