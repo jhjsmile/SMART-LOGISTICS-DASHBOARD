@@ -34,9 +34,6 @@ from streamlit_autorefresh import st_autorefresh
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 # =================================================================
@@ -790,8 +787,8 @@ def _inject_autofocus(label: str = None):
 # =================================================================
 # 텔레그램 알림
 # =================================================================
-_TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-_TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
+_TELEGRAM_BOT_TOKEN = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
+_TELEGRAM_CHAT_ID   = st.secrets.get("TELEGRAM_CHAT_ID", "")
 
 def _send_telegram(message: str) -> None:
     """텔레그램 메시지 전송 (백그라운드 스레드, 실패 시 무시)."""
@@ -6495,6 +6492,40 @@ elif curr_l == "마스터 관리":
                         st.session_state["_del_mgr_toast"] = "✅ 월별 계획 수량 전체 삭제 완료"; st.rerun()
                 if _ppa3.button("취소", key="del_plan_all_no", use_container_width=True):
                     st.session_state[_ck_plan_all] = False; st.rerun()
+
+        st.divider()
+
+        # ── 상태 되돌리기 ────────────────────────────────────────
+        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin:16px 0 10px 0;'>↩️ 제품 상태 수동 변경 (관리자 전용)</h4>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.caption("실수로 잘못 처리된 제품의 상태를 되돌리거나 직접 변경합니다.")
+            _all_states = ['조립중', '검사대기', '검사중', 'OQC대기', 'OQC중', '출하승인', '포장대기', '포장중', '완료', '불량 처리 중', '수리 완료(재투입)']
+            _rb_col1, _rb_col2 = st.columns([2, 1])
+            _rb_sn = _rb_col1.text_input("시리얼 번호 입력", placeholder="예) SN-20240101-001", key="rollback_sn")
+            _rb_target = _rb_col2.selectbox("변경할 상태", _all_states, key="rollback_target")
+
+            if _rb_sn:
+                _rb_df = st.session_state.production_db
+                _rb_match = _rb_df[_rb_df['시리얼'] == _rb_sn.strip()] if not _rb_df.empty else pd.DataFrame()
+                if not _rb_match.empty:
+                    _rb_row = _rb_match.iloc[0]
+                    st.info(f"현재 상태: **{_rb_row['상태']}** | 모델: {_rb_row.get('모델','')} | 반: {_rb_row.get('반','')}")
+                    if st.button("✅ 상태 변경 실행", key="rollback_exec", type="primary"):
+                        _prev_s = _rb_row['상태']
+                        if update_row(_rb_sn.strip(), {'상태': _rb_target, '시간': get_now_kst_str()}):
+                            insert_audit_log(
+                                시리얼=_rb_sn.strip(), 모델=_rb_row.get('모델',''), 반=_rb_row.get('반',''),
+                                이전상태=_prev_s, 이후상태=_rb_target,
+                                작업자=st.session_state.user_id, 비고="관리자 수동 상태 변경"
+                            )
+                            _clear_production_cache()
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.success(f"✅ [{_rb_sn}] {_prev_s} → {_rb_target} 변경 완료")
+                            st.rerun()
+                        else:
+                            st.error("변경 실패. 시리얼 번호를 확인해주세요.")
+                else:
+                    st.warning("해당 시리얼 번호를 찾을 수 없습니다.")
 
         st.divider()
 
