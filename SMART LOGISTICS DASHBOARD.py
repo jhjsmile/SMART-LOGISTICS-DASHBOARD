@@ -5465,7 +5465,8 @@ elif curr_l == "불량 공정":
 elif curr_l == "수리 현황 리포트":
     st.markdown("<h2 class='centered-title'>📈 품질 분석 및 수리 이력 리포트</h2>", unsafe_allow_html=True)
     hist_df = st.session_state.production_db
-    hist_df = hist_df[hist_df['수리'].astype(str).str.strip() != ""]
+    _repair_col = hist_df['수리'].astype(str).str.strip()
+    hist_df = hist_df[(_repair_col != "") & (_repair_col != "OQC합격")]
 
     if not hist_df.empty:
         c_l, c_r = st.columns([1.8, 1.2])
