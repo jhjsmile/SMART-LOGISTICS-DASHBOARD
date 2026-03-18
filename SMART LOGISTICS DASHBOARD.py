@@ -2579,10 +2579,17 @@ st.components.v1.html("""
     };
     window.parent._admSubmit = function() {
         var msg = pdoc.getElementById('adm_msg_input').value.trim() || '(사유 없음)';
-        var url = new URL(window.parent.location.href);
-        url.searchParams.set('admin_call_msg', msg);
         window.parent._admClose();
-        window.parent.location.href = url.toString();
+        var form = pdoc.createElement('form');
+        form.method = 'get';
+        form.action = window.parent.location.pathname;
+        var inp = pdoc.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'admin_call_msg';
+        inp.value = msg;
+        form.appendChild(inp);
+        pdoc.body.appendChild(form);
+        form.submit();
     };
 
     /* ── 모달 ── */
