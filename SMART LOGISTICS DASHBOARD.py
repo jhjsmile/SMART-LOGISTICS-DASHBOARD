@@ -2478,7 +2478,12 @@ st.components.v1.html("""
 <script>
 (function(){
     var pdoc = window.parent.document;
-    if (pdoc.getElementById('adm_float_btn')) return;
+    var _old = pdoc.getElementById('adm_float_btn');
+    if (_old) _old.remove();
+    var _oldOverlay = pdoc.getElementById('adm_modal_overlay');
+    if (_oldOverlay) _oldOverlay.remove();
+    var _oldStyle = pdoc.getElementById('adm_float_style');
+    if (_oldStyle) _oldStyle.remove();
 
     /* ── 스타일 ── */
     var s = pdoc.createElement('style');
