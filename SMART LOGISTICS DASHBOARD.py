@@ -3607,11 +3607,17 @@ elif curr_l == "생산 지표 관리":
     _today = date.today()
     if period == "오늘":
         date_from = date_to_d = today_str
+        plan_date_to = today_str
     elif period == "이번 주":
         _mon = _today - timedelta(days=_today.weekday())
+        _fri = _mon + timedelta(days=4)
         date_from = _mon.strftime('%Y-%m-%d'); date_to_d = today_str
+        plan_date_to = _fri.strftime('%Y-%m-%d')
     else:
+        import calendar as _cal
         date_from = today_str[:7] + "-01"; date_to_d = today_str
+        _last_day = _cal.monthrange(_today.year, _today.month)[1]
+        plan_date_to = f"{today_str[:7]}-{_last_day:02d}"
 
     if not db_all.empty:
         db_f = db_all[db_all['시간'].str[:10] >= date_from]
@@ -3621,7 +3627,7 @@ elif curr_l == "생산 지표 관리":
         db_f = db_all.copy()
 
     if not sch_all.empty:
-        sch_f = sch_all[(sch_all['날짜'] >= date_from) & (sch_all['날짜'] <= date_to_d)]
+        sch_f = sch_all[(sch_all['날짜'] >= date_from) & (sch_all['날짜'] <= plan_date_to)]
         if ban_filter != "전체": sch_f = sch_f[sch_f['반'] == ban_filter]
     else:
         sch_f = sch_all.copy()
@@ -3652,11 +3658,12 @@ elif curr_l == "생산 지표 관리":
         ("불량률", f"{defect_pct}", "%", "#c0392b" if defect_pct > 3 else "#d68910" if defect_pct > 0 else "#1e8449"),
     ]
     for col, (lbl, val, unit, color) in zip(k, kpi_data):
+        _sub = f"{date_from} ~ {plan_date_to}" if lbl == "계획" else f"{date_from} ~ {date_to_d}"
         col.markdown(f"""
 <div class='kpi-card'>
   <div class='kpi-lbl'>{lbl}</div>
   <div class='kpi-val' style='color:{color};'>{val}<span style='font-size:1rem;font-weight:600;color:#aaa;margin-left:2px;'>{unit}</span></div>
-  <div class='kpi-sub'>{date_from} ~ {date_to_d}</div>
+  <div class='kpi-sub'>{_sub}</div>
 </div>""", unsafe_allow_html=True)
 
     # ══════════════════════════════════════════════════════════════
