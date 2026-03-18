@@ -2471,16 +2471,21 @@ elif curr_l == "조립 라인":
     _wip_today  = len(f_df[f_df['시간'].astype(str).str.startswith(today_str) & f_df['상태'].isin(['조립중','수리 완료(재투입)'])]) if not f_df.empty else 0
 
     if _plan_qty > 0:
-        _pct = min(int(_done_today / _plan_qty * 100), 100)
-        _remain = max(_plan_qty - _done_today, 0)
-        if _pct >= 100:
-            _bar_color = "#28a745"; _msg = "🎉 목표 달성! 수고하셨습니다!"; _emoji = "🏆"
-        elif _pct >= 80:
-            _bar_color = "#28a745"; _msg = f"💪 거의 다 왔어요! {_remain}개만 더!"; _emoji = "🔥"
-        elif _pct >= 50:
-            _bar_color = "#ffc107"; _msg = f"👍 절반 넘었어요! {_remain}개 남았어요!"; _emoji = "⚡"
+        _real_pct = int(_done_today / _plan_qty * 100)
+        _bar_pct  = min(_real_pct, 100)
+        _over     = max(_done_today - _plan_qty, 0)
+        _remain   = max(_plan_qty - _done_today, 0)
+        if _real_pct >= 100:
+            _bar_color = "#28a745"
+            _msg = f"🎉 목표 달성! 수고하셨습니다!" + (f" (초과 +{_over}개)" if _over > 0 else "")
+            _emoji = "🏆"
+            _pct_label = f"{_real_pct}%" + (f" <span style='font-size:1rem;color:#28a745;'>+{_over}개 초과</span>" if _over > 0 else "")
+        elif _real_pct >= 80:
+            _bar_color = "#28a745"; _msg = f"💪 거의 다 왔어요! {_remain}개만 더!"; _emoji = "🔥"; _pct_label = f"{_real_pct}%"
+        elif _real_pct >= 50:
+            _bar_color = "#ffc107"; _msg = f"👍 절반 넘었어요! {_remain}개 남았어요!"; _emoji = "⚡"; _pct_label = f"{_real_pct}%"
         else:
-            _bar_color = "#e67e22"; _msg = f"🚀 파이팅! 목표까지 {_remain}개 남았어요!"; _emoji = "💡"
+            _bar_color = "#e67e22"; _msg = f"🚀 파이팅! 목표까지 {_remain}개 남았어요!"; _emoji = "💡"; _pct_label = f"{_real_pct}%"
 
         st.markdown(f"""
         <div style='background:#ffffff;border-radius:16px;padding:24px 28px;margin-bottom:16px;
@@ -2492,11 +2497,11 @@ elif curr_l == "조립 라인":
             <div style='display:flex;align-items:flex-end;gap:8px;margin-bottom:10px;'>
                 <span style='color:{_bar_color};font-size:3.2rem;font-weight:900;line-height:1;'>{_done_today}</span>
                 <span style='color:#555;font-size:1.1rem;margin-bottom:8px;'>/ {_plan_qty} EA</span>
-                <span style='color:{_bar_color};font-size:2rem;font-weight:800;margin-bottom:4px;margin-left:12px;'>{_pct}%</span>
+                <span style='color:{_bar_color};font-size:2rem;font-weight:800;margin-bottom:4px;margin-left:12px;'>{_pct_label}</span>
                 <span style='font-size:1.8rem;margin-bottom:4px;'>{_emoji}</span>
             </div>
             <div style='background:#e9ecef;border-radius:8px;height:18px;overflow:hidden;margin-bottom:10px;'>
-                <div style='background:{_bar_color};width:{_pct}%;height:100%;border-radius:8px;'></div>
+                <div style='background:{_bar_color};width:{_bar_pct}%;height:100%;border-radius:8px;'></div>
             </div>
             <div style='display:flex;justify-content:space-between;align-items:center;'>
                 <span style='color:#333;font-size:0.95rem;font-weight:600;'>{_msg}</span>
