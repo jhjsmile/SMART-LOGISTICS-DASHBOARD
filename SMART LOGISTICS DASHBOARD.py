@@ -3894,8 +3894,8 @@ elif curr_l == "생산 지표 관리":
         months_list.append(f"{_yr3}-{_mo3:02d}")
     months_list = sorted(set(months_list))[-6:]
 
-    # 반별 월별 실적 집계
-    db_raw = st.session_state.production_db.copy()
+    # 반별 월별 실적 집계 (6개월 데이터 필요 → 직접 로드)
+    db_raw = load_realtime_ledger(months=6)
     chart_rows = []
     for ban in PRODUCTION_GROUPS:
         for mo in months_list:
