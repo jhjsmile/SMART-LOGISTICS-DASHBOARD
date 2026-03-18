@@ -5481,8 +5481,12 @@ elif curr_l == "수리 현황 리포트":
     if not hist_df.empty:
         c_l, c_r = st.columns([1.8, 1.2])
         with c_l:
-            st.plotly_chart(px.bar(hist_df.groupby('라인').size().reset_index(name='수량'),
-                x='라인', y='수량', title="공정별 이슈 빈도"), use_container_width=True)
+            _line_order = ['조립 라인', '검사 라인', 'OQC 라인']
+            _issue_df = hist_df.groupby('라인').size().reset_index(name='수량')
+            _issue_df['라인'] = pd.Categorical(_issue_df['라인'], categories=_line_order, ordered=True)
+            _issue_df = _issue_df.sort_values('라인')
+            st.plotly_chart(px.bar(_issue_df, x='라인', y='수량', title="공정별 이슈 빈도",
+                category_orders={'라인': _line_order}), use_container_width=True)
         with c_r:
             st.plotly_chart(px.pie(hist_df.groupby('모델').size().reset_index(name='수량'),
                 values='수량', names='모델', hole=0.4, title="모델별 불량 비중"), use_container_width=True)
