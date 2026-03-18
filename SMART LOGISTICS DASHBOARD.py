@@ -827,7 +827,6 @@ def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
     if curr_cnt > 0 and curr_cnt > prev:
         _safe_label = _html_mod.escape(str(label))
         now_str = datetime.now(KST).strftime('%Y-%m-%d %H:%M')
-        _send_telegram(f"📥 <b>입고 대기 알림</b>\n라인: {label}\n수량: {curr_cnt}건\n시각: {now_str}")
         st.components.v1.html(f"""
         <script>
         (function(){{
