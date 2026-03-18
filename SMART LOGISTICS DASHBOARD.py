@@ -787,29 +787,28 @@ def _inject_autofocus(label: str = None):
 # =================================================================
 # 텔레그램 알림
 # =================================================================
-_TELEGRAM_BOT_TOKEN = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
-_TELEGRAM_CHAT_ID   = st.secrets.get("TELEGRAM_CHAT_ID", "")
+def _get_tg_creds():
+    """TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID를 최상위 또는 theme 섹션에서 찾아 반환."""
+    token, chat = "", ""
+    for _key in ("TELEGRAM_BOT_TOKEN",):
+        try: token = str(st.secrets[_key]).strip(); break
+        except Exception: pass
+        try: token = str(st.secrets["theme"][_key]).strip(); break
+        except Exception: pass
+    for _key in ("TELEGRAM_CHAT_ID",):
+        try: chat = str(st.secrets[_key]).strip(); break
+        except Exception: pass
+        try: chat = str(st.secrets["theme"][_key]).strip(); break
+        except Exception: pass
+    return token, chat
+
+_TELEGRAM_BOT_TOKEN, _TELEGRAM_CHAT_ID = _get_tg_creds()
 
 def _send_telegram(message: str) -> str:
     """텔레그램 메시지 전송. 성공 시 'ok', 실패 시 오류 문자열 반환."""
-    _token = ""
-    _chat  = ""
-    # 최상위 키로 시도
-    try:
-        _token = str(st.secrets["TELEGRAM_BOT_TOKEN"]).strip()
-    except Exception:
-        pass
-    try:
-        _chat = str(st.secrets["TELEGRAM_CHAT_ID"]).strip()
-    except Exception:
-        pass
-    # 못 찾았으면 전체 중첩 탐색
+    _token, _chat = _get_tg_creds()
     if not _token or not _chat:
-        try:
-            _all = {k: dict(v) if hasattr(v, 'keys') else str(v) for k, v in st.secrets.items()}
-        except Exception as _e:
-            _all = f"st.secrets.items() 오류: {_e}"
-        return f"TELEGRAM 키 없음. 전체 secrets 구조: {_all}"
+        return "전송 실패: TELEGRAM 시크릿 없음"
     try:
         url = f"https://api.telegram.org/bot{_token}/sendMessage"
         res = requests.post(url, json={"chat_id": _chat, "text": message, "parse_mode": "HTML"}, timeout=10)
