@@ -5574,13 +5574,13 @@ elif curr_l == "불량 공정":
 
                     rep_c1, rep_c2 = st.columns(2)
                     target_sn = rep_c1.text_input(
-                        "🎯 교체되어야 할 대상 시리얼",
+                        "🎯 기존 시리얼",
                         value=row['시리얼'],
                         placeholder="교체 대상 S/N 스캔/입력",
                         key=f"target_{idx}"
                     )
                     replace_sn = rep_c2.text_input(
-                        "🔄 교체될 시리얼 (새 제품)",
+                        "🔄 교체 시리얼",
                         placeholder="새 S/N 스캔/입력 (없으면 비워두세요)",
                         key=f"rep_{idx}"
                     )
