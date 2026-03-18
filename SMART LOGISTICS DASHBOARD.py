@@ -757,22 +757,18 @@ def get_now_kst_str() -> str:
 
 def _inject_autofocus(label: str = None):
     """스캔 입력 후 재렌더 시 지정 라벨의 text input에 자동 포커스 (JS 주입).
-    label이 주어지면 해당 라벨과 연결된 입력란을 특정하고, 없으면 첫 번째 활성 입력란 사용."""
+    label이 주어지면 aria-label로 해당 입력란을 특정하고, 없으면 첫 번째 활성 입력란 사용."""
     import streamlit.components.v1 as components
     if label:
-        safe = label.replace("'", "\\'")
+        safe = label.replace('"', '\\"')
         js = (
-            "<script>(function(){function f(){"
-            "var lbs=window.parent.document.querySelectorAll('label');"
-            "for(var i=0;i<lbs.length;i++){"
-            f"if(lbs[i].textContent.trim()==='{safe}'){{"
-            "var p=lbs[i].closest('div[data-testid]')||lbs[i].parentElement;"
-            "var inp=p?p.querySelector('input[type=text]'):null;"
-            "if(inp&&!inp.disabled&&!inp.readOnly&&inp.offsetParent!==null)"
-            "{inp.focus();return true;}}}"
-            "return false;}"
-            "if(!f()){setTimeout(function(){if(!f())setTimeout(f,200);},80);}})();"
-            "</script>"
+            f'<script>(function(){{'
+            f'function f(){{'
+            f'var inp=window.parent.document.querySelector(\'input[aria-label="{safe}"]\');'
+            f'if(inp&&!inp.disabled&&!inp.readOnly&&inp.offsetParent!==null)'
+            f'{{inp.focus();return true;}}return false;}}'
+            f'if(!f()){{setTimeout(function(){{if(!f())setTimeout(f,300);}},100);}}'
+            f'}})();</script>'
         )
     else:
         js = (
@@ -780,7 +776,7 @@ def _inject_autofocus(label: str = None):
             ".querySelectorAll('input[type=text]');for(var i=0;i<els.length;i++)"
             "{var e=els[i];if(!e.disabled&&!e.readOnly&&e.offsetParent!==null)"
             "{e.focus();return true;}}return false;}"
-            "if(!f()){setTimeout(function(){if(!f())setTimeout(f,200);},80);}})();"
+            "if(!f()){setTimeout(function(){if(!f())setTimeout(f,300);},100);}})();"
             "</script>"
         )
     components.html(js, height=0, scrolling=False)
