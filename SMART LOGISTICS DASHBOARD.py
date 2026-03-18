@@ -4564,8 +4564,8 @@ elif curr_l == "OQC 라인":
         db_oqc['상태'] == 'OQC대기'
     ].sort_values('시간', ascending=False)
 
-    _oqc_in_ck_key = "oqc_in_ck"
-    _oqc_in_sc_cnt = "oqc_in_sc_cnt"
+    _oqc_in_ck_key = f"oqc_in_ck_{oqc_ban}"
+    _oqc_in_sc_cnt = f"oqc_in_sc_cnt_{oqc_ban}"
     if _oqc_in_ck_key not in st.session_state: st.session_state[_oqc_in_ck_key] = {}
     if _oqc_in_sc_cnt not in st.session_state: st.session_state[_oqc_in_sc_cnt] = 0
 
@@ -4639,8 +4639,8 @@ elif curr_l == "OQC 라인":
     st.markdown("<div class='section-title'>🔍 OQC 검사 진행</div>", unsafe_allow_html=True)
     oqc_wait_list = db_oqc[db_oqc['상태'] == 'OQC중'].sort_values('시간', ascending=False)
 
-    _oqc_ck_key = "oqc_ck"
-    _oqc_sc_cnt = "oqc_sc_cnt"
+    _oqc_ck_key = f"oqc_ck_{oqc_ban}"
+    _oqc_sc_cnt = f"oqc_sc_cnt_{oqc_ban}"
     if _oqc_ck_key not in st.session_state: st.session_state[_oqc_ck_key] = {}
     if _oqc_sc_cnt not in st.session_state: st.session_state[_oqc_sc_cnt] = 0
 
