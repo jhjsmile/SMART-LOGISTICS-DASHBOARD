@@ -19,6 +19,9 @@
 
 
 import re
+import os
+import threading
+import requests
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -149,6 +152,50 @@ ROLE_LABELS = {
     "oqc_team":       "🏅 OQC 품질팀",
 }
 
+# ── 권한 레벨 (읽기 / 쓰기 / 수정) ─────────────────────────────
+PERM_ACTIONS       = ["read", "write", "edit"]
+PERM_ACTION_LABELS = {"read": "읽기", "write": "쓰기", "edit": "수정"}
+
+def _parse_custom_perms(raw):
+    """커스텀 권한 파싱 — 구형(list) / 신형(dict{"pages":…,"levels":…}) 모두 지원.
+    Returns (pages: list | None, levels: dict[str, set])
+      pages  — 네비게이션에 표시할 메뉴 키 목록 (None = 역할 기본값 사용)
+      levels — {메뉴키: {"read","write","edit"} 의 부분집합}
+    """
+    if raw is None:
+        return None, {}
+    if isinstance(raw, list):
+        # 구형: 전 메뉴 전체 권한
+        return raw, {p: set(PERM_ACTIONS) for p in raw}
+    if isinstance(raw, dict) and "pages" in raw:
+        pages  = raw.get("pages", [])
+        levels = {k: set(v) for k, v in raw.get("levels", {}).items()}
+        for p in pages:
+            if p not in levels and not any(p.startswith(k + "::") for k in levels):
+                levels[p] = set(PERM_ACTIONS)
+        return pages, levels
+    return None, {}
+
+def check_perm(page_key: str, action: str = "read") -> bool:
+    """현재 로그인 사용자의 페이지·동작 권한 확인.
+    page_key: 메뉴명 또는 "라인::반" 형식
+    action  : "read" | "write" | "edit"
+    Returns True if allowed.
+    """
+    role = st.session_state.get("user_role")
+    if role in ("master", "admin"):
+        return True
+    levels = st.session_state.get("user_permission_levels", {})
+    if not levels:
+        return True   # 커스텀 레벨 미설정 → 기본 허용 (nav 접근으로 이미 제어됨)
+    if page_key in levels:
+        return action in levels[page_key]
+    # 상위 키 적용 (예: "조립 라인" → "조립 라인::제조1반"에도 적용)
+    for key, actions in levels.items():
+        if page_key.startswith(key + "::"):
+            return action in actions
+    return True   # levels에 없는 키 → 기본 허용
+
 SCHEDULE_COLORS = {
     "조립계획": "#7eb8e8",
     "포장계획": "#7ec8a0",
@@ -178,6 +225,7 @@ STATUS_STYLE = {
     '조립중':   ('#f0f0f0','#3d3530','#c8b89a','🔧'),
     '수리 완료(재투입)': ('#f0e8d4','#5a4020','#c8a87a','♻️'),
     '불량 처리 중': ('#fde8e7','#7a2e2a','#e87e7a','🚫'),
+    '교체됨':      ('#e8e8f4','#3a3a6a','#9a9ad8','🔁'),
 }
 
 # ── 상태별 배경색 (STATE_CLR / STATE_CLR2 공통 상수, 두 곳에서 재사용) ──
@@ -194,6 +242,7 @@ STATUS_BG = {
     'OQC중':            '#ddeeff',
     '출하승인':         '#d4f0e2',
     '부적합(OQC)':      '#fde8e7',
+    '교체됨':           '#e8e8f4',
 }
 
 st.markdown("""
@@ -596,7 +645,7 @@ def verify_pw(plain: str, hashed: str) -> bool:
     if _BCRYPT_AVAILABLE and hashed.startswith("$2"):
         try:
             return _bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
-        except Exception:
+        except (ValueError, AttributeError):
             return False
     # SHA-256 fallback (기존 계정 호환)
     return hashlib.sha256(plain.encode("utf-8")).hexdigest() == hashed
@@ -686,6 +735,14 @@ def _clear_audit_cache() -> None:
     """감사 로그 캐시 초기화"""
     load_audit_log.clear()
 
+def _clear_all_cache() -> None:
+    """전체 캐시 일괄 초기화"""
+    _clear_production_cache()
+    _clear_schedule_cache()
+    _clear_plan_cache()
+    _clear_master_cache()
+    _clear_audit_cache()
+
 def keep_supabase_alive() -> None:
     try:
         get_supabase().table("production").select("id").limit(1).execute()
@@ -701,10 +758,59 @@ if "supabase_alive_checked" not in st.session_state:
 def get_now_kst_str() -> str:
     return datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
 
+def _inject_autofocus(label: str = None):
+    """스캔 입력 후 재렌더 시 지정 라벨의 text input에 자동 포커스 (JS 주입).
+    label이 주어지면 aria-label로 해당 입력란을 특정하고, 없으면 첫 번째 활성 입력란 사용."""
+    import streamlit.components.v1 as components
+    if label:
+        safe = label.replace('"', '\\"')
+        js = (
+            f'<script>(function(){{'
+            f'function f(){{'
+            f'var inp=window.parent.document.querySelector(\'input[aria-label="{safe}"]\');'
+            f'if(inp&&!inp.disabled&&!inp.readOnly&&inp.offsetParent!==null)'
+            f'{{inp.focus();return true;}}return false;}}'
+            f'if(!f()){{setTimeout(function(){{if(!f())setTimeout(f,300);}},100);}}'
+            f'}})();</script>'
+        )
+    else:
+        js = (
+            "<script>(function(){function f(){var els=window.parent.document"
+            ".querySelectorAll('input[type=text]');for(var i=0;i<els.length;i++)"
+            "{var e=els[i];if(!e.disabled&&!e.readOnly&&e.offsetParent!==null)"
+            "{e.focus();return true;}}return false;}"
+            "if(!f()){setTimeout(function(){if(!f())setTimeout(f,300);},100);}})();"
+            "</script>"
+        )
+    components.html(js, height=0, scrolling=False)
+
+# =================================================================
+# 텔레그램 알림
+# =================================================================
+_TELEGRAM_BOT_TOKEN = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
+_TELEGRAM_CHAT_ID   = st.secrets.get("TELEGRAM_CHAT_ID", "")
+
+def _send_telegram(message: str) -> None:
+    """텔레그램 메시지 전송 (백그라운드 스레드, 실패 시 무시)."""
+    if not _TELEGRAM_BOT_TOKEN or not _TELEGRAM_CHAT_ID:
+        return
+    def _do_send():
+        try:
+            url = f"https://api.telegram.org/bot{_TELEGRAM_BOT_TOKEN}/sendMessage"
+            requests.post(url, json={"chat_id": _TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}, timeout=5)
+        except Exception:
+            pass
+    threading.Thread(target=_do_send, daemon=True).start()
+
+
 def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
     """입고 대기 수량이 증가하면 가운데 팝업 알림 + 사운드를 출력한다."""
+    import html as _html_mod
     prev = st.session_state.get(notif_key, -1)
     if curr_cnt > 0 and curr_cnt > prev:
+        _safe_label = _html_mod.escape(str(label))
+        now_str = datetime.now(KST).strftime('%Y-%m-%d %H:%M')
+        _send_telegram(f"📥 <b>입고 대기 알림</b>\n라인: {label}\n수량: {curr_cnt}건\n시각: {now_str}")
         st.components.v1.html(f"""
         <script>
         (function(){{
@@ -753,7 +859,7 @@ def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
             box.innerHTML =
                 '<div style="font-size:3.5rem;margin-bottom:12px;">📥</div>'
                 + '<div style="font-size:1.6rem;font-weight:800;color:#1a1a2e;margin-bottom:8px;">입고 대기 알림</div>'
-                + '<div style="font-size:1.05rem;color:#2E75B6;font-weight:600;margin-bottom:8px;">{label}</div>'
+                + '<div style="font-size:1.05rem;color:#2E75B6;font-weight:600;margin-bottom:8px;">{_safe_label}</div>'
                 + '<div style="font-size:2.6rem;font-weight:900;color:#c8605a;margin-bottom:28px;">{curr_cnt}건 도착!</div>'
                 + '<button id="sld_notif_btn" style="background:#2E75B6;color:#fff;border:none;border-radius:10px;padding:14px 44px;font-size:1.15rem;cursor:pointer;font-weight:700;">✅ 확인</button>';
 
@@ -774,7 +880,6 @@ def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
     _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','작업자']
     try:
         sb = get_supabase()
-        from datetime import date, timedelta
         cutoff = (date.today().replace(day=1) -
                   timedelta(days=(months-1)*28)).strftime('%Y-%m-%d')
         try:
@@ -804,14 +909,31 @@ def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
         return pd.DataFrame(columns=_EMPTY_COLS)
 
 def insert_row(row: dict) -> bool:
+    sn = row.get('시리얼', '')
+    sb = get_supabase()
     try:
-        get_supabase().table("production").insert(row).execute()
+        sb.table("production").insert(row).execute()
         return True
     except Exception as e:
         err_str = str(e)
         if "23505" in err_str or "duplicate key" in err_str or "already exists" in err_str:
-            sn = row.get('시리얼', '')
-            st.error(f"⚠️ 이미 등록된 시리얼입니다: **{sn}**\n\n동일한 S/N이 이미 생산 이력에 존재합니다. 시리얼을 확인해주세요.")
+            # ── 화면에 실제로 보이는 레코드인지 확인 ─────────────────────
+            # production_db는 3개월 필터 + deleted_at IS NULL 적용된 현재 화면 데이터
+            # → 화면에 없으면 soft-deleted 또는 날짜 밖 레코드이므로 재등록 허용
+            prod_db = st.session_state.get('production_db', pd.DataFrame())
+            if not prod_db.empty and sn in prod_db['시리얼'].values:
+                # 화면에 보이는 활성 레코드와 충돌 → 진짜 중복
+                st.error(f"⚠️ 이미 등록된 시리얼입니다: **{sn}**\n\n동일한 S/N이 이미 생산 이력에 존재합니다. 시리얼을 확인해주세요.")
+                return False
+            # 화면에 없는 레코드 (soft-deleted / 날짜 필터 밖) → upsert로 덮어쓰기
+            # deleted_at/deleted_by를 NULL로 초기화해야 deleted_at IS NULL 필터에 표시됨
+            try:
+                upsert_row = {**row, 'deleted_at': None, 'deleted_by': None}
+                sb.table("production").upsert(upsert_row, on_conflict="시리얼").execute()
+                return True
+            except Exception as e2:
+                st.error(f"등록 실패: {e2}")
+                return False
         else:
             st.error(f"등록 실패: {e}")
         return False
@@ -1235,6 +1357,20 @@ def load_material_serials(메인시리얼: str = "") -> pd.DataFrame:
     except Exception:
         return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
 
+@st.cache_data(ttl=60)
+def load_material_serials_bulk(serials: tuple) -> pd.DataFrame:
+    """여러 메인시리얼에 대한 자재 시리얼을 한 번에 조회 (N+1 방지)"""
+    if not serials:
+        return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+    try:
+        sb  = get_supabase()
+        res = sb.table("material_serial").select("*").in_("메인시리얼", list(serials)).order("시간", desc=False).execute()
+        if res.data:
+            return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
+        return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+    except Exception:
+        return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+
 def search_material_by_sn(자재시리얼: str) -> pd.DataFrame:
     """자재 S/N으로 메인 S/N 역추적"""
     try:
@@ -1333,7 +1469,7 @@ def show_inline_day_panel():
     if not action or not action_data:
         return
 
-    can_edit = st.session_state.user_role in CALENDAR_EDIT_ROLES
+    can_edit = st.session_state.user_role in CALENDAR_EDIT_ROLES and check_perm("생산 지표 관리", "edit")
     sch_df   = st.session_state.schedule_db
 
     # ── 패널 컨테이너 ─────────────────────────────────────────
@@ -1550,7 +1686,7 @@ def show_inline_day_panel():
                     ship_v  = _esc(r.get('출하계획', ''))
                     note_v  = _esc(r.get('특이사항', ''))
                     try: qty_v = int(float(r.get('조립수', 0))) if r.get('조립수') not in (None,'','nan') else 0
-                    except: qty_v = 0
+                    except (ValueError, TypeError): qty_v = 0
                     qty_str  = f"{qty_v}대" if qty_v else "-"
                     ship_str = ship_v if ship_v and ship_v != 'nan' else "-"
                     note_str = f" ⚠️ {note_v}" if note_v and note_v not in ('', 'nan') else ""
@@ -1667,20 +1803,29 @@ if 'user_db' not in st.session_state:
         if result.data:
             # DB에서 로드 성공
             import json as _json
-            st.session_state.user_db = {
-                user['username']: {
+            _user_db = {}
+            for user in result.data:
+                _entry = {
                     'pw_hash': user['password_hash'],
                     'role': user['role'],
-                    **({'custom_permissions': _json.loads(user['custom_permissions'])}
-                       if user.get('custom_permissions') else {})
                 }
-                for user in result.data
-            }
+                if user.get('custom_permissions'):
+                    try:
+                        _entry['custom_permissions'] = _json.loads(user['custom_permissions'])
+                    except (_json.JSONDecodeError, ValueError):
+                        pass  # 잘못된 JSON은 무시하고 커스텀 권한 없이 로그인 허용
+                _user_db[user['username']] = _entry
+            st.session_state.user_db = _user_db
         else:
-            # DB에 데이터 없으면 기본값 (환경변수에서)
-            st.session_state.user_db = {
-                "admin": {"pw_hash": st.secrets.get("default_users", {}).get("admin_hash", hash_pw("CHANGE_ME_NOW")), "role": "admin"},
-            }
+            # DB에 데이터 없으면 secrets.toml의 해시 사용 (기본 패스워드 사용 금지)
+            _admin_hash = st.secrets.get("default_users", {}).get("admin_hash")
+            if _admin_hash:
+                st.session_state.user_db = {
+                    "admin": {"pw_hash": _admin_hash, "role": "admin"},
+                }
+            else:
+                st.session_state.user_db = {}
+                st.sidebar.error("❌ DB에 사용자 없음 & secrets에 admin_hash 미설정: [default_users] admin_hash를 추가하세요.")
     except Exception as e:
         # Supabase 연결 실패 시 임시 계정 (경고 표시)
         # 보안: 평문 비밀번호 하드코딩 제거 → secrets.toml 또는 환경변수에서 해시 로드
@@ -1709,10 +1854,12 @@ if 'master_synced' not in st.session_state:
     sync_master_to_session()
     st.session_state.master_synced = True
 
-if 'login_status'        not in st.session_state: st.session_state.login_status        = False
-if 'user_role'           not in st.session_state: st.session_state.user_role           = None
-if 'user_id'             not in st.session_state: st.session_state.user_id             = None
-if 'admin_authenticated' not in st.session_state: st.session_state.admin_authenticated = False
+if 'login_status'            not in st.session_state: st.session_state.login_status            = False
+if 'user_role'               not in st.session_state: st.session_state.user_role               = None
+if 'user_id'                 not in st.session_state: st.session_state.user_id                 = None
+if 'admin_authenticated'     not in st.session_state: st.session_state.admin_authenticated     = False
+if 'user_custom_permissions' not in st.session_state: st.session_state.user_custom_permissions = None
+if 'user_permission_levels'  not in st.session_state: st.session_state.user_permission_levels  = {}
 if 'selected_group'      not in st.session_state: st.session_state.selected_group      = "제조2반"
 if 'current_line'        not in st.session_state: st.session_state.current_line        = "현황판"
 if 'confirm_target'      not in st.session_state: st.session_state.confirm_target      = None
@@ -1761,8 +1908,11 @@ if not st.session_state.login_status:
                         st.stop()
                     st.session_state.user_id       = in_id
                     st.session_state.user_role     = _role
-                    # ✨ 커스텀 권한 적용
-                    st.session_state.user_custom_permissions = user_info.get("custom_permissions", None)
+                    # ✨ 커스텀 권한 적용 (nav 접근 목록 + 읽기/쓰기/수정 레벨)
+                    _raw_perms = user_info.get("custom_permissions", None)
+                    _pages, _levels = _parse_custom_perms(_raw_perms)
+                    st.session_state.user_custom_permissions = _pages   # None = 역할 기본값 사용
+                    st.session_state.user_permission_levels  = _levels
                     # 데이터 로드 전에 login_status를 False로 유지 → 로드 중 st.warning() 억제
                     st.session_state.production_db = load_realtime_ledger()
                     st.session_state.schedule_db   = load_schedule()
@@ -2217,7 +2367,7 @@ if curr_l == "현황판":
 
     # 캘린더
     st.markdown("<div class='section-title'>📅 생산 일정 캘린더</div>", unsafe_allow_html=True)
-    if st.session_state.user_role in CALENDAR_EDIT_ROLES:
+    if st.session_state.user_role in CALENDAR_EDIT_ROLES and check_perm("생산 지표 관리", "edit"):
         st.caption("✏️ 날짜 버튼 클릭 → 일정 상세/추가/수정/삭제")
     else:
         st.caption("👁️ 조회만 가능합니다.")
@@ -2255,6 +2405,7 @@ elif curr_l == "조립 라인":
 
     # 변경 알림 팝업
     if has_new_sch and not st.session_state.get(f"sch_popup_dismissed_{curr_g}", False):
+        _send_telegram(f"🔔 <b>오늘 일정 변경 알림</b>\n날짜: {today_str}\n반: {curr_g}\n일정: {len(today_sch)}건 등록/변경")
         with st.container():
             st.warning(f"🔔 오늘 생산 일정이 등록/변경되었습니다!\n\n{today_str} 기준 **{curr_g}** 일정 **{len(today_sch)}건**이 있습니다. 아래에서 확인하세요.")
             ack_c1, ack_c2 = st.columns([3, 1])
@@ -2311,6 +2462,56 @@ elif curr_l == "조립 라인":
     db_g = db_v[db_v['반'] == curr_g]                                       # 현재 반 전체
     f_df = db_v[(db_v['반'] == curr_g) & (db_v['라인'] == "조립 라인")]
 
+    # ── 🎯 오늘의 목표 달성 현황 ─────────────────────────────────
+    _plan_qty = int(today_sch['조립수'].apply(lambda x: int(float(x)) if str(x) not in ('','nan','None') else 0).sum()) if not today_sch.empty else 0
+    _done_today = len(f_df[
+        f_df['시간'].astype(str).str.startswith(today_str) &
+        f_df['상태'].isin(['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료'])
+    ]) if not f_df.empty else 0
+    _wip_today  = len(f_df[f_df['시간'].astype(str).str.startswith(today_str) & f_df['상태'].isin(['조립중','수리 완료(재투입)'])]) if not f_df.empty else 0
+
+    if _plan_qty > 0:
+        _real_pct = int(_done_today / _plan_qty * 100)
+        _bar_pct  = min(_real_pct, 100)
+        _over     = max(_done_today - _plan_qty, 0)
+        _remain   = max(_plan_qty - _done_today, 0)
+        if _real_pct >= 100:
+            _bar_color = "#28a745"
+            _msg = f"🎉 목표 달성! 수고하셨습니다!" + (f" (초과 +{_over}개)" if _over > 0 else "")
+            _emoji = "🏆"
+            _pct_label = f"{_real_pct}%" + (f" <span style='font-size:1rem;color:#28a745;'>+{_over}개 초과</span>" if _over > 0 else "")
+        elif _real_pct >= 80:
+            _bar_color = "#28a745"; _msg = f"💪 거의 다 왔어요! {_remain}개만 더!"; _emoji = "🔥"; _pct_label = f"{_real_pct}%"
+        elif _real_pct >= 50:
+            _bar_color = "#ffc107"; _msg = f"👍 절반 넘었어요! {_remain}개 남았어요!"; _emoji = "⚡"; _pct_label = f"{_real_pct}%"
+        else:
+            _bar_color = "#e67e22"; _msg = f"🚀 파이팅! 목표까지 {_remain}개 남았어요!"; _emoji = "💡"; _pct_label = f"{_real_pct}%"
+
+        st.markdown(f"""
+        <div style='background:#ffffff;border-radius:16px;padding:24px 28px;margin-bottom:16px;
+                    border:2px solid {_bar_color};box-shadow:0 4px 16px rgba(0,0,0,0.1);'>
+            <div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;'>
+                <span style='color:#1a1a2e;font-size:1.1rem;font-weight:700;'>🎯 오늘의 목표 달성 현황</span>
+                <span style='color:#888;font-size:0.85rem;'>{today_str}</span>
+            </div>
+            <div style='display:flex;align-items:flex-end;gap:8px;margin-bottom:10px;'>
+                <span style='color:{_bar_color};font-size:3.2rem;font-weight:900;line-height:1;'>{_done_today}</span>
+                <span style='color:#555;font-size:1.1rem;margin-bottom:8px;'>/ {_plan_qty} EA</span>
+                <span style='color:{_bar_color};font-size:2rem;font-weight:800;margin-bottom:4px;margin-left:12px;'>{_pct_label}</span>
+                <span style='font-size:1.8rem;margin-bottom:4px;'>{_emoji}</span>
+            </div>
+            <div style='background:#e9ecef;border-radius:8px;height:18px;overflow:hidden;margin-bottom:10px;'>
+                <div style='background:{_bar_color};width:{_bar_pct}%;height:100%;border-radius:8px;'></div>
+            </div>
+            <div style='display:flex;justify-content:space-between;align-items:center;'>
+                <span style='color:#333;font-size:0.95rem;font-weight:600;'>{_msg}</span>
+                <span style='color:#666;font-size:0.82rem;'>작업 중: {_wip_today}개</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.info(f"📋 오늘({today_str}) 등록된 조립 계획이 없습니다. 일정을 등록하면 달성 현황이 표시됩니다.", icon="ℹ️")
+
     # ── 모델/품목별 수량 카운트 + 생산 이력 ─────────────────────────
     if not f_df.empty:
         with st.expander(f"📊 {curr_g} 조립 라인 수량 현황", expanded=True):
@@ -2347,6 +2548,8 @@ elif curr_l == "조립 라인":
             _asm_search_key = f"sn_search_{curr_g}_{st.session_state[_asm_search_cnt]}"
             sc1, sc2 = st.columns([2, 2])
             sn_search = sc1.text_input("🔍 시리얼 검색", placeholder="S/N 스캔 또는 입력...", key=_asm_search_key)
+            if st.session_state.pop("_autofocus_after_rerun", None) == _asm_search_key:
+                _inject_autofocus()
             if sn_search.strip():
                 f_df_view = f_df[f_df['시리얼'].str.contains(sn_search.strip(), case=False, na=False)]
                 if f_df_view.empty:
@@ -2355,6 +2558,7 @@ elif curr_l == "조립 라인":
                 _wip_mask = f_df_view['상태'].isin(["조립중", "수리 완료(재투입)"])
                 for _si in f_df_view.index[_wip_mask]:
                     st.session_state[_asm_chk_key][str(_si)] = True
+                st.session_state["_autofocus_after_rerun"] = f"sn_search_{curr_g}_{st.session_state[_asm_search_cnt] + 1}"
                 st.session_state[_asm_search_cnt] += 1  # 키 변경 → 체크박스 새 키로 재렌더 → value= 적용
                 st.rerun()
             else:
@@ -2364,7 +2568,8 @@ elif curr_l == "조립 라인":
             if checked_idxs:
                 ba1, ba2, ba3 = st.columns([2, 1, 1])
                 ba1.markdown(f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(checked_idxs)}개 선택됨</span>", unsafe_allow_html=True)
-                if ba2.button("✅ 일괄 완료", key=f"bulk_ok_{curr_g}", type="primary", use_container_width=True):
+                if ba2.button("✅ 일괄 완료", key=f"bulk_ok_{curr_g}", type="primary", use_container_width=True,
+                             disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
                     for ci in checked_idxs:
                         ci_int = int(ci)
                         if ci_int in f_df.index:
@@ -2373,10 +2578,12 @@ elif curr_l == "조립 라인":
                             insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                 이전상태=_r['상태'], 이후상태='검사대기', 작업자=st.session_state.user_id)
                     st.session_state[_asm_chk_key] = {}
+                    st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
                     _clear_production_cache()              # ← 캐시 초기화 (누락 버그 수정)
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
-                if ba3.button("🚫 일괄 불량", key=f"bulk_ng_{curr_g}", use_container_width=True):
+                if ba3.button("🚫 일괄 불량", key=f"bulk_ng_{curr_g}", use_container_width=True,
+                             disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
                     for ci in checked_idxs:
                         ci_int = int(ci)
                         if ci_int in f_df.index:
@@ -2386,6 +2593,7 @@ elif curr_l == "조립 라인":
                             insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                 이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
                     st.session_state[_asm_chk_key] = {}
+                    st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
                     _clear_production_cache()              # ← 캐시 초기화 (누락 버그 수정)
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
@@ -2396,7 +2604,11 @@ elif curr_l == "조립 라인":
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;'>{txt}</p>", unsafe_allow_html=True)
 
             _asm_cb_ver = st.session_state[_asm_search_cnt]  # 스캔 시 변경 → 체크박스 강제 재렌더
-            for idx, row in f_df_view.sort_values('시간', ascending=False).iterrows():
+            # 자재 시리얼 일괄 조회 (N+1 방지)
+            _asm_bulk_sns = tuple(f_df_view['시리얼'].unique().tolist())
+            _asm_bulk_mats = load_material_serials_bulk(_asm_bulk_sns) if _asm_bulk_sns else pd.DataFrame()
+            for row in f_df_view.sort_values('시간', ascending=False).reset_index().to_dict('records'):
+                idx = row['index']
                 is_actionable = row['상태'] in ["조립중", "수리 완료(재투입)"]
                 r = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 2.0])
                 _ck = r[0].checkbox("", key=f"asm_cb_{curr_g}_{idx}_{_asm_cb_ver}",
@@ -2404,7 +2616,13 @@ elif curr_l == "조립 라인":
                     disabled=not is_actionable, label_visibility="collapsed")
                 st.session_state[_asm_chk_key][str(idx)] = _ck
                 r[1].caption(str(row['시간'])[:16]); r[2].caption(row['모델'])
-                r[3].caption(row['품목코드']); r[4].caption(f"`{row['시리얼']}`")
+                r[3].caption(row['품목코드'])
+                _asm_mc = len(_asm_bulk_mats[_asm_bulk_mats['메인시리얼'] == row['시리얼']]) if not _asm_bulk_mats.empty else 0
+                _asm_mat_badge = f"  🔩{_asm_mc}" if _asm_mc > 0 else "  ⚠️"
+                _asm_tog_key = f"mat_tog_{row['시리얼']}_{curr_g}_asm"
+                if r[4].button(f"{row['시리얼']}{_asm_mat_badge}", key=f"sntog_asm_{idx}_{_asm_cb_ver}",
+                               use_container_width=True, help="클릭하여 자재 시리얼 조회"):
+                    st.session_state[_asm_tog_key] = not st.session_state.get(_asm_tog_key, False)
                 with r[5]:
                     if is_actionable:
                         b1, b2 = st.columns(2)
@@ -2414,6 +2632,7 @@ elif curr_l == "조립 라인":
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태='검사대기', 작업자=st.session_state.user_id)
                             st.session_state[_asm_chk_key].pop(str(idx), None)
+                            st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
                         if b2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량"):
@@ -2423,6 +2642,7 @@ elif curr_l == "조립 라인":
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
                             st.session_state[_asm_chk_key].pop(str(idx), None)
+                            st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
                     else:
@@ -2432,6 +2652,18 @@ elif curr_l == "조립 라인":
                         else:
                             bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
                             st.markdown(f"<div style='background:{bg};color:{tc};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.75rem;'>{ic} {s}</div>", unsafe_allow_html=True)
+                # ── 자재 시리얼 토글 표시 ──
+                if st.session_state.get(_asm_tog_key, False):
+                    _asm_row_mats = _asm_bulk_mats[_asm_bulk_mats['메인시리얼'] == row['시리얼']] if not _asm_bulk_mats.empty else pd.DataFrame()
+                    with st.container(border=True):
+                        st.caption(f"🔩 자재 시리얼 — `{row['시리얼']}`")
+                        if not _asm_row_mats.empty:
+                            for _, _am in _asm_row_mats.iterrows():
+                                amc1, amc2 = st.columns([2, 4])
+                                amc1.caption(_am.get('자재명', ''))
+                                amc2.caption(f"`{_am.get('자재시리얼', '')}`")
+                        else:
+                            st.caption("등록된 자재 시리얼 없음")
     else:
         st.info("등록된 생산 내역이 없습니다.")
 
@@ -2454,7 +2686,7 @@ elif curr_l == "조립 라인":
 
         ef1, ef2 = st.columns(2)
         target_item = ef1.selectbox("품목 코드",
-            g_items if target_model != "선택하세요." else ["모델 선택 대기"],
+            (g_items if g_items else ["(품목코드 없음)"]) if target_model != "선택하세요." else ["모델 선택 대기"],
             key=f"item_sel_{curr_g}")
         _msn_cnt_key = f"msn_cnt_{curr_g}"
         if _msn_cnt_key not in st.session_state:
@@ -2483,6 +2715,8 @@ elif curr_l == "조립 라인":
             placeholder="바코드 스캔 → 자동 추가 (Enter)",
             key=_scan_field_key,
         )
+        if st.session_state.pop("_autofocus_after_rerun", None) == _scan_field_key:
+            _inject_autofocus("자재 S/N 스캔")
         sc2.caption("💡 스캐너로 스캔하면 Enter가 자동 입력됩니다")
 
         if scan_input.strip():
@@ -2495,6 +2729,7 @@ elif curr_l == "조립 라인":
                 })
             else:
                 st.toast(f"⚠️ 이미 추가된 자재 S/N: {scan_input.strip()}", icon="⚠️")
+            st.session_state["_autofocus_after_rerun"] = f"{_scan_sn_key}_{st.session_state[_scan_counter_key] + 1}"
             st.session_state[_scan_counter_key] += 1
             st.rerun()
 
@@ -2555,15 +2790,119 @@ elif curr_l == "조립 라인":
                 st.session_state[_mat_list_key] = []
                 st.session_state[f"scan_cnt_{curr_g}"] = 0
                 st.session_state[_msn_cnt_key] += 1
+                _clear_production_cache()
                 st.session_state.production_db = load_realtime_ledger()
                 st.toast(f"✅ 등록 완료: {sn_val}", icon="✅")
                 st.rerun()
 
         if st.button("▶️ 생산 시작 등록", use_container_width=True, type="primary", key=f"start_btn_{curr_g}"):
-            if target_model != "선택하세요." and target_sn.strip():
+            if target_model != "선택하세요." and target_item not in [None, "", "모델 선택 대기", "(품목코드 없음)"] and target_sn.strip():
                 _do_register_sn(target_sn.strip())
             else:
-                st.warning("모델과 메인 S/N을 모두 입력해주세요.")
+                st.warning("모델, 품목코드, 메인 S/N을 모두 입력해주세요.")
+
+    # ── 기존 제품 자재 시리얼 추가 ────────────────────────────────────
+    with st.expander("🔩 기존 제품 자재 시리얼 추가 등록", expanded=False):
+        st.caption("메인 S/N을 입력하면 기존 등록된 자재를 조회하고 누락된 자재를 추가할 수 있습니다.")
+
+        _add_mat_sn_cnt_key = f"add_mat_sn_cnt_{curr_g}"
+        if _add_mat_sn_cnt_key not in st.session_state:
+            st.session_state[_add_mat_sn_cnt_key] = 0
+        _add_main_sn_key = f"add_main_sn_{curr_g}_{st.session_state[_add_mat_sn_cnt_key]}"
+        add_main_sn = st.text_input("🔍 메인 S/N 조회", placeholder="기존 등록된 메인 S/N 입력", key=_add_main_sn_key)
+
+        if add_main_sn.strip():
+            _exist_row = db_v[db_v['시리얼'] == add_main_sn.strip()]
+            if _exist_row.empty:
+                st.warning(f"⚠️ 등록되지 않은 S/N입니다: **{add_main_sn.strip()}**")
+            else:
+                _er = _exist_row.iloc[0]
+                st.success(f"✅ 등록 확인: **{_er['모델']}** `{_er['품목코드']}` — 상태: {_er['상태']}")
+
+                existing_mats = load_material_serials(add_main_sn.strip())
+                if not existing_mats.empty:
+                    st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 4px 0;'>기존 등록 자재: <b>{len(existing_mats)}개</b></p>", unsafe_allow_html=True)
+                    emh1, emh2 = st.columns([2, 4])
+                    emh1.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>자재명</p>", unsafe_allow_html=True)
+                    emh2.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>자재 S/N</p>", unsafe_allow_html=True)
+                    for _, mat_r in existing_mats.iterrows():
+                        emc1, emc2 = st.columns([2, 4])
+                        emc1.caption(mat_r.get('자재명', ''))
+                        emc2.caption(f"`{mat_r.get('자재시리얼', '')}`")
+                else:
+                    st.info("기존 등록된 자재 시리얼이 없습니다.")
+
+                st.divider()
+                st.markdown("<p style='font-size:0.85rem;font-weight:700;color:#5a4f45;margin:0 0 6px 0;'>➕ 자재 추가 등록</p>", unsafe_allow_html=True)
+
+                _add_mat_list_key = f"add_mat_list_{curr_g}"
+                if _add_mat_list_key not in st.session_state:
+                    st.session_state[_add_mat_list_key] = []
+                _add_scan_cnt_key = f"add_scan_cnt_{curr_g}"
+                if _add_scan_cnt_key not in st.session_state:
+                    st.session_state[_add_scan_cnt_key] = 0
+
+                asc1, asc2, asc3 = st.columns([2, 3, 1])
+                add_sel_mat_name = asc1.selectbox("자재명 선택", MAT_NAME_OPTIONS, key=f"add_mat_nm_sel_{curr_g}")
+                _add_scan_field_key = f"add_scan_sn_{curr_g}_{st.session_state[_add_scan_cnt_key]}"
+                add_scan_input = asc2.text_input("자재 S/N 스캔", placeholder="바코드 스캔 → 자동 추가 (Enter)", key=_add_scan_field_key)
+                if st.session_state.pop("_autofocus_after_rerun", None) == _add_scan_field_key:
+                    _inject_autofocus("자재 S/N 스캔")
+                asc2.caption("💡 스캐너로 스캔하면 Enter가 자동 입력됩니다")
+
+                if add_scan_input.strip():
+                    _already = any(m["자재시리얼"] == add_scan_input.strip() for m in st.session_state[_add_mat_list_key])
+                    if not _already:
+                        st.session_state[_add_mat_list_key].append({"자재명": add_sel_mat_name, "자재시리얼": add_scan_input.strip()})
+                    else:
+                        st.toast(f"⚠️ 이미 추가된 자재 S/N: {add_scan_input.strip()}", icon="⚠️")
+                    st.session_state["_autofocus_after_rerun"] = f"add_scan_sn_{curr_g}_{st.session_state[_add_scan_cnt_key] + 1}"
+                    st.session_state[_add_scan_cnt_key] += 1
+                    st.rerun()
+
+                if asc3.button("➕ 추가", key=f"add_mat_manual_{curr_g}", use_container_width=True):
+                    st.session_state[_add_mat_list_key].append({"자재명": add_sel_mat_name, "자재시리얼": ""})
+                    st.rerun()
+
+                add_mat_list_now = st.session_state[_add_mat_list_key]
+                if add_mat_list_now:
+                    st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 2px 0;'>추가 예정 자재: <b>{len(add_mat_list_now)}개</b></p>", unsafe_allow_html=True)
+                    add_updated_list = []
+                    _add_should_rerun = False
+                    for ami, amat in enumerate(add_mat_list_now):
+                        alc1, alc2, alc3 = st.columns([2, 4, 1])
+                        anew_name = alc1.selectbox("", MAT_NAME_OPTIONS,
+                            index=MAT_NAME_OPTIONS.index(amat["자재명"]) if amat["자재명"] in MAT_NAME_OPTIONS else 0,
+                            key=f"add_mat_nm_{curr_g}_{ami}", label_visibility="collapsed")
+                        anew_sn = alc2.text_input("", value=amat["자재시리얼"],
+                            key=f"add_mat_sv_{curr_g}_{ami}", label_visibility="collapsed",
+                            placeholder="S/N 직접 입력 또는 스캔")
+                        if not alc3.button("🗑", key=f"add_mat_del_{curr_g}_{ami}", help="삭제"):
+                            add_updated_list.append({"자재명": anew_name, "자재시리얼": anew_sn})
+                        else:
+                            _add_should_rerun = True
+                    st.session_state[_add_mat_list_key] = add_updated_list
+                    if _add_should_rerun:
+                        st.rerun()
+
+                    if st.button("💾 자재 시리얼 추가 저장", key=f"add_mat_save_{curr_g}", type="primary", use_container_width=True):
+                        valid_add_mats = [m for m in st.session_state[_add_mat_list_key] if m["자재시리얼"].strip()]
+                        if valid_add_mats:
+                            if insert_material_serials(
+                                메인시리얼=add_main_sn.strip(), 모델=_er['모델'],
+                                반=curr_g, 자재목록=valid_add_mats,
+                                작업자=st.session_state.user_id
+                            ):
+                                st.session_state[_add_mat_list_key] = []
+                                st.session_state[_add_mat_sn_cnt_key] += 1
+                                st.session_state[_add_scan_cnt_key] = 0
+                                st.cache_data.clear()
+                                st.toast(f"✅ {len(valid_add_mats)}개 자재 시리얼 추가 완료", icon="✅")
+                                st.rerun()
+                        else:
+                            st.warning("추가할 자재 시리얼을 입력해주세요.")
+                else:
+                    st.caption("자재 없음 — 스캔하거나 ➕ 추가 버튼을 누르세요")
 
 
 # ── 검사 / 포장 라인 ─────────────────────────────────────────────
@@ -2589,12 +2928,15 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             ws1, ws2 = st.columns([3, 3])
             w_scan = ws1.text_input("🔍 시리얼 스캔/검색", placeholder="스캔 또는 입력 → 자동 체크",
                                     key=_wscan_key)
+            if st.session_state.pop("_autofocus_after_rerun", None) == _wscan_key:
+                _inject_autofocus()
             if w_scan.strip():
                 matched_sn = wait_list[wait_list['시리얼'].str.contains(
                     w_scan.strip(), case=False, na=False)]
                 if not matched_sn.empty:
                     for wi in matched_sn.index:
                         st.session_state[_wck_key][str(wi)] = True
+                    st.session_state["_autofocus_after_rerun"] = f"wscan_{curr_g}_{curr_l}_{st.session_state[_wscan_cnt] + 1}"
                     st.session_state[_wscan_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                     st.rerun()
                 else:
@@ -2621,11 +2963,13 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 반=curr_g, 이전상태=_prev_s, 이후상태=_next_s,
                                 작업자=st.session_state.user_id)
                     st.session_state[_wck_key] = {}
+                    st.session_state[_wscan_cnt] += 1  # 체크박스 키 리셋
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
                 if wba3.button("☐ 선택 해제", key=f"wait_unck_{curr_g}_{curr_l}",
                                use_container_width=True):
                     st.session_state[_wck_key] = {}
+                    st.session_state[_wscan_cnt] += 1  # 체크박스 키 리셋
                     st.rerun()
 
             st.markdown("<hr style='margin:8px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
@@ -2637,7 +2981,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     wc1.markdown(f"**{w_model}**" + (f"  `{w_pn}`" if w_pn else ""))
                     wc2.caption(f"{len(w_gdf)}대")
                     _wcb_ver = st.session_state[_wscan_cnt]
-                    for wi, (widx, wrow) in enumerate(w_gdf.iterrows()):
+                    for wrow in w_gdf.reset_index().to_dict('records'):
+                        widx = wrow['index']
                         wr1, wr2, wr3 = st.columns([0.5, 3, 1.2])
                         _wck = wr1.checkbox("", key=f"wck_{curr_g}_{curr_l}_{widx}_{_wcb_ver}",
                             value=st.session_state[_wck_key].get(str(widx), False),
@@ -2676,21 +3021,23 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             hs1, hs2 = st.columns([3, 3])
             _sn_search_qp = hs1.text_input("🔍 시리얼 스캔/검색",
                 placeholder="스캔 또는 입력 → 자동 체크", key=_hsrch_key)
+            if st.session_state.pop("_autofocus_after_rerun", None) == _hsrch_key:
+                _inject_autofocus()
 
+            f_df_view = f_df
             if _sn_search_qp.strip():
                 _actionable = f_df[f_df['상태'].isin(["검사중","포장중","수리 완료(재투입)"])]
-                f_df_view = _actionable[_actionable['시리얼'].str.contains(
+                _search_result = _actionable[_actionable['시리얼'].str.contains(
                     _sn_search_qp.strip(), case=False, na=False)]
-                if f_df_view.empty:
+                if _search_result.empty:
                     hs1.warning(f"**'{_sn_search_qp.strip()}'** — 처리 가능한 시리얼이 없습니다.")
                 else:
+                    f_df_view = _search_result
                     for _hi in f_df_view.index:
                         st.session_state[_hck_key][str(_hi)] = True
+                    st.session_state["_autofocus_after_rerun"] = f"hsrch_{curr_g}_{curr_l}_{st.session_state[_hsrch_cnt] + 1}"
                     st.session_state[_hsrch_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                     st.rerun()
-                f_df_view = f_df
-            else:
-                f_df_view = f_df
 
             _h_checked = [k for k,v in st.session_state[_hck_key].items() if v]
             if _h_checked:
@@ -2699,7 +3046,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 hba1.markdown(f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(_h_checked)}개 선택됨</span>",
                               unsafe_allow_html=True)
                 if hba2.button(f"✅ 일괄 {btn_lbl}", key=f"hist_bulk_ok_{curr_g}_{curr_l}",
-                               type="primary", use_container_width=True):
+                               type="primary", use_container_width=True,
+                               disabled=not check_perm(f"{curr_l}::{curr_g}", "write")):
                     _clear_production_cache()
                     _ok_s  = 'OQC대기' if curr_l == '검사 라인' else '완료'
                     _prv_s = '검사중'  if curr_l == '검사 라인' else '포장중'
@@ -2712,6 +3060,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                     이전상태=_r['상태'], 이후상태=_ok_s, 작업자=st.session_state.user_id)
                     st.session_state[_hck_key] = {}
+                    st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
                 if hba3.button("🚫 일괄 불량", key=f"hist_bulk_ng_{curr_g}_{curr_l}",
@@ -2727,11 +3076,13 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                     이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
                     st.session_state[_hck_key] = {}
+                    st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
                 if hba4.button("☐", key=f"hist_unck_{curr_g}_{curr_l}",
                                use_container_width=True, help="선택 해제"):
                     st.session_state[_hck_key] = {}
+                    st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                     st.rerun()
 
             # Bug fix: STATUS_STYLE2는 전역 STATUS_STYLE과 중복 — 전역 상수 재사용
@@ -2743,7 +3094,11 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                              unsafe_allow_html=True)
 
             _hcb_ver = st.session_state[_hsrch_cnt]
-            for idx, row in f_df_view.sort_values('시간', ascending=False).iterrows():
+            # 자재 시리얼 일괄 조회 (N+1 방지)
+            _hist_bulk_sns = tuple(f_df_view['시리얼'].unique().tolist())
+            _hist_bulk_mats = load_material_serials_bulk(_hist_bulk_sns) if _hist_bulk_sns else pd.DataFrame()
+            for row in f_df_view.sort_values('시간', ascending=False).reset_index().to_dict('records'):
+                idx = row['index']
                 is_act = row['상태'] in ["검사중","포장중","수리 완료(재투입)"]
                 r = st.columns([0.4, 1.8, 1.8, 1.3, 1.6, 2.2])
                 _hck = r[0].checkbox("", key=f"hck_{curr_g}_{curr_l}_{idx}_{_hcb_ver}",
@@ -2753,7 +3108,12 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 r[1].caption(str(row['시간'])[:16])
                 r[2].caption(row['모델'])
                 r[3].caption(row['품목코드'])
-                r[4].caption(f"`{row['시리얼']}`")
+                _hist_mc = len(_hist_bulk_mats[_hist_bulk_mats['메인시리얼'] == row['시리얼']]) if not _hist_bulk_mats.empty else 0
+                _hist_mat_badge = f"  🔩{_hist_mc}" if _hist_mc > 0 else "  ⚠️"
+                _hist_tog_key = f"mat_tog_{row['시리얼']}_{curr_g}_{curr_l}"
+                if r[4].button(f"{row['시리얼']}{_hist_mat_badge}", key=f"sntog_hist_{idx}_{_hcb_ver}",
+                               use_container_width=True, help="클릭하여 자재 시리얼 조회"):
+                    st.session_state[_hist_tog_key] = not st.session_state.get(_hist_tog_key, False)
                 with r[5]:
                     if is_act:
                         btn_lbl = "검사 합격" if curr_l == "검사 라인" else "포장 완료"
@@ -2766,6 +3126,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태=_ok_s, 작업자=st.session_state.user_id)
                             st.session_state[_hck_key].pop(str(idx), None)
+                            st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
                         if c2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량"):
@@ -2775,6 +3136,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
                             st.session_state[_hck_key].pop(str(idx), None)
+                            st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
                     else:
@@ -2784,89 +3146,228 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         else:
                             bg2,tc2,bc2,ic2 = STATUS_STYLE2.get(s2, ('#f5f2ec','#5a5048','#c8b89a','•'))
                             st.markdown(f"<div style='background:{bg2};color:{tc2};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc2};font-size:0.75rem;'>{ic2} {s2}</div>", unsafe_allow_html=True)
+                # ── 자재 시리얼 토글 표시 ──
+                if st.session_state.get(_hist_tog_key, False):
+                    _hist_row_mats = _hist_bulk_mats[_hist_bulk_mats['메인시리얼'] == row['시리얼']] if not _hist_bulk_mats.empty else pd.DataFrame()
+                    with st.container(border=True):
+                        st.caption(f"🔩 자재 시리얼 — `{row['시리얼']}`")
+                        if not _hist_row_mats.empty:
+                            for _, _hm in _hist_row_mats.iterrows():
+                                hmc1, hmc2 = st.columns([2, 4])
+                                hmc1.caption(_hm.get('자재명', ''))
+                                hmc2.caption(f"`{_hm.get('자재시리얼', '')}`")
+                        else:
+                            st.caption("등록된 자재 시리얼 없음")
         else:
             st.info("해당 공정 내역이 없습니다.")
 
+    # ── 기존 제품 자재 시리얼 조회 / 추가 ────────────────────────────
+    MAT_NAME_OPTIONS_QL = st.session_state.get("dropdown_mat_name") or []
+    with st.expander("🔩 자재 시리얼 조회 / 추가 등록", expanded=False):
+        st.caption("메인 S/N을 입력하면 등록된 자재를 조회하고 누락된 자재를 추가할 수 있습니다.")
+
+        _ql_sn_cnt_key = f"ql_sn_cnt_{curr_g}_{curr_l}"
+        if _ql_sn_cnt_key not in st.session_state:
+            st.session_state[_ql_sn_cnt_key] = 0
+        ql_main_sn = st.text_input("🔍 메인 S/N 조회", placeholder="기존 등록된 메인 S/N 입력",
+                                   key=f"ql_main_sn_{curr_g}_{curr_l}_{st.session_state[_ql_sn_cnt_key]}")
+
+        if ql_main_sn.strip():
+            _ql_exist = db_s[db_s['시리얼'] == ql_main_sn.strip()]
+            if _ql_exist.empty:
+                st.warning(f"⚠️ 등록되지 않은 S/N입니다: **{ql_main_sn.strip()}**")
+            else:
+                _ql_er = _ql_exist.iloc[0]
+                st.success(f"✅ **{_ql_er['모델']}** `{_ql_er['품목코드']}` — 상태: {_ql_er['상태']}")
+
+                _ql_mats = load_material_serials(ql_main_sn.strip())
+                if not _ql_mats.empty:
+                    st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 4px 0;'>기존 등록 자재: <b>{len(_ql_mats)}개</b></p>", unsafe_allow_html=True)
+                    for _, _qm in _ql_mats.iterrows():
+                        qmc1, qmc2 = st.columns([2, 4])
+                        qmc1.caption(_qm.get('자재명', ''))
+                        qmc2.caption(f"`{_qm.get('자재시리얼', '')}`")
+                else:
+                    st.info("기존 등록된 자재 시리얼이 없습니다.")
+
+                st.divider()
+                st.markdown("<p style='font-size:0.85rem;font-weight:700;color:#5a4f45;margin:0 0 6px 0;'>➕ 자재 추가 등록</p>", unsafe_allow_html=True)
+
+                _ql_mat_list_key = f"ql_mat_list_{curr_g}_{curr_l}"
+                if _ql_mat_list_key not in st.session_state:
+                    st.session_state[_ql_mat_list_key] = []
+                _ql_scan_cnt_key = f"ql_scan_cnt_{curr_g}_{curr_l}"
+                if _ql_scan_cnt_key not in st.session_state:
+                    st.session_state[_ql_scan_cnt_key] = 0
+
+                qsc1, qsc2, qsc3 = st.columns([2, 3, 1])
+                if MAT_NAME_OPTIONS_QL:
+                    ql_sel_mat = qsc1.selectbox("자재명 선택", MAT_NAME_OPTIONS_QL,
+                                                key=f"ql_mat_nm_sel_{curr_g}_{curr_l}")
+                else:
+                    ql_sel_mat = qsc1.text_input("자재명 입력", placeholder="예: PCB, 배터리",
+                                                 key=f"ql_mat_nm_txt_{curr_g}_{curr_l}")
+                _ql_scan_field_key = f"ql_scan_{curr_g}_{curr_l}_{st.session_state[_ql_scan_cnt_key]}"
+                ql_scan_input = qsc2.text_input("자재 S/N 스캔",
+                    placeholder="바코드 스캔 → 자동 추가 (Enter)",
+                    key=_ql_scan_field_key)
+                if st.session_state.pop("_autofocus_after_rerun", None) == _ql_scan_field_key:
+                    _inject_autofocus("자재 S/N 스캔")
+                qsc2.caption("💡 스캐너로 스캔하면 Enter가 자동 입력됩니다")
+
+                if ql_scan_input.strip():
+                    if not any(m["자재시리얼"] == ql_scan_input.strip() for m in st.session_state[_ql_mat_list_key]):
+                        st.session_state[_ql_mat_list_key].append({"자재명": ql_sel_mat, "자재시리얼": ql_scan_input.strip()})
+                    else:
+                        st.toast(f"⚠️ 이미 추가된 S/N: {ql_scan_input.strip()}", icon="⚠️")
+                    st.session_state["_autofocus_after_rerun"] = f"ql_scan_{curr_g}_{curr_l}_{st.session_state[_ql_scan_cnt_key] + 1}"
+                    st.session_state[_ql_scan_cnt_key] += 1
+                    st.rerun()
+
+                if qsc3.button("➕ 추가", key=f"ql_mat_add_{curr_g}_{curr_l}", use_container_width=True):
+                    st.session_state[_ql_mat_list_key].append({"자재명": ql_sel_mat, "자재시리얼": ""})
+                    st.rerun()
+
+                ql_mat_list_now = st.session_state[_ql_mat_list_key]
+                if ql_mat_list_now:
+                    st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 2px 0;'>추가 예정: <b>{len(ql_mat_list_now)}개</b></p>", unsafe_allow_html=True)
+                    ql_updated = []
+                    _ql_rerun = False
+                    for qi, qmat in enumerate(ql_mat_list_now):
+                        qlc1, qlc2, qlc3 = st.columns([2, 4, 1])
+                        if MAT_NAME_OPTIONS_QL:
+                            qn = qlc1.selectbox("", MAT_NAME_OPTIONS_QL,
+                                index=MAT_NAME_OPTIONS_QL.index(qmat["자재명"]) if qmat["자재명"] in MAT_NAME_OPTIONS_QL else 0,
+                                key=f"ql_nm_{curr_g}_{curr_l}_{qi}", label_visibility="collapsed")
+                        else:
+                            qn = qlc1.text_input("", value=qmat["자재명"],
+                                key=f"ql_nm_txt_{curr_g}_{curr_l}_{qi}", label_visibility="collapsed")
+                        qs = qlc2.text_input("", value=qmat["자재시리얼"],
+                            key=f"ql_sv_{curr_g}_{curr_l}_{qi}", label_visibility="collapsed",
+                            placeholder="S/N 직접 입력 또는 스캔")
+                        if not qlc3.button("🗑", key=f"ql_del_{curr_g}_{curr_l}_{qi}", help="삭제"):
+                            ql_updated.append({"자재명": qn, "자재시리얼": qs})
+                        else:
+                            _ql_rerun = True
+                    st.session_state[_ql_mat_list_key] = ql_updated
+                    if _ql_rerun:
+                        st.rerun()
+
+                    if st.button("💾 자재 시리얼 추가 저장", key=f"ql_save_{curr_g}_{curr_l}",
+                                 type="primary", use_container_width=True):
+                        valid_ql_mats = [m for m in st.session_state[_ql_mat_list_key] if m["자재시리얼"].strip()]
+                        if valid_ql_mats:
+                            if insert_material_serials(메인시리얼=ql_main_sn.strip(),
+                                    모델=_ql_er['모델'], 반=curr_g,
+                                    자재목록=valid_ql_mats, 작업자=st.session_state.user_id):
+                                st.session_state[_ql_mat_list_key] = []
+                                st.session_state[_ql_sn_cnt_key] += 1
+                                st.session_state[_ql_scan_cnt_key] = 0
+                                st.cache_data.clear()
+                                st.toast(f"✅ {len(valid_ql_mats)}개 자재 시리얼 추가 완료", icon="✅")
+                                st.rerun()
+                        else:
+                            st.warning("추가할 자재 시리얼을 입력해주세요.")
+                else:
+                    st.caption("자재 없음 — 스캔하거나 ➕ 추가 버튼을 누르세요")
+
 elif curr_l == "생산 현황 리포트":
+    st.markdown("<h2 class='centered-title'>📊 생산 현황 리포트</h2>", unsafe_allow_html=True)
 
-    db_v = st.session_state.production_db
-    db_g = db_v[db_v['반'] == curr_g]   # 현재 반 전체 (db_g NameError 방지)
+    v_group = st.radio("조회 범위", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="prod_report_grp")
+    df_rpt = st.session_state.production_db.copy()
+    if v_group != "전체":
+        df_rpt = df_rpt[df_rpt['반'] == v_group]
 
-    # ── 신규 제품 등록 ───────────────────────────────────────────────
-    _asm_reg_toast = st.session_state.pop("_asm_reg_toast", None)
-    if _asm_reg_toast:
-        st.success(_asm_reg_toast)
-    st.markdown("<div class='section-title'>➕ 신규 제품 등록</div>", unsafe_allow_html=True)
-    models_for_group = st.session_state.group_master_models.get(curr_g, [])
-    items_for_group  = st.session_state.group_master_items.get(curr_g, {})
+    if not df_rpt.empty:
+        # ── KPI ──────────────────────────────────────────────────────
+        _rpt_done    = df_rpt[(df_rpt['라인'] == '포장 라인') & (df_rpt['상태'] == '완료')]
+        _rpt_ing     = df_rpt[df_rpt['상태'].isin(['조립중','검사대기','검사중','OQC대기','OQC중','포장중','출하승인'])]
+        _rpt_defect  = df_rpt[df_rpt['상태'].str.contains('불량|부적합', na=False)]
+        kp1, kp2, kp3, kp4 = st.columns(4)
+        kp1.metric("📥 총 투입",      f"{len(df_rpt)} EA")
+        kp2.metric("✅ 최종 완료",    f"{len(_rpt_done)} EA")
+        kp3.metric("⚙️ 진행 중",     f"{len(_rpt_ing)} EA")
+        kp4.metric("🚫 불량/부적합", f"{len(_rpt_defect)} 건")
+        st.divider()
 
-    with st.form("asm_register_form", clear_on_submit=True):
-        fc1, fc2, fc3 = st.columns([2, 2, 1.5])
-        sn_input  = fc1.text_input("시리얼 번호 *", placeholder="예: SN20260301001")
-        model_sel = fc2.selectbox("모델 *", ["(선택)"] + models_for_group)
-        # items_for_group 값은 list이므로 첫 번째 값만 기본값으로 사용 (Bug fix: list → str)
-        _pn_raw   = items_for_group.get(model_sel, []) if model_sel != "(선택)" else []
-        auto_pn   = _pn_raw[0] if isinstance(_pn_raw, list) and _pn_raw else (str(_pn_raw) if _pn_raw else "")
-        pn_input  = fc3.text_input("품목코드", value=auto_pn)
-        submitted  = st.form_submit_button("✅ 등록", use_container_width=True, type="primary")
+        # ── 차트 행 1: 상태별 분포 + 모델별 비중 ─────────────────────
+        cc1, cc2 = st.columns([1.8, 1.2])
+        with cc1:
+            _st_cnt = df_rpt.groupby('상태').size().reset_index(name='수량').sort_values('수량', ascending=False)
+            _fig_st = px.bar(_st_cnt, x='상태', y='수량', color='상태',
+                             title="<b>현재 상태별 제품 분포</b>", template="plotly_white")
+            _fig_st.update_layout(showlegend=False, margin=dict(t=40, b=20))
+            _fig_st.update_yaxes(dtick=1)
+            st.plotly_chart(_fig_st, use_container_width=True)
+        with cc2:
+            _md_cnt = df_rpt.groupby('모델').size().reset_index(name='수량')
+            _fig_md = px.pie(_md_cnt, values='수량', names='모델', hole=0.45,
+                             title="<b>모델별 생산 비중</b>")
+            _fig_md.update_layout(margin=dict(t=40, b=20))
+            st.plotly_chart(_fig_md, use_container_width=True)
 
-    if submitted:
-        sn_clean = sn_input.strip()
-        if not sn_clean:
-            st.error("시리얼 번호를 입력해주세요.")
-        elif model_sel == "(선택)":
-            st.error("모델을 선택해주세요.")
-        else:
-            new_row = {
-                "시간": get_now_kst_str(), "반": curr_g, "라인": "조립 라인",
-                "모델": model_sel,
-                "품목코드": pn_input.strip(), "시리얼": sn_clean,
-                "상태": "조립중", "증상": "", "수리": "",
-                "작업자": st.session_state.user_id
-            }
-            if insert_row(new_row):
-                insert_audit_log(시리얼=sn_clean, 모델=model_sel, 반=curr_g,
-                    이전상태="", 이후상태="조립중", 작업자=st.session_state.user_id)
-                st.session_state["_asm_reg_toast"] = f"✅ [{sn_clean}] 등록 완료"
-                _clear_production_cache()                  # ← 캐시 초기화 (누락 버그 수정)
-                st.session_state.production_db = load_realtime_ledger()
-                st.rerun()
+        # ── 차트 행 2: 반별/공정별 완료 + 일자별 투입 추이 ───────────
+        cc3, cc4 = st.columns([1.2, 1.8])
+        with cc3:
+            if v_group == "전체":
+                _ban_done = df_rpt[df_rpt['상태'] == '완료'].groupby('반').size().reset_index(name='완료')
+                if not _ban_done.empty:
+                    _fig_ban = px.bar(_ban_done, x='반', y='완료', color='반',
+                                      title="<b>반별 완료 수량</b>", template="plotly_white")
+                    _fig_ban.update_layout(showlegend=False, margin=dict(t=40, b=20))
+                    st.plotly_chart(_fig_ban, use_container_width=True)
+                else:
+                    st.info("완료 데이터 없음")
+            else:
+                _ln_cnt = df_rpt.groupby('라인').size().reset_index(name='수량')
+                _fig_ln = px.bar(_ln_cnt, x='라인', y='수량', color='라인',
+                                 title=f"<b>{v_group} 공정별 현황</b>", template="plotly_white")
+                _fig_ln.update_layout(showlegend=False, margin=dict(t=40, b=20))
+                _fig_ln.update_yaxes(dtick=1)
+                st.plotly_chart(_fig_ln, use_container_width=True)
+        with cc4:
+            try:
+                _df_trend = df_rpt.copy()
+                _df_trend['날짜'] = pd.to_datetime(_df_trend['시간'], errors='coerce').dt.date
+                _daily = _df_trend.groupby('날짜').size().reset_index(name='수량').dropna().sort_values('날짜')
+                if not _daily.empty:
+                    _fig_tr = px.line(_daily, x='날짜', y='수량', markers=True,
+                                      title="<b>일자별 생산 투입 추이</b>", template="plotly_white")
+                    _fig_tr.update_traces(line_color='#2471a3', marker_color='#2471a3')
+                    _fig_tr.update_layout(margin=dict(t=40, b=20))
+                    st.plotly_chart(_fig_tr, use_container_width=True)
+                else:
+                    st.info("추이 데이터 없음")
+            except Exception:
+                st.info("추이 차트 데이터 처리 중 오류")
 
-    st.divider()
+        st.divider()
 
-    # ── 조립 중 목록 ─────────────────────────────────────────────────
-    st.markdown("<div class='section-title'>🔧 조립 진행 중</div>", unsafe_allow_html=True)
-    ing_df = db_g[db_g['상태'] == '조립중'].sort_values('시간', ascending=False)
+        # ── 불량 현황 차트 ────────────────────────────────────────────
+        if not _rpt_defect.empty:
+            st.markdown("<div class='section-title'>🚫 불량/부적합 현황</div>", unsafe_allow_html=True)
+            cc5, cc6 = st.columns(2)
+            with cc5:
+                _ng_model = _rpt_defect.groupby('모델').size().reset_index(name='건수')
+                _fig_ng = px.bar(_ng_model, x='모델', y='건수', color='모델',
+                                 title="<b>모델별 불량 건수</b>", template="plotly_white")
+                _fig_ng.update_layout(showlegend=False, margin=dict(t=40, b=20))
+                st.plotly_chart(_fig_ng, use_container_width=True)
+            with cc6:
+                _ng_state = _rpt_defect.groupby('상태').size().reset_index(name='건수')
+                _fig_ngs = px.pie(_ng_state, values='건수', names='상태', hole=0.4,
+                                  title="<b>불량 유형 분포</b>")
+                _fig_ngs.update_layout(margin=dict(t=40, b=20))
+                st.plotly_chart(_fig_ngs, use_container_width=True)
+            st.divider()
 
-    if not ing_df.empty:
-        hh = st.columns([2, 2, 2, 1.5])
-        for col, txt in zip(hh, ["등록 시간", "모델", "시리얼", "조립 완료"]):
-            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
-        # 성능: iterrows → enumerate + to_dict('records')
-        for idx, row in enumerate(ing_df.to_dict('records')):
-            rr = st.columns([2, 2, 2, 1.5])
-            rr[0].caption(str(row.get('시간', ''))[:16])
-            rr[1].write(row.get('모델', ''))
-            rr[2].markdown(f"`{row.get('시리얼', '')}`")
-            if rr[3].button("✔ 조립 완료", key=f"asm_done_{idx}", use_container_width=True, type="primary"):
-                _clear_production_cache()
-                update_row(row['시리얼'], {'상태': '검사대기', '시간': get_now_kst_str()})
-                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
-                    이전상태='조립중', 이후상태='검사대기', 작업자=st.session_state.user_id)
-                st.session_state.production_db = load_realtime_ledger()
-                st.rerun()
-    else:
-        st.info("조립 진행 중인 제품이 없습니다.")
-
-    st.divider()
-
-    with st.expander("📋 최근 등록 이력 (최근 20건)", expanded=False):
-        hist = db_g[db_g['라인'] == '조립 라인'].sort_values('시간', ascending=False).head(20)
-        if not hist.empty:
-            st.dataframe(hist[['시간', '모델', '시리얼', '상태', '작업자']].reset_index(drop=True),
+        # ── 이력 테이블 ───────────────────────────────────────────────
+        with st.expander("📋 전체 이력 테이블", expanded=False):
+            st.dataframe(df_rpt.sort_values('시간', ascending=False).reset_index(drop=True),
                          use_container_width=True, hide_index=True)
-        else:
-            st.info("이력이 없습니다.")
+    else:
+        st.info("조회 가능한 데이터가 없습니다.")
 
 # ── 검사 라인 ────────────────────────────────────────────────────
 elif curr_l == "검사 라인":
@@ -3057,34 +3558,6 @@ elif curr_l == "포장 라인":
         else:
             st.info("완료된 제품이 없습니다.")
 
-elif curr_l == "생산 현황 리포트":
-    st.markdown("<h2 class='centered-title'>📊 생산 운영 통합 모니터링</h2>", unsafe_allow_html=True)
-    v_group = st.radio("조회 범위", ["전체"] + PRODUCTION_GROUPS, horizontal=True)
-    df = st.session_state.production_db.copy()
-    if v_group != "전체": df = df[df['반'] == v_group]
-
-    if not df.empty:
-        c1,c2,c3,c4 = st.columns(4)
-        c1.metric("총 투입",      f"{len(df)} EA")
-        c2.metric("최종 생산",    f"{len(df[(df['라인']=='포장 라인')&(df['상태']=='완료')])} EA")
-        c3.metric("현재 작업 중", f"{len(df[df['상태'].isin(['조립중','검사중','포장중'])])} EA")
-        c4.metric("품질 이슈",    f"{len(df[df['상태'].str.contains('불량',na=False)])} 건")
-        st.divider()
-        cl, cr = st.columns([1.8, 1.2])
-        with cl:
-            fig_b = px.bar(df.groupby('라인').size().reset_index(name='수량'),
-                           x='라인', y='수량', color='라인',
-                           title="<b>[공정 단계별 제품 분포]</b>", template="plotly_white")
-            fig_b.update_yaxes(dtick=1)
-            st.plotly_chart(fig_b, use_container_width=True)
-        with cr:
-            fig_p = px.pie(df.groupby('모델').size().reset_index(name='수량'),
-                           values='수량', names='모델', hole=0.5, title="<b>[생산 모델별 비중]</b>")
-            st.plotly_chart(fig_p, use_container_width=True)
-        st.dataframe(df.sort_values('시간', ascending=False), use_container_width=True, hide_index=True)
-    else:
-        st.info("조회 가능한 데이터가 없습니다.")
-
 # ── 생산 지표 관리 ─────────────────────────────────────────────────
 elif curr_l == "생산 지표 관리":
 
@@ -3144,12 +3617,11 @@ elif curr_l == "생산 지표 관리":
     period     = fc1.radio("기간", ["오늘","이번 주","이번 달"], horizontal=True, key="dash_period")
     ban_filter = fc2.radio("반", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="dash_ban")
 
-    from datetime import date as _date, timedelta as _td
-    _today = _date.today()
+    _today = date.today()
     if period == "오늘":
         date_from = date_to_d = today_str
     elif period == "이번 주":
-        _mon = _today - _td(days=_today.weekday())
+        _mon = _today - timedelta(days=_today.weekday())
         date_from = _mon.strftime('%Y-%m-%d'); date_to_d = today_str
     else:
         date_from = today_str[:7] + "-01"; date_to_d = today_str
@@ -3371,14 +3843,13 @@ elif curr_l == "생산 지표 관리":
     ]
 
     # 입력 폼 (관리자 전용)
-    if st.session_state.user_role in CALENDAR_EDIT_ROLES:
+    if st.session_state.user_role in CALENDAR_EDIT_ROLES and check_perm("생산 지표 관리", "write"):
         with st.expander("⚙️ 월 계획 수량 입력 / 변경", expanded=False):
             st.caption("반/월별 목표 수량을 입력합니다. 변경 시 사유를 선택하면 이력이 자동 기록됩니다.")
             pl1, pl2, pl3 = st.columns([1.5, 1.5, 1.2])
             p_ban  = pl1.selectbox("반", PRODUCTION_GROUPS, key="plan_ban")
-            from datetime import date as _d2
             # Bug fix: 28일 단위 대신 월 단위로 정확히 역산 (Python modulo 활용)
-            _today2 = _d2.today()
+            _today2 = date.today()
             _months = []
             for i in range(6):
                 _mo = (_today2.month - 1 - i) % 12 + 1
@@ -3411,15 +3882,14 @@ elif curr_l == "생산 지표 관리":
                     plan_key = f"{p_ban}_{p_month}"
                     st.session_state.production_plan[plan_key] = int(p_qty)
                     _clear_plan_cache()
-                    st.success(f"✅ {p_ban} / {p_month} → {p_qty:,}대 저장 완료")
+                    st.toast(f"✅ {p_ban} / {p_month} → {p_qty:,}대 저장 완료")
                     st.rerun()
 
     # ── 월별 달성률 그래프 ────────────────────────────────────────
     plan_map_now = st.session_state.production_plan  # {반_YYYY-MM: 계획수량}
 
     # 최근 6개월 목록 (Bug fix: 28일 단위 대신 월 단위로 정확히 역산)
-    from datetime import date as _d3
-    _td3 = _d3.today()
+    _td3 = date.today()
     months_list = []
     for i in range(5, -1, -1):
         _mo3 = (_td3.month - 1 - i) % 12 + 1
@@ -3825,7 +4295,6 @@ elif curr_l == "생산 지표 관리":
         if uploaded_file:
             try:
                 import openpyxl, io as _io, re as _re
-                from datetime import datetime as _dt
 
                 raw = uploaded_file.read()
                 wb  = openpyxl.load_workbook(_io.BytesIO(raw), data_only=True)
@@ -3866,7 +4335,7 @@ elif curr_l == "생산 지표 관리":
                                 continue
                             # 날짜 처리 (datetime / 문자열 / 숫자 모두 대응)
                             date_str = None
-                            if isinstance(date_val, _dt):
+                            if isinstance(date_val, datetime):
                                 date_str = date_val.strftime('%Y-%m-%d')
                             elif hasattr(date_val, 'strftime'):  # date 객체
                                 date_str = date_val.strftime('%Y-%m-%d')
@@ -3879,8 +4348,7 @@ elif curr_l == "생산 지표 관리":
                             elif isinstance(date_val, (int, float)):
                                 # 엑셀 시리얼 날짜 변환
                                 try:
-                                    from datetime import date as _date
-                                    date_str = (_date(1899, 12, 30) + __import__('datetime').timedelta(days=int(date_val))).strftime('%Y-%m-%d')
+                                    date_str = (date(1899, 12, 30) + timedelta(days=int(date_val))).strftime('%Y-%m-%d')
                                 except Exception:
                                     pass
                             if not date_str:
@@ -3914,7 +4382,7 @@ elif curr_l == "생산 지표 관리":
 
                         if not ban and not model and not date_val: continue
                         if not model and not note: continue
-                        if isinstance(date_val, _dt):
+                        if isinstance(date_val, datetime):
                             date_str = date_val.strftime('%Y-%m-%d')
                         elif isinstance(date_val, str) and len(date_val) == 10:
                             date_str = date_val
@@ -4038,9 +4506,9 @@ elif curr_l == "생산 지표 관리":
                             _clear_schedule_cache()
                             st.session_state.schedule_db = load_schedule()
                             if success_cnt > 0:
-                                st.success(f"✅ 등록 완료: {success_cnt}건  |  건너뜀(중복): {skip_cnt}건" + (f"  |  실패: {fail_cnt}건" if fail_cnt else ""))
+                                st.toast(f"✅ 등록 완료: {success_cnt}건  |  건너뜀(중복): {skip_cnt}건" + (f"  |  실패: {fail_cnt}건" if fail_cnt else ""))
                             if fail_rows:
-                                st.error("등록 실패 행:\n" + "\n".join(fail_rows))
+                                st.toast("등록 실패 행:\n" + "\n".join(fail_rows), icon="🚨")
                             st.rerun()
                 else:
                     st.warning("파싱된 일정이 없습니다. 파일 형식을 확인해주세요.")
@@ -4216,8 +4684,8 @@ elif curr_l == "OQC 라인":
         db_oqc['상태'] == 'OQC대기'
     ].sort_values('시간', ascending=False)
 
-    _oqc_in_ck_key = "oqc_in_ck"
-    _oqc_in_sc_cnt = "oqc_in_sc_cnt"
+    _oqc_in_ck_key = f"oqc_in_ck_{oqc_ban}"
+    _oqc_in_sc_cnt = f"oqc_in_sc_cnt_{oqc_ban}"
     if _oqc_in_ck_key not in st.session_state: st.session_state[_oqc_in_ck_key] = {}
     if _oqc_in_sc_cnt not in st.session_state: st.session_state[_oqc_in_sc_cnt] = 0
 
@@ -4226,12 +4694,15 @@ elif curr_l == "OQC 라인":
         oi_c1, _ = st.columns([3, 3])
         _oqc_in_scan = oi_c1.text_input("🔍 시리얼 스캔/검색", placeholder="스캔 또는 입력 → 자동 체크",
                                          key=_oqc_in_sc_key)
+        if st.session_state.pop("_autofocus_after_rerun", None) == _oqc_in_sc_key:
+            _inject_autofocus()
         if _oqc_in_scan.strip():
             _oqc_in_matched = packing_done[packing_done['시리얼'].str.contains(
                 _oqc_in_scan.strip(), case=False, na=False)]
             if not _oqc_in_matched.empty:
                 for _oi in _oqc_in_matched.index:
                     st.session_state[_oqc_in_ck_key][str(_oi)] = True
+                st.session_state["_autofocus_after_rerun"] = f"oqc_in_sc_{st.session_state[_oqc_in_sc_cnt] + 1}"
                 st.session_state[_oqc_in_sc_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                 st.rerun()
             else:
@@ -4252,10 +4723,12 @@ elif curr_l == "OQC 라인":
                         insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
                             이전상태='OQC대기', 이후상태='OQC중', 작업자=st.session_state.user_id)
                 st.session_state[_oqc_in_ck_key] = {}
+                st.session_state[_oqc_in_sc_cnt] += 1  # 체크박스 키 리셋
                 st.session_state.production_db = load_realtime_ledger()
                 st.rerun()
             if oib3.button("☐ 해제", key="oqc_in_unck", use_container_width=True):
                 st.session_state[_oqc_in_ck_key] = {}
+                st.session_state[_oqc_in_sc_cnt] += 1  # 체크박스 키 리셋
                 st.rerun()
 
         hh = st.columns([0.4, 2, 2, 1.5, 2, 1.5])
@@ -4289,8 +4762,8 @@ elif curr_l == "OQC 라인":
     st.markdown("<div class='section-title'>🔍 OQC 검사 진행</div>", unsafe_allow_html=True)
     oqc_wait_list = db_oqc[db_oqc['상태'] == 'OQC중'].sort_values('시간', ascending=False)
 
-    _oqc_ck_key = "oqc_ck"
-    _oqc_sc_cnt = "oqc_sc_cnt"
+    _oqc_ck_key = f"oqc_ck_{oqc_ban}"
+    _oqc_sc_cnt = f"oqc_sc_cnt_{oqc_ban}"
     if _oqc_ck_key not in st.session_state: st.session_state[_oqc_ck_key] = {}
     if _oqc_sc_cnt not in st.session_state: st.session_state[_oqc_sc_cnt] = 0
 
@@ -4300,12 +4773,15 @@ elif curr_l == "OQC 라인":
         os1, _ = st.columns([3, 3])
         _oqc_scan = os1.text_input("🔍 시리얼 스캔/검색", placeholder="스캔 또는 입력 → 자동 체크",
                                     key=_oqc_sc_key)
+        if st.session_state.pop("_autofocus_after_rerun", None) == _oqc_sc_key:
+            _inject_autofocus()
         if _oqc_scan.strip():
             _oqc_matched = oqc_wait_list[oqc_wait_list['시리얼'].str.contains(
                 _oqc_scan.strip(), case=False, na=False)]
             if not _oqc_matched.empty:
                 for _oi in _oqc_matched.index:
                     st.session_state[_oqc_ck_key][str(_oi)] = True
+                st.session_state["_autofocus_after_rerun"] = f"oqc_sc_{st.session_state[_oqc_sc_cnt] + 1}"
                 st.session_state[_oqc_sc_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
                 st.rerun()
             else:
@@ -4317,7 +4793,8 @@ elif curr_l == "OQC 라인":
             ob1, ob2, ob3, ob4 = st.columns([2, 1.2, 1.5, 0.8])
             ob1.markdown(f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(_oqc_checked)}개 선택됨</span>",
                          unsafe_allow_html=True)
-            if ob2.button("✅ 일괄 합격", key="oqc_bulk_ok", type="primary", use_container_width=True):
+            if ob2.button("✅ 일괄 합격", key="oqc_bulk_ok", type="primary", use_container_width=True,
+                          disabled=not check_perm("OQC 라인", "write")):
                 _clear_production_cache()
                 for _oi in _oqc_checked:
                     _oi_int = int(_oi)
@@ -4328,11 +4805,13 @@ elif curr_l == "OQC 라인":
                         insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
                             이전상태='OQC중', 이후상태='출하승인', 작업자=st.session_state.user_id)
                 st.session_state[_oqc_ck_key] = {}
+                st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                 st.session_state.production_db = load_realtime_ledger()
                 st.rerun()
             _bulk_defect = ob3.selectbox("부적합 사유", OQC_DEFECT_REASONS,
                                          key="oqc_bulk_defect", label_visibility="collapsed")
-            if ob4.button("🚫 부적합", key="oqc_bulk_ng", use_container_width=True):
+            if ob4.button("🚫 부적합", key="oqc_bulk_ng", use_container_width=True,
+                          disabled=not check_perm("OQC 라인", "write")):
                 _dflt = _bulk_defect if _bulk_defect not in ["(선택)", "", None] else ""
                 if not _dflt:
                     st.warning("⚠️ 부적합 사유를 먼저 선택해주세요.")
@@ -4342,12 +4821,17 @@ elif curr_l == "OQC 라인":
                         _oi_int = int(_oi)
                         if _oi_int in oqc_wait_list.index:
                             _orow = oqc_wait_list.loc[_oi_int]
-                            update_row(_orow['시리얼'], {'상태': '부적합(OQC)', '시간': get_now_kst_str(),
-                                                         '증상': _dflt, '수리': f"사유:{_dflt}"})
+                            update_row(_orow['시리얼'], {
+                                '상태': '불량 처리 중',
+                                '시간': get_now_kst_str(),
+                                '증상': f"불량입고출처: OQC 라인 (부적합사유: {_dflt})",
+                                '수리': f"OQC 부적합 판정 - 사유: {_dflt}"
+                            })
                             insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
-                                이전상태='OQC중', 이후상태='부적합(OQC)',
-                                작업자=st.session_state.user_id, 비고=f"사유:{_dflt}")
+                                이전상태='OQC중', 이후상태='불량 처리 중',
+                                작업자=st.session_state.user_id, 비고=f"OQC 부적합 - 사유: {_dflt}")
                     st.session_state[_oqc_ck_key] = {}
+                    st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
 
@@ -4355,6 +4839,9 @@ elif curr_l == "OQC 라인":
 
         # 개별 항목 목록 (체크박스 + 개별 판정)
         _oqc_cb_ver = st.session_state[_oqc_sc_cnt]
+        # 자재 시리얼 일괄 조회 (N+1 방지)
+        _oqc_bulk_sns = tuple(oqc_wait_list['시리얼'].unique().tolist())
+        _oqc_bulk_mats = load_material_serials_bulk(_oqc_bulk_sns) if _oqc_bulk_sns else pd.DataFrame()
         for idx, row in oqc_wait_list.iterrows():
             with st.container(border=True):
                 ic1, ic2, ic3, ic4, ic5 = st.columns([0.4, 2, 1.5, 1.5, 1.5])
@@ -4392,6 +4879,7 @@ elif curr_l == "OQC 라인":
                     insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                         이전상태='OQC중', 이후상태='출하승인', 작업자=st.session_state.user_id)
                     st.session_state[_oqc_ck_key].pop(str(idx), None)
+                    st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
                 if btn2:
@@ -4399,14 +4887,32 @@ elif curr_l == "OQC 라인":
                         st.warning("⚠️ 부적합 사유를 먼저 선택해주세요.")
                     else:
                         _clear_production_cache()
-                        update_row(row['시리얼'], {'상태': '부적합(OQC)', '시간': get_now_kst_str(),
-                                                   '증상': defect_txt, '수리': f"사유:{defect_txt}"})
+                        update_row(row['시리얼'], {
+                            '상태': '불량 처리 중',
+                            '시간': get_now_kst_str(),
+                            '증상': f"불량입고출처: OQC 라인 (부적합사유: {defect_txt})",
+                            '수리': f"OQC 부적합 판정 - 사유: {defect_txt}"
+                        })
                         insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
-                            이전상태='OQC중', 이후상태='부적합(OQC)',
-                            작업자=st.session_state.user_id, 비고=f"사유:{defect_txt}")
+                            이전상태='OQC중', 이후상태='불량 처리 중',
+                            작업자=st.session_state.user_id, 비고=f"OQC 부적합 - 사유: {defect_txt}")
                         st.session_state[_oqc_ck_key].pop(str(idx), None)
+                        st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                         st.session_state.production_db = load_realtime_ledger()
                         st.rerun()
+
+                # ── 자재 시리얼 인라인 표시 ──
+                _sn_key = row.get('시리얼', '')
+                _row_mats = _oqc_bulk_mats[_oqc_bulk_mats['메인시리얼'] == _sn_key] if not _oqc_bulk_mats.empty else pd.DataFrame()
+                _mat_label = f"🔩 자재 시리얼 {len(_row_mats)}개 등록됨" if not _row_mats.empty else "🔩 자재 시리얼 미등록 ⚠️"
+                with st.expander(_mat_label, expanded=False):
+                    if not _row_mats.empty:
+                        for _, _rm in _row_mats.iterrows():
+                            rmc1, rmc2 = st.columns([2, 4])
+                            rmc1.caption(_rm.get('자재명', ''))
+                            rmc2.caption(f"`{_rm.get('자재시리얼', '')}`")
+                    else:
+                        st.caption("등록된 자재 시리얼이 없습니다.")
     else:
         st.info("OQC 검사 대기 중인 제품이 없습니다.")
 
@@ -4427,19 +4933,43 @@ elif curr_l == "OQC 라인":
         for col, txt in zip(rh, ["시간", "모델", "반", "시리얼", "결과", "비고", "이력"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
 
+        # 자재 시리얼 일괄 조회 (OQC 결과 이력)
+        _oqc_done_sns = tuple(oqc_done['시리얼'].unique().tolist())
+        _oqc_done_mats = load_material_serials_bulk(_oqc_done_sns) if _oqc_done_sns else pd.DataFrame()
         # 성능: iterrows → enumerate + to_dict('records') (idx2 → 순번 _i 로 교체)
         for _i, row in enumerate(oqc_done.to_dict('records')):
             rr2 = st.columns([1.8, 2, 1.5, 2.2, 1.5, 2.5, 1])
             rr2[0].caption(str(row.get('시간',''))[:16])
             rr2[1].write(row.get('모델',''))
             rr2[2].write(row.get('반',''))
-            rr2[3].markdown(f"`{row.get('시리얼','')}`")
+            _oqc_done_sn = row.get('시리얼','')
+            _oqc_done_mc = len(_oqc_done_mats[_oqc_done_mats['메인시리얼'] == _oqc_done_sn]) if not _oqc_done_mats.empty else 0
+            _oqc_done_tog = f"mat_tog_oqcdone_{_oqc_done_sn}_{_i}"
+            _oqc_done_badge = f"  🔩{_oqc_done_mc}" if _oqc_done_mc > 0 else "  ⚠️"
+            if rr2[3].button(f"{_oqc_done_sn}{_oqc_done_badge}", key=f"sntog_oqcd_{_i}",
+                             use_container_width=True, help="클릭하여 자재 시리얼 조회"):
+                st.session_state[_oqc_done_tog] = not st.session_state.get(_oqc_done_tog, False)
             결과 = row.get('상태','')
             if 결과 == '출하승인':
                 rr2[4].markdown("<span style='background:#d4f0e2;color:#1f6640;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>✅ 출하승인</span>", unsafe_allow_html=True)
             else:
                 rr2[4].markdown("<span style='background:#fde8e7;color:#7a2e2a;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>🚫 부적합</span>", unsafe_allow_html=True)
-            rr2[5].caption(row.get('수리',''))
+                if 결과 == '부적합(OQC)':
+                    if rr2[4].button("🔧 불량 공정 이관", key=f"oqc_send_defect_{_i}",
+                                     use_container_width=True, help="불량 공정으로 이관하여 수리/교체 처리"):
+                        _reason = row.get('증상', '') or row.get('수리', '').replace('사유:', '')
+                        _clear_production_cache()
+                        update_row(row['시리얼'], {
+                            '상태': '불량 처리 중',
+                            '시간': get_now_kst_str(),
+                            '증상': f"불량입고출처: OQC 라인 (부적합사유: {_reason})",
+                            '수리': f"OQC 부적합 판정 - 사유: {_reason}"
+                        })
+                        insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                            이전상태='부적합(OQC)', 이후상태='불량 처리 중',
+                            작업자=st.session_state.user_id, 비고=f"OQC 부적합 이관 - 사유: {_reason}")
+                        st.session_state.production_db = load_realtime_ledger()
+                        st.rerun()
 
             # 이력 버튼 → 해당 행 아래 인라인 expander로 표시
             _hist_key = f"oqc_hist_open_{_i}"
@@ -4451,7 +4981,7 @@ elif curr_l == "OQC 라인":
                 with st.container(border=True):
                     hc1, hc2 = st.columns([8, 1])
                     hc1.markdown(f"📋 **제품 전체 이력** — `{sn}`")
-                    if hc2.button("✖ 닫기", key=f"oqc_hist_close_{idx2}"):
+                    if hc2.button("✖ 닫기", key=f"oqc_hist_close_{_i}"):
                         st.session_state[_hist_key] = False
                         st.rerun()
 
@@ -4496,6 +5026,18 @@ elif curr_l == "OQC 라인":
                             st.markdown(f"- **{mr.get('자재명','')}** : `{mr.get('자재시리얼','')}`　<span style='color:#aaa;font-size:0.75rem;'>{mr.get('작업자','')}</span>", unsafe_allow_html=True)
                     else:
                         st.info("등록된 자재 시리얼 없음")
+            # ── 시리얼 클릭 자재 토글 표시 ──
+            if st.session_state.get(_oqc_done_tog, False):
+                _oqcd_row_mats = _oqc_done_mats[_oqc_done_mats['메인시리얼'] == _oqc_done_sn] if not _oqc_done_mats.empty else pd.DataFrame()
+                with st.container(border=True):
+                    st.caption(f"🔩 자재 시리얼 — `{_oqc_done_sn}`")
+                    if not _oqcd_row_mats.empty:
+                        for _, _dm in _oqcd_row_mats.iterrows():
+                            dmc1, dmc2 = st.columns([2, 4])
+                            dmc1.caption(_dm.get('자재명', ''))
+                            dmc2.caption(f"`{_dm.get('자재시리얼', '')}`")
+                    else:
+                        st.caption("등록된 자재 시리얼 없음")
     else:
         st.info("OQC 결과 이력이 없습니다.")
 
@@ -4724,7 +5266,7 @@ elif curr_l == "OQC 라인":
                                file_name="자재시리얼_양식.xlsx",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                key="mat_tmpl_dl")
-        except: st.caption("양식 다운로드 기능 준비 중")
+        except Exception: st.caption("양식 다운로드 기능 준비 중")
 
         mat_file = st.file_uploader("자재 시리얼 엑셀 업로드", type=["xlsx","xls"], key="mat_xl_upload")
         if mat_file:
@@ -4757,13 +5299,24 @@ elif curr_l == "불량 공정":
     st.markdown("<h2 class='centered-title'>🛠️ 불량 분석 및 수리 조치</h2>", unsafe_allow_html=True)
     db = st.session_state.production_db
 
-    # 반 선택
-    sel_group = st.radio("조회 반 선택", ["전체"] + PRODUCTION_GROUPS, horizontal=True,
-                         key="defect_group_radio")
-    if sel_group == "전체":
-        target_groups = PRODUCTION_GROUPS
+    # 사용자가 접근 가능한 반 계산
+    # "조립 라인" 등 전체 권한이면 모든 반, "조립 라인::제조2반" 등 반별 권한이면 해당 반만
+    _has_global_line = any(p in allowed_nav for p in ["조립 라인", "검사 라인", "포장 라인"])
+    if _has_global_line:
+        _accessible_groups = PRODUCTION_GROUPS
     else:
-        target_groups = [sel_group]
+        _accessible_groups = [g for g in PRODUCTION_GROUPS if any(f"::{g}" in nav for nav in allowed_nav)]
+        if not _accessible_groups:
+            _accessible_groups = PRODUCTION_GROUPS  # master/admin 등 fallback
+
+    # 반 선택 UI: 접근 가능한 반이 1개면 선택 UI 숨기고 자동 적용
+    if len(_accessible_groups) == 1:
+        target_groups = _accessible_groups
+        st.caption(f"📍 조회 반: **{_accessible_groups[0]}**")
+    else:
+        sel_group = st.radio("조회 반 선택", ["전체"] + _accessible_groups, horizontal=True,
+                             key="defect_group_radio")
+        target_groups = _accessible_groups if sel_group == "전체" else [sel_group]
 
     # 요약 카드 (선택된 반별)
     card_cols = st.columns(len(target_groups))
@@ -4822,6 +5375,15 @@ elif curr_l == "불량 공정":
                 else:
                     ic5.caption("출처 미기록")
 
+                # OQC 부적합 사유 표시
+                if '부적합사유:' in _증상_raw:
+                    _oqc_reason = _증상_raw.split('부적합사유:')[-1].strip().rstrip(')')
+                    st.markdown(
+                        f"<div style='background:#fde8e8;color:#7a1a1a;padding:4px 10px;"
+                        f"border-radius:5px;font-size:0.78rem;margin:4px 0 2px 0;"
+                        f"border-left:3px solid #e87878;'>🚫 OQC 부적합 사유: <b>{_oqc_reason}</b></div>",
+                        unsafe_allow_html=True)
+
                 r1, r2 = st.columns(2)
                 # 불량 원인 드롭다운 + 직접입력
                 cause_sel = r1.selectbox("불량 원인", DEFECT_CAUSES, key=f"cs_{idx}")
@@ -4841,26 +5403,72 @@ elif curr_l == "불량 공정":
                 else:
                     v_a = action_sel
 
+                # 교체 시리얼 입력 (선택)
+                replace_sn = st.text_input(
+                    "🔄 교체 시리얼 (선택)",
+                    placeholder="기존 불량품 대신 새 S/N으로 교체 시 입력 (없으면 비워두세요)",
+                    key=f"rep_{idx}"
+                )
+
                 c_f, c_b = st.columns([3, 1])
                 img = c_f.file_uploader("사진 첨부", type=['jpg','png'], key=f"i_{idx}")
                 c_b.markdown("<div class='button-spacer'></div>", unsafe_allow_html=True)
                 if c_b.button("✅ 확정", key=f"b_{idx}", type="primary", use_container_width=True):
                     if v_c and v_a:
-                        _clear_production_cache()
                         img_link = f" [사진: {upload_img_to_drive(img, row['시리얼'])}]" if img else ""
-                        update_row(row['시리얼'], {
-                            '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
-                            '증상': v_c, '수리': v_a + img_link
-                        })
-                        # 감사 로그 기록
-                        insert_audit_log(
-                            시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
-                            이전상태="불량 처리 중", 이후상태="수리 완료(재투입)",
-                            작업자=st.session_state.user_id,
-                            비고=f"원인:{v_c} / 조치:{v_a}"
-                        )
-                        st.session_state.production_db = load_realtime_ledger()
-                        st.rerun()
+                        _rep_sn = replace_sn.strip()
+                        if _rep_sn:
+                            # 교체 시리얼이 이미 등록된 S/N인지 최신 데이터로 확인
+                            _fresh_db = load_realtime_ledger()
+                            _rep_exist = _fresh_db[_fresh_db['시리얼'] == _rep_sn]
+                            if not _rep_exist.empty:
+                                st.warning(f"⚠️ 교체 시리얼이 이미 등록되어 있습니다: **{_rep_sn}**")
+                            else:
+                                # 기존 불량 S/N → 교체됨 처리
+                                update_row(row['시리얼'], {
+                                    '상태': "교체됨", '시간': get_now_kst_str(),
+                                    '증상': v_c, '수리': f"교체처리({_rep_sn}){img_link}"
+                                })
+                                insert_audit_log(
+                                    시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                                    이전상태="불량 처리 중", 이후상태="교체됨",
+                                    작업자=st.session_state.user_id,
+                                    비고=f"원인:{v_c} / 교체S/N:{_rep_sn}"
+                                )
+                                # 새 교체 S/N → 조립중으로 신규 등록
+                                insert_row({
+                                    '시간': get_now_kst_str(), '반': row['반'],
+                                    '라인': row.get('라인', '조립 라인'),
+                                    '모델': row['모델'], '품목코드': row['품목코드'],
+                                    '시리얼': _rep_sn, '상태': '조립중',
+                                    '증상': f"교체투입(구S/N:{row['시리얼']})",
+                                    '수리': '', '작업자': st.session_state.user_id
+                                })
+                                insert_audit_log(
+                                    시리얼=_rep_sn, 모델=row['모델'], 반=row['반'],
+                                    이전상태="-", 이후상태="조립중",
+                                    작업자=st.session_state.user_id,
+                                    비고=f"교체투입 (구S/N:{row['시리얼']})"
+                                )
+                                _clear_production_cache()
+                                st.session_state.production_db = load_realtime_ledger()
+                                st.toast(f"✅ 교체 완료: {row['시리얼']} → {_rep_sn}", icon="✅")
+                                st.rerun()
+                        else:
+                            # 교체 없이 수리 완료(재투입)
+                            update_row(row['시리얼'], {
+                                '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
+                                '증상': v_c, '수리': v_a + img_link
+                            })
+                            insert_audit_log(
+                                시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                                이전상태="불량 처리 중", 이후상태="수리 완료(재투입)",
+                                작업자=st.session_state.user_id,
+                                비고=f"원인:{v_c} / 조치:{v_a}"
+                            )
+                            _clear_production_cache()
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.rerun()
                     else:
                         st.warning("불량 원인과 수리 조치를 모두 선택해주세요.")
     if not has_any:
@@ -5034,7 +5642,7 @@ elif curr_l == "마스터 관리":
                         st.session_state.group_master_items[g_name]  = {}
                         delete_all_master_by_group(g_name)
                         st.session_state[all_master_ck] = False
-                        st.success(f"{g_name} 모델/품목 전체 삭제 완료")
+                        st.toast(f"{g_name} 모델/품목 전체 삭제 완료")
                         st.rerun()
                     if am3.button("취소", key=f"del_all_m_no_{g_name}", use_container_width=True):
                         st.session_state[all_master_ck] = False
@@ -5066,7 +5674,7 @@ elif curr_l == "마스터 관리":
                                     # DB 제거
                                     delete_model_from_master(g_name, del_model)
                                     st.session_state[del_m_ck] = False
-                                    st.success(f"[{del_model}] 삭제 완료")
+                                    st.toast(f"[{del_model}] 삭제 완료")
                                     st.rerun()
                                 if dm2.button("취소", key=f"del_m_no_{g_name}", use_container_width=True):
                                     st.session_state[del_m_ck] = False
@@ -5096,7 +5704,7 @@ elif curr_l == "마스터 관리":
                                         st.session_state.group_master_items[g_name][di_model].remove(del_item)
                                         delete_item_from_master(g_name, di_model, del_item)
                                         st.session_state[del_i_ck] = False
-                                        st.success(f"[{del_item}] 삭제 완료")
+                                        st.toast(f"[{del_item}] 삭제 완료")
                                         st.rerun()
                                     if di2.button("취소", key=f"del_i_no_{g_name}", use_container_width=True):
                                         st.session_state[del_i_ck] = False
@@ -5137,38 +5745,56 @@ elif curr_l == "마스터 관리":
             
             with user_tab2:
                 st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>🔑 사용자별 개별 권한 부여</p>", unsafe_allow_html=True)
-                
+
                 # 등록된 사용자 목록
                 user_list = list(st.session_state.user_db.keys())
                 if user_list:
                     selected_user = st.selectbox("사용자 선택", user_list, key="perm_user_select")
-                    current_role = st.session_state.user_db[selected_user].get("role", "assembly_team")
-                    
+                    current_role  = st.session_state.user_db[selected_user].get("role", "assembly_team")
+
                     st.caption(f"현재 역할: **{current_role}**")
-                    st.caption("체크된 메뉴에만 접근 가능합니다.")
-                    
-                    # 현재 사용자의 커스텀 권한 가져오기 (없으면 기본 역할 권한)
-                    current_perms = st.session_state.user_db[selected_user].get("custom_permissions", None)
-                    if current_perms is None:
-                        current_perms = ROLES.get(current_role, [])
-                    
-                    # 일반 메뉴 (반별 구분 없음)
+                    st.caption("📖 읽기 — 페이지 열람  /  ✏️ 쓰기 — 신규 등록·처리  /  🔧 수정 — 기존 데이터 변경·삭제")
+
+                    # ── 현재 커스텀 권한 파싱 (없으면 역할 기본값) ───────────
+                    _raw = st.session_state.user_db[selected_user].get("custom_permissions", None)
+                    _cur_pages, _cur_levels = _parse_custom_perms(_raw)
+                    if _cur_pages is None:
+                        _cur_pages  = ROLES.get(current_role, [])
+                        _cur_levels = {p: set(PERM_ACTIONS) for p in _cur_pages}
+
+                    selected_pages  = []   # 최종 접근 가능 페이지 목록
+                    selected_levels = {}   # {page_key: [action, ...]}
+
+                    # ── 일반 메뉴 권한 (읽기/쓰기/수정 각각 체크) ───────────
+                    st.markdown("**일반 메뉴 권한:**")
                     _general_menus = ["생산 지표 관리", "OQC 라인", "생산 현황 리포트", "불량 공정",
                                       "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼"]
 
-                    st.markdown("**접근 가능 메뉴:**")
+                    _gh = st.columns([2.2, 0.7, 0.7, 0.7])
+                    _gh[0].markdown("**메뉴**")
+                    for _ai, _al in enumerate(["읽기", "쓰기", "수정"]):
+                        _gh[_ai + 1].markdown(f"**{_al}**")
 
-                    # 일반 메뉴 체크박스 (2열)
-                    selected_perms = []
-                    _gcols = st.columns(2)
-                    for _gi, menu in enumerate(_general_menus):
-                        if _gcols[_gi % 2].checkbox(menu, value=(menu in current_perms),
-                                                     key=f"perm_{selected_user}_{menu}"):
-                            selected_perms.append(menu)
+                    for _menu in _general_menus:
+                        _gr = st.columns([2.2, 0.7, 0.7, 0.7])
+                        _gr[0].write(_menu)
+                        _menu_levels = _cur_levels.get(_menu, set())
+                        _has_access  = _menu in _cur_pages
+                        _checked = {}
+                        for _ai, _act in enumerate(PERM_ACTIONS):
+                            _checked[_act] = _gr[_ai + 1].checkbox(
+                                "", value=(_has_access and _act in _menu_levels),
+                                key=f"perm_{selected_user}_{_menu}_{_act}",
+                                label_visibility="collapsed"
+                            )
+                        # 읽기 체크 = 페이지 접근 허용
+                        if _checked["read"]:
+                            selected_pages.append(_menu)
+                            selected_levels[_menu] = [a for a, v in _checked.items() if v]
 
-                    # 제조 라인 — 반별 체크 그리드
+                    # ── 제조 라인 — 반별 접근 체크 (기존 그리드 유지) ────────
                     st.markdown("**📍 제조 라인 접근 (반별 선택):**")
-                    st.caption("각 반(班)별로 접근 가능한 라인을 개별 선택합니다.")
+                    st.caption("각 반(班)별로 접근 가능한 라인을 선택합니다.")
                     _line_types = ["조립 라인", "검사 라인", "포장 라인"]
                     _lh = st.columns([1.5, 1, 1, 1])
                     _lh[0].markdown("**반**")
@@ -5179,24 +5805,64 @@ elif curr_l == "마스터 관리":
                         _rc[0].write(_group)
                         for _li, _lt in enumerate(_line_types):
                             _pk = f"{_lt}::{_group}"
-                            # 구형("조립 라인" = 전 반 허용) 또는 신형("조립 라인::제조1반") 모두 체크 ON
-                            _chk = (_pk in current_perms) or (_lt in current_perms)
+                            _chk = (_pk in _cur_pages) or (_lt in _cur_pages)
                             if _rc[_li + 1].checkbox("", value=_chk,
                                                       key=f"perm_{selected_user}_{_group}_{_lt}",
                                                       label_visibility="collapsed"):
-                                selected_perms.append(_pk)
+                                selected_pages.append(_pk)
 
+                    # ── 제조 라인 동작 권한 (라인 유형별 읽기/쓰기/수정) ─────
+                    st.markdown("**📍 제조 라인 동작 권한:**")
+                    st.caption("위에서 접근을 허용한 라인에서 수행 가능한 동작을 설정합니다.")
+
+                    _ldh = st.columns([1.5, 0.7, 0.7, 0.7])
+                    _ldh[0].markdown("**라인**")
+                    for _ai, _al in enumerate(["읽기", "쓰기", "수정"]):
+                        _ldh[_ai + 1].markdown(f"**{_al}**")
+
+                    for _lt in _line_types:
+                        _ldr = st.columns([1.5, 0.7, 0.7, 0.7])
+                        _ldr[0].write(_lt)
+                        # 이 라인 유형에 접근 권한이 있는지 확인
+                        _lt_has_access = any(
+                            f"{_lt}::{g}" in selected_pages for g in PRODUCTION_GROUPS
+                        )
+                        # 현재 레벨: 부모키(_lt) 우선, 없으면 서브키에서 검색
+                        _lt_cur_levels = _cur_levels.get(_lt, None)
+                        if _lt_cur_levels is None:
+                            for _k, _v in _cur_levels.items():
+                                if _k.startswith(_lt + "::"):
+                                    _lt_cur_levels = _v
+                                    break
+                        if _lt_cur_levels is None:
+                            _lt_cur_levels = set(PERM_ACTIONS) if _lt_has_access else set()
+
+                        _lt_checked = {}
+                        for _ai, _act in enumerate(PERM_ACTIONS):
+                            _lt_checked[_act] = _ldr[_ai + 1].checkbox(
+                                "", value=(_lt_has_access and _act in _lt_cur_levels),
+                                key=f"perm_{selected_user}_{_lt}_lvl_{_act}",
+                                label_visibility="collapsed",
+                                disabled=not _lt_has_access
+                            )
+                        _lt_result = [a for a, v in _lt_checked.items() if v]
+                        if _lt_result:
+                            selected_levels[_lt] = _lt_result
+
+                    # ── 저장 / 복원 ───────────────────────────────────────────
                     perm_col1, perm_col2 = st.columns(2)
-                    if perm_col1.button("💾 권한 저장", key="save_custom_perm", use_container_width=True, type="primary"):
-                        st.session_state.user_db[selected_user]["custom_permissions"] = selected_perms
+                    if perm_col1.button("💾 권한 저장", key="save_custom_perm",
+                                        use_container_width=True, type="primary"):
+                        _new_perm = {"pages": selected_pages, "levels": selected_levels}
+                        st.session_state.user_db[selected_user]["custom_permissions"] = _new_perm
                         try:
                             import json
                             get_supabase().table("users").update(
-                                {"custom_permissions": json.dumps(selected_perms, ensure_ascii=False)}
+                                {"custom_permissions": json.dumps(_new_perm, ensure_ascii=False)}
                             ).eq("username", selected_user).execute()
-                            st.success(f"✅ [{selected_user}] 권한 저장 완료 ({len(selected_perms)}개 메뉴) — DB 반영됨")
+                            st.success(f"✅ [{selected_user}] 권한 저장 완료 ({len(selected_pages)}개 메뉴) — DB 반영됨")
                         except Exception as _e:
-                            st.success(f"✅ [{selected_user}] 권한 저장 완료 ({len(selected_perms)}개 메뉴)")
+                            st.success(f"✅ [{selected_user}] 권한 저장 완료 ({len(selected_pages)}개 메뉴)")
                             st.caption(f"DB 저장 실패 (세션에만 적용): {_e}")
 
                     if perm_col2.button("↩️ 기본 권한 복원", key="reset_custom_perm", use_container_width=True):
@@ -5237,9 +5903,9 @@ elif curr_l == "마스터 관리":
                             try:
                                 get_supabase().table("users").delete().eq(
                                     "username", confirm_target).execute()
-                                st.success(f"✅ [{confirm_target}] 계정 삭제 완료")
+                                st.toast(f"✅ [{confirm_target}] 계정 삭제 완료")
                             except Exception as _e:
-                                st.warning(f"메모리 삭제 완료, DB 삭제 실패: {_e}")
+                                st.toast(f"메모리 삭제 완료, DB 삭제 실패: {_e}", icon="⚠️")
                             st.session_state["del_user_confirm"] = False
                             st.session_state["del_user_target"] = ""
                             st.rerun()
@@ -5264,7 +5930,7 @@ elif curr_l == "마스터 관리":
                     db_export['시간_dt'] = pd.to_datetime(db_export['시간'])
                     db_export = db_export[(db_export['시간_dt'].dt.date >= start_date) & (db_export['시간_dt'].dt.date <= end_date)]
                     db_export = db_export.drop(columns=['시간_dt'])
-                except: pass
+                except (TypeError, KeyError): pass
             st.caption(f"📋 조회 결과: **{len(db_export)}건**")
             st.download_button("📥 CSV 다운로드",
                 db_export.to_csv(index=False).encode('utf-8-sig'),
@@ -5311,16 +5977,15 @@ elif curr_l == "마스터 관리":
                 final = ["(선택)"] + deduped + ["기타 (직접 입력)"]
                 st.session_state[ss_key] = final
                 if save_app_setting(ss_key, final):
-                    st.success(f"✅ {label} 저장 완료 ({len(deduped)}개 항목) — DB 반영됨")
+                    st.toast(f"✅ {label} 저장 완료 ({len(deduped)}개 항목) — DB 반영됨")
                 else:
-                    st.success(f"✅ {label} 저장 완료 ({len(deduped)}개 항목)")
-                    st.caption("DB 저장 실패 — 앱 재시작 시 초기화될 수 있습니다.")
+                    st.toast(f"✅ {label} 저장 완료 ({len(deduped)}개 항목) — DB 저장 실패, 앱 재시작 시 초기화될 수 있습니다.", icon="⚠️")
                 st.rerun()
             if ec2.button(f"↩️ 기본값 복원", key=f"dd_reset_{tab_key}", use_container_width=True):
                 default_val = _DD_DEFAULTS.get(ss_key, [])
                 st.session_state[ss_key] = default_val
                 save_app_setting(ss_key, default_val)
-                st.success("기본값으로 복원됩니다.")
+                st.toast("기본값으로 복원됩니다.")
                 st.rerun()
             st.caption(f"현재 {len(editable)}개 항목 등록됨 (선택·직접입력 제외)")
 
@@ -5436,27 +6101,25 @@ elif curr_l == "마스터 관리":
             if _d_sn.strip():    prod_df = prod_df[prod_df['시리얼'].str.contains(_d_sn.strip(), case=False, na=False)]
 
             if not prod_df.empty:
-                # 개별 삭제
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                ph = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
-                for c, t in zip(ph, ["시간","반","라인","시리얼","상태","삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                # 성능: iterrows → enumerate + to_dict('records')
-                for i, row in enumerate(prod_df.sort_values('시간', ascending=False).head(200).to_dict('records')):
-                    pr = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
-                    pr[0].caption(str(row.get('시간',''))[:16])
-                    pr[1].caption(row.get('반',''))
-                    pr[2].caption(row.get('라인',''))
-                    pr[3].caption(f"`{row.get('시리얼','')}`")
-                    pr[4].caption(row.get('상태',''))
-                    if pr[5].button("🗑️", key=f"del_prod_{i}", help="이 행 삭제"):
-                        if delete_production_row_by_sn(row['시리얼']):
-                            _clear_production_cache()
-                            st.session_state.production_db = load_realtime_ledger()
-                            st.success(f"삭제 완료: {row['시리얼']}")
-                            st.rerun()
-                if len(prod_df) > 200:
-                    st.caption(f"※ 최대 200건만 표시. 필터로 범위를 좁혀주세요.")
+                with st.expander(f"📋 개별 삭제 목록 ({len(prod_df)}건)", expanded=False):
+                    ph = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
+                    for c, t in zip(ph, ["시간","반","라인","시리얼","상태","삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                    for i, row in enumerate(prod_df.sort_values('시간', ascending=False).head(200).to_dict('records')):
+                        pr = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
+                        pr[0].caption(str(row.get('시간',''))[:16])
+                        pr[1].caption(row.get('반',''))
+                        pr[2].caption(row.get('라인',''))
+                        pr[3].caption(f"`{row.get('시리얼','')}`")
+                        pr[4].caption(row.get('상태',''))
+                        if pr[5].button("🗑️", key=f"del_prod_{i}", help="이 행 삭제"):
+                            if delete_production_row_by_sn(row['시리얼']):
+                                _clear_production_cache()
+                                st.session_state.production_db = load_realtime_ledger()
+                                st.toast(f"삭제 완료: {row['시리얼']}")
+                                st.rerun()
+                    if len(prod_df) > 200:
+                        st.caption(f"※ 최대 200건만 표시. 필터로 범위를 좁혀주세요.")
             else:
                 st.info("조건에 맞는 데이터가 없습니다.")
 
@@ -5502,7 +6165,7 @@ elif curr_l == "마스터 관리":
                     res = get_supabase().table("audit_log").select("*").order("시간", desc=True).limit(500).execute()
                     return pd.DataFrame(res.data) if res.data else pd.DataFrame(
                         columns=['id','시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
-                except: return pd.DataFrame(columns=['id','시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+                except Exception: return pd.DataFrame(columns=['id','시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
 
             audit_df = _load_audit_all()
             st.caption(f"현재 **{len(audit_df)}건** (최대 500건 표시)")
@@ -5518,24 +6181,23 @@ elif curr_l == "마스터 관리":
             if _a_sn.strip():   adf = adf[adf['시리얼'].str.contains(_a_sn.strip(), case=False, na=False)]
 
             if not adf.empty:
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                ah = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
-                for c, t in zip(ah, ["시간","반","시리얼","모델","이전상태","이후상태","삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
-                for row in adf.to_dict('records'):
-                    ar = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
-                    ar[0].caption(str(row.get('시간',''))[:16])
-                    ar[1].caption(row.get('반',''))
-                    ar[2].caption(f"`{row.get('시리얼','')}`")
-                    ar[3].caption(row.get('모델',''))
-                    ar[4].caption(row.get('이전상태',''))
-                    ar[5].caption(row.get('이후상태',''))
-                    _row_id = row.get('id')
-                    if _row_id and ar[6].button("🗑️", key=f"del_audit_{_row_id}", help="이 행 삭제"):
-                        if delete_audit_log_row(_row_id):
-                            _clear_audit_cache()
-                            st.session_state["_del_mgr_toast"] = "✅ 감사 로그 삭제 완료"; st.rerun()
+                with st.expander(f"📋 개별 삭제 목록 ({len(adf)}건)", expanded=False):
+                    ah = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
+                    for c, t in zip(ah, ["시간","반","시리얼","모델","이전상태","이후상태","삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                    for row in adf.to_dict('records'):
+                        ar = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
+                        ar[0].caption(str(row.get('시간',''))[:16])
+                        ar[1].caption(row.get('반',''))
+                        ar[2].caption(f"`{row.get('시리얼','')}`")
+                        ar[3].caption(row.get('모델',''))
+                        ar[4].caption(row.get('이전상태',''))
+                        ar[5].caption(row.get('이후상태',''))
+                        _row_id = row.get('id')
+                        if _row_id and ar[6].button("🗑️", key=f"del_audit_{_row_id}", help="이 행 삭제"):
+                            if delete_audit_log_row(_row_id):
+                                _clear_audit_cache()
+                                st.session_state["_del_mgr_toast"] = "✅ 감사 로그 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 감사 로그가 없습니다.")
 
@@ -5565,7 +6227,7 @@ elif curr_l == "마스터 관리":
                     res = get_supabase().table("material_serial").select("*").order("시간", desc=True).limit(500).execute()
                     return pd.DataFrame(res.data) if res.data else pd.DataFrame(
                         columns=['id','시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
-                except: return pd.DataFrame(columns=['id','시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+                except Exception: return pd.DataFrame(columns=['id','시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
 
             mat_df = _load_mat_all()
             st.caption(f"현재 **{len(mat_df)}건** (최대 500건 표시)")
@@ -5584,23 +6246,22 @@ elif curr_l == "마스터 관리":
                 ]
 
             if not mdf.empty:
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                mh = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
-                for c, t in zip(mh, ["시간","메인S/N","모델","자재명","자재S/N","삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
-                for row in mdf.to_dict('records'):
-                    mr = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
-                    mr[0].caption(str(row.get('시간',''))[:16])
-                    mr[1].caption(f"`{row.get('메인시리얼','')}`")
-                    mr[2].caption(row.get('모델',''))
-                    mr[3].caption(row.get('자재명',''))
-                    mr[4].caption(f"`{row.get('자재시리얼','')}`")
-                    _mid = row.get('id')
-                    if _mid and mr[5].button("🗑️", key=f"del_mat_{_mid}", help="이 행 삭제"):
-                        if delete_material_serial_row(_mid):
-                            load_material_serials.clear()
-                            st.session_state["_del_mgr_toast"] = "✅ 자재 시리얼 삭제 완료"; st.rerun()
+                with st.expander(f"📋 개별 삭제 목록 ({len(mdf)}건)", expanded=False):
+                    mh = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
+                    for c, t in zip(mh, ["시간","메인S/N","모델","자재명","자재S/N","삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                    for row in mdf.to_dict('records'):
+                        mr = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
+                        mr[0].caption(str(row.get('시간',''))[:16])
+                        mr[1].caption(f"`{row.get('메인시리얼','')}`")
+                        mr[2].caption(row.get('모델',''))
+                        mr[3].caption(row.get('자재명',''))
+                        mr[4].caption(f"`{row.get('자재시리얼','')}`")
+                        _mid = row.get('id')
+                        if _mid and mr[5].button("🗑️", key=f"del_mat_{_mid}", help="이 행 삭제"):
+                            if delete_material_serial_row(_mid):
+                                load_material_serials.clear()
+                                st.session_state["_del_mgr_toast"] = "✅ 자재 시리얼 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 자재 시리얼이 없습니다.")
 
@@ -5639,25 +6300,24 @@ elif curr_l == "마스터 관리":
                 ]
 
             if not sdf.empty:
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                sh = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
-                for c, t in zip(sh, ["날짜","반","카테고리","모델명","조립수","출하계획","삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
-                for row in sdf.sort_values('날짜', ascending=False).to_dict('records'):
-                    sr = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
-                    sr[0].caption(str(row.get('날짜',''))[:10])
-                    sr[1].caption(row.get('반',''))
-                    sr[2].caption(row.get('카테고리',''))
-                    sr[3].caption(row.get('모델명',''))
-                    sr[4].caption(str(row.get('조립수','')))
-                    sr[5].caption(str(row.get('출하계획','')))
-                    _sid = row.get('id')
-                    if _sid and sr[6].button("🗑️", key=f"del_sch_{_sid}", help="이 행 삭제"):
-                        if delete_schedule(int(_sid)):
-                            _clear_schedule_cache()
-                            st.session_state.schedule_db = load_schedule()
-                            st.session_state["_del_mgr_toast"] = "✅ 생산 일정 삭제 완료"; st.rerun()
+                with st.expander(f"📋 개별 삭제 목록 ({len(sdf)}건)", expanded=False):
+                    sh = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
+                    for c, t in zip(sh, ["날짜","반","카테고리","모델명","조립수","출하계획","삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                    for row in sdf.sort_values('날짜', ascending=False).to_dict('records'):
+                        sr = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
+                        sr[0].caption(str(row.get('날짜',''))[:10])
+                        sr[1].caption(row.get('반',''))
+                        sr[2].caption(row.get('카테고리',''))
+                        sr[3].caption(row.get('모델명',''))
+                        sr[4].caption(str(row.get('조립수','')))
+                        sr[5].caption(str(row.get('출하계획','')))
+                        _sid = row.get('id')
+                        if _sid and sr[6].button("🗑️", key=f"del_sch_{_sid}", help="이 행 삭제"):
+                            if delete_schedule(int(_sid)):
+                                _clear_schedule_cache()
+                                st.session_state.schedule_db = load_schedule()
+                                st.session_state["_del_mgr_toast"] = "✅ 생산 일정 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 일정이 없습니다.")
 
@@ -5704,27 +6364,26 @@ elif curr_l == "마스터 관리":
             if _pl_kw.strip():   pldf = pldf[pldf['월'].astype(str).str.contains(_pl_kw.strip(), na=False)]
 
             if not pldf.empty:
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                plh = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
-                for c, t in zip(plh, ["시간","반","월","이전수량","변경수량","증감","변경사유","삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
-                for row in pldf.to_dict('records'):
-                    plr = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
-                    plr[0].caption(str(row.get('시간',''))[:16])
-                    plr[1].caption(row.get('반',''))
-                    plr[2].caption(str(row.get('월','')))
-                    plr[3].caption(str(row.get('이전수량','')))
-                    plr[4].caption(str(row.get('변경수량','')))
-                    _inc = row.get('증감', 0)
-                    _inc_color = "#1f6640" if _inc >= 0 else "#c8605a"
-                    plr[5].markdown(f"<span style='color:{_inc_color};font-weight:bold;font-size:0.8rem;'>{'+' if _inc>0 else ''}{_inc}</span>", unsafe_allow_html=True)
-                    plr[6].caption(row.get('변경사유',''))
-                    _plid = row.get('id')
-                    if _plid and plr[7].button("🗑️", key=f"del_plog_{_plid}", help="이 행 삭제"):
-                        if delete_plan_change_log_row(_plid):
-                            _clear_plan_cache()
-                            st.session_state["_del_mgr_toast"] = "✅ 계획 변경 이력 삭제 완료"; st.rerun()
+                with st.expander(f"📋 개별 삭제 목록 ({len(pldf)}건)", expanded=False):
+                    plh = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
+                    for c, t in zip(plh, ["시간","반","월","이전수량","변경수량","증감","변경사유","삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                    for row in pldf.to_dict('records'):
+                        plr = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
+                        plr[0].caption(str(row.get('시간',''))[:16])
+                        plr[1].caption(row.get('반',''))
+                        plr[2].caption(str(row.get('월','')))
+                        plr[3].caption(str(row.get('이전수량','')))
+                        plr[4].caption(str(row.get('변경수량','')))
+                        _inc = row.get('증감', 0)
+                        _inc_color = "#1f6640" if _inc >= 0 else "#c8605a"
+                        plr[5].markdown(f"<span style='color:{_inc_color};font-weight:bold;font-size:0.8rem;'>{'+' if _inc>0 else ''}{_inc}</span>", unsafe_allow_html=True)
+                        plr[6].caption(row.get('변경사유',''))
+                        _plid = row.get('id')
+                        if _plid and plr[7].button("🗑️", key=f"del_plog_{_plid}", help="이 행 삭제"):
+                            if delete_plan_change_log_row(_plid):
+                                _clear_plan_cache()
+                                st.session_state["_del_mgr_toast"] = "✅ 계획 변경 이력 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 계획 변경 이력이 없습니다.")
 
@@ -5770,24 +6429,23 @@ elif curr_l == "마스터 관리":
             if _sl_kw.strip():   sldf = sldf[sldf['모델명'].astype(str).str.contains(_sl_kw.strip(), case=False, na=False)]
 
             if not sldf.empty:
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                slh = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
-                for c, t in zip(slh, ["시간","반","날짜","모델명","변경사유","작업자","삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
-                for row in sldf.to_dict('records'):
-                    slr = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
-                    slr[0].caption(str(row.get('시간',''))[:16])
-                    slr[1].caption(row.get('반',''))
-                    slr[2].caption(str(row.get('날짜',''))[:10])
-                    slr[3].caption(row.get('모델명',''))
-                    slr[4].caption(row.get('변경사유',''))
-                    slr[5].caption(row.get('작업자',''))
-                    _slid = row.get('id')
-                    if _slid and slr[6].button("🗑️", key=f"del_slog_{_slid}", help="이 행 삭제"):
-                        if delete_schedule_change_log_row(_slid):
-                            _clear_schedule_cache()
-                            st.session_state["_del_mgr_toast"] = "✅ 일정 변경 이력 삭제 완료"; st.rerun()
+                with st.expander(f"📋 개별 삭제 목록 ({len(sldf)}건)", expanded=False):
+                    slh = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
+                    for c, t in zip(slh, ["시간","반","날짜","모델명","변경사유","작업자","삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                    for row in sldf.to_dict('records'):
+                        slr = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
+                        slr[0].caption(str(row.get('시간',''))[:16])
+                        slr[1].caption(row.get('반',''))
+                        slr[2].caption(str(row.get('날짜',''))[:10])
+                        slr[3].caption(row.get('모델명',''))
+                        slr[4].caption(row.get('변경사유',''))
+                        slr[5].caption(row.get('작업자',''))
+                        _slid = row.get('id')
+                        if _slid and slr[6].button("🗑️", key=f"del_slog_{_slid}", help="이 행 삭제"):
+                            if delete_schedule_change_log_row(_slid):
+                                _clear_schedule_cache()
+                                st.session_state["_del_mgr_toast"] = "✅ 일정 변경 이력 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 일정 변경 이력이 없습니다.")
 
@@ -5835,25 +6493,24 @@ elif curr_l == "마스터 관리":
             ppdf = ppdf.sort_values('월', ascending=False) if not ppdf.empty else ppdf
 
             if not ppdf.empty:
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                pph = st.columns([2, 2, 2, 1])
-                for c, t in zip(pph, ["반", "월", "계획 수량", "삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>",
-                               unsafe_allow_html=True)
-                # 성능: iterrows → enumerate + to_dict('records')
-                for _pi, row in enumerate(ppdf.to_dict('records')):
-                    ppr = st.columns([2, 2, 2, 1])
-                    ppr[0].write(row.get('반', ''))
-                    ppr[1].write(str(row.get('월', '')))
-                    ppr[2].write(f"{int(row.get('계획수량', 0)):,} EA")
-                    _p_ban = row.get('반', '')
-                    _p_wol = row.get('월', '')
-                    if ppr[3].button("🗑️", key=f"del_plan_{_pi}", help="이 행 삭제"):
-                        if delete_production_plan_row(_p_ban, _p_wol):
-                            _clear_plan_cache()
-                            st.session_state.production_plan = load_production_plan()
-                            st.session_state["_del_mgr_toast"] = f"✅ 삭제 완료: {_p_ban} {_p_wol}"
-                            st.rerun()
+                with st.expander(f"📋 개별 삭제 목록 ({len(ppdf)}건)", expanded=False):
+                    pph = st.columns([2, 2, 2, 1])
+                    for c, t in zip(pph, ["반", "월", "계획 수량", "삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>",
+                                   unsafe_allow_html=True)
+                    for _pi, row in enumerate(ppdf.to_dict('records')):
+                        ppr = st.columns([2, 2, 2, 1])
+                        ppr[0].write(row.get('반', ''))
+                        ppr[1].write(str(row.get('월', '')))
+                        ppr[2].write(f"{int(row.get('계획수량', 0)):,} EA")
+                        _p_ban = row.get('반', '')
+                        _p_wol = row.get('월', '')
+                        if ppr[3].button("🗑️", key=f"del_plan_{_pi}", help="이 행 삭제"):
+                            if delete_production_plan_row(_p_ban, _p_wol):
+                                _clear_plan_cache()
+                                st.session_state.production_plan = load_production_plan()
+                                st.session_state["_del_mgr_toast"] = f"✅ 삭제 완료: {_p_ban} {_p_wol}"
+                                st.rerun()
             else:
                 st.info("조건에 맞는 계획 수량이 없습니다.")
 
@@ -5880,6 +6537,40 @@ elif curr_l == "마스터 관리":
 
         st.divider()
 
+        # ── 상태 되돌리기 ────────────────────────────────────────
+        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin:16px 0 10px 0;'>↩️ 제품 상태 수동 변경 (관리자 전용)</h4>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.caption("실수로 잘못 처리된 제품의 상태를 되돌리거나 직접 변경합니다.")
+            _all_states = ['조립중', '검사대기', '검사중', 'OQC대기', 'OQC중', '출하승인', '포장대기', '포장중', '완료', '불량 처리 중', '수리 완료(재투입)']
+            _rb_col1, _rb_col2 = st.columns([2, 1])
+            _rb_sn = _rb_col1.text_input("시리얼 번호 입력", placeholder="예) SN-20240101-001", key="rollback_sn")
+            _rb_target = _rb_col2.selectbox("변경할 상태", _all_states, key="rollback_target")
+
+            if _rb_sn:
+                _rb_df = st.session_state.production_db
+                _rb_match = _rb_df[_rb_df['시리얼'] == _rb_sn.strip()] if not _rb_df.empty else pd.DataFrame()
+                if not _rb_match.empty:
+                    _rb_row = _rb_match.iloc[0]
+                    st.info(f"현재 상태: **{_rb_row['상태']}** | 모델: {_rb_row.get('모델','')} | 반: {_rb_row.get('반','')}")
+                    if st.button("✅ 상태 변경 실행", key="rollback_exec", type="primary"):
+                        _prev_s = _rb_row['상태']
+                        if update_row(_rb_sn.strip(), {'상태': _rb_target, '시간': get_now_kst_str()}):
+                            insert_audit_log(
+                                시리얼=_rb_sn.strip(), 모델=_rb_row.get('모델',''), 반=_rb_row.get('반',''),
+                                이전상태=_prev_s, 이후상태=_rb_target,
+                                작업자=st.session_state.user_id, 비고="관리자 수동 상태 변경"
+                            )
+                            _clear_production_cache()
+                            st.session_state.production_db = load_realtime_ledger()
+                            st.success(f"✅ [{_rb_sn}] {_prev_s} → {_rb_target} 변경 완료")
+                            st.rerun()
+                        else:
+                            st.error("변경 실패. 시리얼 번호를 확인해주세요.")
+                else:
+                    st.warning("해당 시리얼 번호를 찾을 수 없습니다.")
+
+        st.divider()
+
         # 기존 전체 초기화 버튼 (하위 호환)
         st.markdown("<p style='color:#8a7f72;font-size:0.85rem;'>⚠️ 아래는 생산 이력만 초기화하는 기존 버튼입니다. 위 탭을 이용하세요.</p>", unsafe_allow_html=True)
         # 초기화 버튼 - 2단계 확인
@@ -5898,7 +6589,7 @@ elif curr_l == "마스터 관리":
                 if delete_all_rows():
                     st.session_state.production_db = load_realtime_ledger()
                     st.session_state.confirm_reset = False
-                    st.success("전체 데이터가 초기화되었습니다.")
+                    st.toast("전체 데이터가 초기화되었습니다.")
                     st.rerun()
             if cc3.button("취소", use_container_width=True):
                 st.session_state.confirm_reset = False
