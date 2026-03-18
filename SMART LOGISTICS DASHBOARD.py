@@ -2470,22 +2470,70 @@ elif curr_l == "조립 라인":
     ]) if not f_df.empty else 0
     _wip_today  = len(f_df[f_df['시간'].astype(str).str.startswith(today_str) & f_df['상태'].isin(['조립중','수리 완료(재투입)'])]) if not f_df.empty else 0
 
-    if _plan_qty > 0:
-        _real_pct = int(_done_today / _plan_qty * 100)
-        _bar_pct  = min(_real_pct, 100)
-        _over     = max(_done_today - _plan_qty, 0)
-        _remain   = max(_plan_qty - _done_today, 0)
-        if _real_pct >= 100:
-            _bar_color = "#28a745"
-            _msg = f"🎉 목표 달성! 수고하셨습니다!" + (f" (초과 +{_over}개)" if _over > 0 else "")
-            _emoji = "🏆"
-            _pct_label = f"{_real_pct}%" + (f" <span style='font-size:1rem;color:#28a745;'>+{_over}개 초과</span>" if _over > 0 else "")
-        elif _real_pct >= 80:
-            _bar_color = "#28a745"; _msg = f"💪 거의 다 왔어요! {_remain}개만 더!"; _emoji = "🔥"; _pct_label = f"{_real_pct}%"
-        elif _real_pct >= 50:
-            _bar_color = "#ffc107"; _msg = f"👍 절반 넘었어요! {_remain}개 남았어요!"; _emoji = "⚡"; _pct_label = f"{_real_pct}%"
+    # ── 월간 계획 대비 남은 수량 계산 ─────────────────────────────
+    _month_str = today_str[:7]
+    _plan_map = st.session_state.get("production_plan", {})
+    _monthly_plan = _plan_map.get(f"{curr_g}_{_month_str}", 0)
+    _done_month = len(f_df[
+        f_df['시간'].astype(str).str.startswith(_month_str) &
+        f_df['상태'].isin(['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료'])
+    ]) if not f_df.empty else 0
+    _month_remain = max(_monthly_plan - _done_month, 0)
+    _month_pct = round(_done_month / _monthly_plan * 100, 1) if _monthly_plan > 0 else 0
+    _today_dt = datetime.now(KST)
+    _days_in_month = calendar.monthrange(_today_dt.year, _today_dt.month)[1]
+    _remain_days = _days_in_month - _today_dt.day
+    _daily_required = round(_month_remain / _remain_days, 1) if _remain_days > 0 else _month_remain
+
+    if _plan_qty > 0 or _monthly_plan > 0:
+        # 오늘 달성 계산
+        if _plan_qty > 0:
+            _real_pct = int(_done_today / _plan_qty * 100)
+            _bar_pct  = min(_real_pct, 100)
+            _over     = max(_done_today - _plan_qty, 0)
+            _remain   = max(_plan_qty - _done_today, 0)
+            if _real_pct >= 100:
+                _bar_color = "#28a745"
+                _msg = f"🎉 목표 달성! 수고하셨습니다!" + (f" (초과 +{_over}개)" if _over > 0 else "")
+                _emoji = "🏆"
+                _pct_label = f"{_real_pct}%" + (f" <span style='font-size:1rem;color:#28a745;'>+{_over}개 초과</span>" if _over > 0 else "")
+            elif _real_pct >= 80:
+                _bar_color = "#28a745"; _msg = f"💪 거의 다 왔어요! {_remain}개만 더!"; _emoji = "🔥"; _pct_label = f"{_real_pct}%"
+            elif _real_pct >= 50:
+                _bar_color = "#ffc107"; _msg = f"👍 절반 넘었어요! {_remain}개 남았어요!"; _emoji = "⚡"; _pct_label = f"{_real_pct}%"
+            else:
+                _bar_color = "#e67e22"; _msg = f"🚀 파이팅! 목표까지 {_remain}개 남았어요!"; _emoji = "💡"; _pct_label = f"{_real_pct}%"
         else:
-            _bar_color = "#e67e22"; _msg = f"🚀 파이팅! 목표까지 {_remain}개 남았어요!"; _emoji = "💡"; _pct_label = f"{_real_pct}%"
+            _real_pct = 0; _bar_pct = 0; _bar_color = "#adb5bd"
+            _msg = "오늘 등록된 조립 계획이 없습니다."; _emoji = "📋"; _pct_label = "-"
+
+        # 월간 프로그레스 바 색상
+        _mbar_color = "#28a745" if _month_pct >= 100 else "#2471a3" if _month_pct >= 50 else "#ffc107"
+
+        # 월간 섹션 HTML
+        if _monthly_plan > 0:
+            _month_section = f"""
+            <div style='background:#f0f4ff;border-radius:10px;padding:14px 16px;margin-bottom:14px;'>
+                <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;'>
+                    <span style='color:#2471a3;font-size:0.95rem;font-weight:700;'>📅 {_month_str} 월간 계획 대비 현황</span>
+                    <span style='color:{_mbar_color};font-size:0.9rem;font-weight:700;'>{_month_pct}%</span>
+                </div>
+                <div style='display:flex;gap:16px;margin-bottom:8px;flex-wrap:wrap;'>
+                    <span style='font-size:0.85rem;color:#555;'>📦 계획 <b style='color:#1a1a2e;'>{_monthly_plan:,}개</b></span>
+                    <span style='font-size:0.85rem;color:#555;'>✅ 완료 <b style='color:#28a745;'>{_done_month:,}개</b></span>
+                    <span style='font-size:0.85rem;color:#555;'>🔲 남은수량 <b style='color:#e67e22;'>{_month_remain:,}개</b></span>
+                    <span style='font-size:0.85rem;color:#555;'>📆 남은일수 <b style='color:#2471a3;'>{_remain_days}일</b></span>
+                    <span style='font-size:0.85rem;color:#555;'>📊 일평균필요 <b style='color:#8e44ad;'>{_daily_required}개/일</b></span>
+                </div>
+                <div style='background:#d0dff5;border-radius:6px;height:10px;overflow:hidden;'>
+                    <div style='background:{_mbar_color};width:{min(_month_pct,100)}%;height:100%;border-radius:6px;'></div>
+                </div>
+            </div>"""
+        else:
+            _month_section = f"""
+            <div style='background:#f8f9fa;border-radius:10px;padding:10px 16px;margin-bottom:14px;'>
+                <span style='color:#888;font-size:0.85rem;'>📅 {_month_str} 월간 계획 미등록 — 생산 계획 탭에서 등록하세요.</span>
+            </div>"""
 
         st.markdown(f"""
         <div style='background:#ffffff;border-radius:16px;padding:24px 28px;margin-bottom:16px;
@@ -2494,9 +2542,10 @@ elif curr_l == "조립 라인":
                 <span style='color:#1a1a2e;font-size:1.1rem;font-weight:700;'>🎯 오늘의 목표 달성 현황</span>
                 <span style='color:#888;font-size:0.85rem;'>{today_str}</span>
             </div>
+            {_month_section}
             <div style='display:flex;align-items:flex-end;gap:8px;margin-bottom:10px;'>
                 <span style='color:{_bar_color};font-size:3.2rem;font-weight:900;line-height:1;'>{_done_today}</span>
-                <span style='color:#555;font-size:1.1rem;margin-bottom:8px;'>/ {_plan_qty} EA</span>
+                <span style='color:#555;font-size:1.1rem;margin-bottom:8px;'>/ {_plan_qty if _plan_qty > 0 else "-"} EA &nbsp;<span style='font-size:0.8rem;color:#888;'>(오늘 계획)</span></span>
                 <span style='color:{_bar_color};font-size:2rem;font-weight:800;margin-bottom:4px;margin-left:12px;'>{_pct_label}</span>
                 <span style='font-size:1.8rem;margin-bottom:4px;'>{_emoji}</span>
             </div>
