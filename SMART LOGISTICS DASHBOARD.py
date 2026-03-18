@@ -2474,6 +2474,7 @@ elif curr_l == "조립 라인":
                             insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                 이전상태=_r['상태'], 이후상태='검사대기', 작업자=st.session_state.user_id)
                     st.session_state[_asm_chk_key] = {}
+                    st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
                     _clear_production_cache()              # ← 캐시 초기화 (누락 버그 수정)
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
@@ -2488,6 +2489,7 @@ elif curr_l == "조립 라인":
                             insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                 이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
                     st.session_state[_asm_chk_key] = {}
+                    st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
                     _clear_production_cache()              # ← 캐시 초기화 (누락 버그 수정)
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
@@ -2526,6 +2528,7 @@ elif curr_l == "조립 라인":
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태='검사대기', 작업자=st.session_state.user_id)
                             st.session_state[_asm_chk_key].pop(str(idx), None)
+                            st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
                         if b2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량"):
@@ -2535,6 +2538,7 @@ elif curr_l == "조립 라인":
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
                             st.session_state[_asm_chk_key].pop(str(idx), None)
+                            st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
                     else:
@@ -2852,6 +2856,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 if wba3.button("☐ 선택 해제", key=f"wait_unck_{curr_g}_{curr_l}",
                                use_container_width=True):
                     st.session_state[_wck_key] = {}
+                    st.session_state[_wscan_cnt] += 1  # 체크박스 키 리셋
                     st.rerun()
 
             st.markdown("<hr style='margin:8px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
@@ -2961,6 +2966,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 if hba4.button("☐", key=f"hist_unck_{curr_g}_{curr_l}",
                                use_container_width=True, help="선택 해제"):
                     st.session_state[_hck_key] = {}
+                    st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                     st.rerun()
 
             # Bug fix: STATUS_STYLE2는 전역 STATUS_STYLE과 중복 — 전역 상수 재사용
@@ -3004,6 +3010,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태=_ok_s, 작업자=st.session_state.user_id)
                             st.session_state[_hck_key].pop(str(idx), None)
+                            st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
                         if c2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량"):
@@ -3013,6 +3020,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
                             st.session_state[_hck_key].pop(str(idx), None)
+                            st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
                     else:
@@ -4592,10 +4600,12 @@ elif curr_l == "OQC 라인":
                         insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
                             이전상태='OQC대기', 이후상태='OQC중', 작업자=st.session_state.user_id)
                 st.session_state[_oqc_in_ck_key] = {}
+                st.session_state[_oqc_in_sc_cnt] += 1  # 체크박스 키 리셋
                 st.session_state.production_db = load_realtime_ledger()
                 st.rerun()
             if oib3.button("☐ 해제", key="oqc_in_unck", use_container_width=True):
                 st.session_state[_oqc_in_ck_key] = {}
+                st.session_state[_oqc_in_sc_cnt] += 1  # 체크박스 키 리셋
                 st.rerun()
 
         hh = st.columns([0.4, 2, 2, 1.5, 2, 1.5])
@@ -4739,6 +4749,7 @@ elif curr_l == "OQC 라인":
                     insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                         이전상태='OQC중', 이후상태='출하승인', 작업자=st.session_state.user_id)
                     st.session_state[_oqc_ck_key].pop(str(idx), None)
+                    st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                     st.session_state.production_db = load_realtime_ledger()
                     st.rerun()
                 if btn2:
@@ -4752,6 +4763,7 @@ elif curr_l == "OQC 라인":
                             이전상태='OQC중', 이후상태='부적합(OQC)',
                             작업자=st.session_state.user_id, 비고=f"사유:{defect_txt}")
                         st.session_state[_oqc_ck_key].pop(str(idx), None)
+                        st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                         st.session_state.production_db = load_realtime_ledger()
                         st.rerun()
 
