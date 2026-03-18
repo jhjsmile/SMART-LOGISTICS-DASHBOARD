@@ -2478,21 +2478,24 @@ elif curr_l == "조립 라인":
         f_df['시간'].astype(str).str.startswith(_month_str) &
         f_df['상태'].isin(['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료'])
     ]) if not f_df.empty else 0
-    _month_remain = max(_monthly_plan - _done_month, 0)
     _month_pct = round(_done_month / _monthly_plan * 100, 1) if _monthly_plan > 0 else 0
     _today_dt = datetime.now(KST)
-    # 남은일수: 달력 기준이 아닌 스케줄에 등록된 내일 이후 조립 계획 일수 기준
+    # 남은수량·남은일수: 내일 이후 스케줄에 등록된 조립수 합산 기준 (지난 날 계획분 제외)
     _tomorrow_str = (_today_dt + timedelta(days=1)).strftime('%Y-%m-%d')
     if not sch_all.empty:
-        _future_sch_days = sch_all[
+        _future_sch = sch_all[
             (sch_all['날짜'] >= _tomorrow_str) &
             (sch_all['날짜'].str.startswith(_month_str)) &
             (sch_all['반'] == curr_g) &
             (sch_all['카테고리'] == '조립계획')
-        ]['날짜'].nunique()
+        ]
+        _month_remain = int(_future_sch['조립수'].apply(
+            lambda x: int(float(x)) if str(x) not in ('', 'nan', 'None') else 0
+        ).sum())
+        _remain_days = _future_sch['날짜'].nunique()
     else:
-        _future_sch_days = 0
-    _remain_days = _future_sch_days
+        _month_remain = 0
+        _remain_days = 0
     _daily_required = round(_month_remain / _remain_days, 1) if _remain_days > 0 else _month_remain
 
     if _plan_qty > 0 or _monthly_plan > 0:
