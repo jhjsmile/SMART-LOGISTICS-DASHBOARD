@@ -1794,7 +1794,8 @@ def show_inline_day_panel():
 
         if can_edit:
             st.divider()
-            if st.button("➕ 이 날짜에 일정 추가", key="inline_add_btn", use_container_width=True, type="primary"):
+            _cal_btn_col, _ = st.columns([1, 2])
+            if _cal_btn_col.button("➕ 이 날짜에 일정 추가", key="inline_add_btn", use_container_width=True, type="primary"):
                 st.session_state.cal_action      = "add"
                 st.session_state.cal_action_data = selected_date
                 st.rerun()
@@ -2972,7 +2973,8 @@ elif curr_l == "조립 라인":
                 st.toast(f"✅ 등록 완료: {sn_val}", icon="✅")
                 st.rerun()
 
-        if st.button("▶️ 생산 시작 등록", use_container_width=True, type="primary", key=f"start_btn_{curr_g}"):
+        _start_col, _ = st.columns([1, 2])
+        if _start_col.button("▶️ 생산 시작 등록", use_container_width=True, type="primary", key=f"start_btn_{curr_g}"):
             if target_model != "선택하세요." and target_item not in [None, "", "모델 선택 대기", "(품목코드 없음)"] and target_sn.strip():
                 _do_register_sn(target_sn.strip())
             else:
@@ -3062,7 +3064,8 @@ elif curr_l == "조립 라인":
                     if _add_should_rerun:
                         st.rerun()
 
-                    if st.button("💾 자재 시리얼 추가 저장", key=f"add_mat_save_{curr_g}", type="primary", use_container_width=True):
+                    _mat_btn_col, _ = st.columns([1, 2])
+                    if _mat_btn_col.button("💾 자재 시리얼 추가 저장", key=f"add_mat_save_{curr_g}", type="primary", use_container_width=True):
                         valid_add_mats = [m for m in st.session_state[_add_mat_list_key] if m["자재시리얼"].strip()]
                         if valid_add_mats:
                             if insert_material_serials(
@@ -3430,7 +3433,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     if _ql_rerun:
                         st.rerun()
 
-                    if st.button("💾 자재 시리얼 추가 저장", key=f"ql_save_{curr_g}_{curr_l}",
+                    _ql_btn_col, _ = st.columns([1, 2])
+                    if _ql_btn_col.button("💾 자재 시리얼 추가 저장", key=f"ql_save_{curr_g}_{curr_l}",
                                  type="primary", use_container_width=True):
                         valid_ql_mats = [m for m in st.session_state[_ql_mat_list_key] if m["자재시리얼"].strip()]
                         if valid_ql_mats:
