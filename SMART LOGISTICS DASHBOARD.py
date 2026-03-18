@@ -2582,7 +2582,7 @@ elif curr_l == "조립 라인":
 
         ef1, ef2 = st.columns(2)
         target_item = ef1.selectbox("품목 코드",
-            g_items if target_model != "선택하세요." else ["모델 선택 대기"],
+            (g_items if g_items else ["(품목코드 없음)"]) if target_model != "선택하세요." else ["모델 선택 대기"],
             key=f"item_sel_{curr_g}")
         _msn_cnt_key = f"msn_cnt_{curr_g}"
         if _msn_cnt_key not in st.session_state:
@@ -2689,10 +2689,10 @@ elif curr_l == "조립 라인":
                 st.rerun()
 
         if st.button("▶️ 생산 시작 등록", use_container_width=True, type="primary", key=f"start_btn_{curr_g}"):
-            if target_model != "선택하세요." and target_sn.strip():
+            if target_model != "선택하세요." and target_item not in [None, "", "모델 선택 대기", "(품목코드 없음)"] and target_sn.strip():
                 _do_register_sn(target_sn.strip())
             else:
-                st.warning("모델과 메인 S/N을 모두 입력해주세요.")
+                st.warning("모델, 품목코드, 메인 S/N을 모두 입력해주세요.")
 
     # ── 기존 제품 자재 시리얼 추가 ────────────────────────────────────
     with st.expander("🔩 기존 제품 자재 시리얼 추가 등록", expanded=False):
@@ -5257,14 +5257,12 @@ elif curr_l == "불량 공정":
                 c_b.markdown("<div class='button-spacer'></div>", unsafe_allow_html=True)
                 if c_b.button("✅ 확정", key=f"b_{idx}", type="primary", use_container_width=True):
                     if v_c and v_a:
-                        _clear_production_cache()
                         img_link = f" [사진: {upload_img_to_drive(img, row['시리얼'])}]" if img else ""
                         _rep_sn = replace_sn.strip()
                         if _rep_sn:
-                            # 교체 시리얼이 이미 등록된 S/N인지 확인
-                            _rep_exist = st.session_state.production_db[
-                                st.session_state.production_db['시리얼'] == _rep_sn
-                            ]
+                            # 교체 시리얼이 이미 등록된 S/N인지 최신 데이터로 확인
+                            _fresh_db = load_realtime_ledger()
+                            _rep_exist = _fresh_db[_fresh_db['시리얼'] == _rep_sn]
                             if not _rep_exist.empty:
                                 st.warning(f"⚠️ 교체 시리얼이 이미 등록되어 있습니다: **{_rep_sn}**")
                             else:
@@ -5294,6 +5292,7 @@ elif curr_l == "불량 공정":
                                     작업자=st.session_state.user_id,
                                     비고=f"교체투입 (구S/N:{row['시리얼']})"
                                 )
+                                _clear_production_cache()
                                 st.session_state.production_db = load_realtime_ledger()
                                 st.toast(f"✅ 교체 완료: {row['시리얼']} → {_rep_sn}", icon="✅")
                                 st.rerun()
@@ -5309,6 +5308,7 @@ elif curr_l == "불량 공정":
                                 작업자=st.session_state.user_id,
                                 비고=f"원인:{v_c} / 조치:{v_a}"
                             )
+                            _clear_production_cache()
                             st.session_state.production_db = load_realtime_ledger()
                             st.rerun()
                     else:
