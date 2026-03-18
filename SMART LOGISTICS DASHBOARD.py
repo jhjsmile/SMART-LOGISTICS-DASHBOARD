@@ -1909,13 +1909,15 @@ if 'wait_scan_cnt'       not in st.session_state: st.session_state.wait_scan_cnt
 # 6. 로그인
 # =================================================================
 
+if 'show_signup' not in st.session_state: st.session_state.show_signup = False
+
 if not st.session_state.login_status:
     _, c_col, _ = st.columns([1, 1.2, 1])
     with c_col:
         st.markdown("<h2 class='centered-title'>🔐 생산 통합 관리 시스템</h2>", unsafe_allow_html=True)
-        login_tab, req_tab = st.tabs(["🔑 로그인", "📝 계정 신청"])
 
-        with login_tab:
+        if not st.session_state.show_signup:
+            # ── 로그인 폼 ──────────────────────────────────────────
             with st.form("gate_login"):
                 in_id = st.text_input("아이디(ID)")
                 in_pw = st.text_input("비밀번호(PW)", type="password")
@@ -1931,9 +1933,7 @@ if not st.session_state.login_status:
                         st.stop()
                     user_info = st.session_state.user_db.get(in_id)
                     if user_info and verify_pw(in_pw, user_info["pw_hash"]):
-                        # 로그인 성공 → 시도 카운터 초기화
                         st.session_state[_attempt_key] = 0
-                        # bcrypt 설치 후 최초 로그인 시 SHA-256 → bcrypt 자동 업그레이드
                         if _BCRYPT_AVAILABLE and not user_info["pw_hash"].startswith("$2"):
                             new_hash = hash_pw(in_pw)
                             st.session_state.user_db[in_id]["pw_hash"] = new_hash
@@ -1942,20 +1942,17 @@ if not st.session_state.login_status:
                                     {"password_hash": new_hash}
                                 ).eq("username", in_id).execute()
                             except Exception:
-                                pass  # 업그레이드 실패해도 로그인은 허용
-                        # 역할 유효성 검사 (허용되지 않은 role이면 로그인 차단)
+                                pass
                         _role = user_info.get("role", "")
                         if _role not in ROLES:
                             st.error(f"❌ 허용되지 않은 계정 권한입니다. (role={_role})")
                             st.stop()
                         st.session_state.user_id       = in_id
                         st.session_state.user_role     = _role
-                        # ✨ 커스텀 권한 적용 (nav 접근 목록 + 읽기/쓰기/수정 레벨)
                         _raw_perms = user_info.get("custom_permissions", None)
                         _pages, _levels = _parse_custom_perms(_raw_perms)
-                        st.session_state.user_custom_permissions = _pages   # None = 역할 기본값 사용
+                        st.session_state.user_custom_permissions = _pages
                         st.session_state.user_permission_levels  = _levels
-                        # 데이터 로드 전에 login_status를 False로 유지 → 로드 중 st.warning() 억제
                         st.session_state.production_db = load_realtime_ledger()
                         st.session_state.schedule_db   = load_schedule()
                         st.session_state.login_status  = True
@@ -1969,9 +1966,16 @@ if not st.session_state.login_status:
                             st.error(f"⛔ 로그인 {MAX_LOGIN_ATTEMPTS}회 실패로 {LOGIN_LOCKOUT_SECONDS//60}분 동안 잠금됩니다.")
                         else:
                             st.error(f"로그인 정보가 올바르지 않습니다. (남은 시도: {_remain_attempts}회)")
+            st.markdown("<div style='text-align:center;margin-top:8px;'>", unsafe_allow_html=True)
+            if st.button("📝 계정이 없으신가요? 가입 / 권한 요청", use_container_width=True):
+                st.session_state.show_signup = True
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        with req_tab:
-            st.caption("계정이 없으시면 아래 양식을 작성해 주세요. 관리자 승인 후 로그인 가능합니다.")
+        else:
+            # ── 계정 신청 폼 ───────────────────────────────────────
+            st.markdown("<div class='section-title'>📝 가입 / 권한 요청</div>", unsafe_allow_html=True)
+            st.caption("아래 양식을 작성해 주세요. 관리자 승인 후 로그인 가능합니다.")
             _REQ_ROLES = {
                 "assembly_team":    "🔧 조립 담당자",
                 "qc_team":          "🔍 검사 담당자",
@@ -1989,14 +1993,23 @@ if not st.session_state.login_status:
                 rq_role  = st.selectbox("요청 권한",
                                         list(_REQ_ROLES.keys()),
                                         format_func=lambda k: _REQ_ROLES[k])
-                rq_reason = st.text_area("신청 사유 *", placeholder="업무 내용 및 접근이 필요한 이유를 입력해 주세요.", height=80)
-                if st.form_submit_button("📨 신청 제출", use_container_width=True, type="primary"):
+                rq_reason = st.text_area("신청 사유 *",
+                                         placeholder="업무 내용 및 접근이 필요한 이유를 입력해 주세요.",
+                                         height=80)
+                sb1, sb2 = st.columns(2)
+                submitted = sb1.form_submit_button("📨 신청 제출", use_container_width=True, type="primary")
+                go_back   = sb2.form_submit_button("← 로그인으로", use_container_width=True)
+
+                if go_back:
+                    st.session_state.show_signup = False
+                    st.rerun()
+                if submitted:
                     if not all([rq_name.strip(), rq_id.strip(), rq_pw, rq_reason.strip()]):
                         st.error("이름·아이디·비밀번호·신청 사유는 필수 입력 항목입니다.")
                     elif rq_pw != rq_pw2:
                         st.error("비밀번호가 일치하지 않습니다.")
                     elif rq_id.strip() in st.session_state.user_db:
-                        st.error("이미 사용 중인 아이디입니다. 다른 아이디를 입력해 주세요.")
+                        st.error("이미 사용 중인 아이디입니다.")
                     else:
                         _ok = submit_access_request(
                             username=rq_id.strip(), pw_hash=hash_pw(rq_pw),
@@ -2004,7 +2017,7 @@ if not st.session_state.login_status:
                             requested_role=rq_role, reason=rq_reason.strip()
                         )
                         if _ok:
-                            st.success("✅ 신청이 완료됐습니다. 관리자 승인 후 로그인 가능합니다.")
+                            st.success("✅ 신청 완료! 관리자 승인 후 로그인 가능합니다.")
                         else:
                             st.error("신청 중 오류가 발생했습니다. 관리자에게 문의해 주세요.")
     st.stop()
