@@ -803,6 +803,7 @@ def _get_tg_creds():
     return token, chat
 
 _TELEGRAM_BOT_TOKEN, _TELEGRAM_CHAT_ID = _get_tg_creds()
+_TG_SENT_CACHE: set = set()   # 프로세스 내 중복 전송 방지 캐시
 
 def _send_telegram(message: str) -> str:
     """텔레그램 메시지 전송. 성공 시 'ok', 실패 시 오류 문자열 반환."""
@@ -2734,11 +2735,11 @@ elif curr_l == "조립 라인":
     has_new_sch   = (sch_ids_now != st.session_state[last_seen_key]) and not today_sch.empty
 
     # 변경 알림 팝업 (최초 로드 시 또는 이미 전송한 경우 텔레그램 제외)
-    _tg_sent_key = f"sch_tg_sent_{curr_g}_{sch_ids_now}"
+    _tg_cache_key = f"sch_{curr_g}_{today_str}_{sch_ids_now}"
     if has_new_sch and not st.session_state.get(f"sch_popup_dismissed_{curr_g}", False):
-        if not _first_load and not st.session_state.get(_tg_sent_key, False):
+        if not _first_load and _tg_cache_key not in _TG_SENT_CACHE:
             _send_telegram(f"🔔 <b>오늘 일정 변경 알림</b>\n날짜: {today_str}\n반: {curr_g}\n일정: {len(today_sch)}건 등록/변경")
-            st.session_state[_tg_sent_key] = True
+            _TG_SENT_CACHE.add(_tg_cache_key)
         with st.container():
             st.warning(f"🔔 오늘 생산 일정이 등록/변경되었습니다!\n\n{today_str} 기준 **{curr_g}** 일정 **{len(today_sch)}건**이 있습니다. 아래에서 확인하세요.")
             ack_c1, ack_c2 = st.columns([3, 1])
