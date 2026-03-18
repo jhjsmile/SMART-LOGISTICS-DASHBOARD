@@ -874,7 +874,7 @@ def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
         """, height=0)
     st.session_state[notif_key] = curr_cnt
 
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=30)
 def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
     """최근 N개월 데이터만 로드 (기본 3개월, 성능 최적화)"""
     _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','작업자']
@@ -2751,7 +2751,7 @@ elif curr_l == "조립 라인":
                     with st.container(border=True):
                         st.caption(f"🔩 자재 시리얼 — `{row['시리얼']}`")
                         if not _asm_row_mats.empty:
-                            for _, _am in _asm_row_mats.iterrows():
+                            for _am in _asm_row_mats.to_dict('records'):
                                 amc1, amc2 = st.columns([2, 4])
                                 amc1.caption(_am.get('자재명', ''))
                                 amc2.caption(f"`{_am.get('자재시리얼', '')}`")
@@ -2918,7 +2918,7 @@ elif curr_l == "조립 라인":
                     emh1, emh2 = st.columns([2, 4])
                     emh1.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>자재명</p>", unsafe_allow_html=True)
                     emh2.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>자재 S/N</p>", unsafe_allow_html=True)
-                    for _, mat_r in existing_mats.iterrows():
+                    for mat_r in existing_mats.to_dict('records'):
                         emc1, emc2 = st.columns([2, 4])
                         emc1.caption(mat_r.get('자재명', ''))
                         emc2.caption(f"`{mat_r.get('자재시리얼', '')}`")
@@ -3245,7 +3245,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     with st.container(border=True):
                         st.caption(f"🔩 자재 시리얼 — `{row['시리얼']}`")
                         if not _hist_row_mats.empty:
-                            for _, _hm in _hist_row_mats.iterrows():
+                            for _hm in _hist_row_mats.to_dict('records'):
                                 hmc1, hmc2 = st.columns([2, 4])
                                 hmc1.caption(_hm.get('자재명', ''))
                                 hmc2.caption(f"`{_hm.get('자재시리얼', '')}`")
@@ -3276,7 +3276,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 _ql_mats = load_material_serials(ql_main_sn.strip())
                 if not _ql_mats.empty:
                     st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 4px 0;'>기존 등록 자재: <b>{len(_ql_mats)}개</b></p>", unsafe_allow_html=True)
-                    for _, _qm in _ql_mats.iterrows():
+                    for _qm in _ql_mats.to_dict('records'):
                         qmc1, qmc2 = st.columns([2, 4])
                         qmc1.caption(_qm.get('자재명', ''))
                         qmc2.caption(f"`{_qm.get('자재시리얼', '')}`")
@@ -3685,8 +3685,8 @@ elif curr_l == "생산 지표 관리":
               padding:1px 6px; margin-right:6px; }
 </style>""", unsafe_allow_html=True)
 
-    db_all    = st.session_state.production_db.copy()
-    sch_all   = st.session_state.schedule_db.copy()
+    db_all    = st.session_state.production_db
+    sch_all   = st.session_state.schedule_db
     today_str = datetime.now(KST).strftime('%Y-%m-%d')
 
     # ── 상단 필터 (한 줄, 컴팩트) ─────────────────────────────────
@@ -3711,17 +3711,18 @@ elif curr_l == "생산 지표 관리":
         plan_date_to = f"{today_str[:7]}-{_last_day:02d}"
 
     if not db_all.empty:
-        db_f = db_all[db_all['시간'].str[:10] >= date_from]
-        db_f = db_f[db_f['시간'].str[:10] <= date_to_d]
-        if ban_filter != "전체": db_f = db_f[db_f['반'] == ban_filter]
+        _t = db_all['시간'].str[:10]
+        _mask = (_t >= date_from) & (_t <= date_to_d)
+        if ban_filter != "전체": _mask &= (db_all['반'] == ban_filter)
+        db_f = db_all[_mask]
     else:
-        db_f = db_all.copy()
+        db_f = db_all
 
     if not sch_all.empty:
         sch_f = sch_all[(sch_all['날짜'] >= date_from) & (sch_all['날짜'] <= plan_date_to)]
         if ban_filter != "전체": sch_f = sch_f[sch_f['반'] == ban_filter]
     else:
-        sch_f = sch_all.copy()
+        sch_f = sch_all
 
     def _qty(df, col='조립수'):
         if df.empty: return 0
@@ -4737,13 +4738,13 @@ elif curr_l == "OQC 라인":
     # 부적합 사유 선택지
     OQC_DEFECT_REASONS = st.session_state.get('dropdown_oqc_defect', ['(선택)', '기타 (직접 입력)'])
 
-    db_oqc_all = st.session_state.production_db.copy()
+    db_oqc_all = st.session_state.production_db
 
     # ── 반 선택 ──────────────────────────────────────────────────
     BAN_CLR  = {"제조1반": "#2471a3", "제조2반": "#1e8449", "제조3반": "#6c3483"}
     BAN_BG   = {"제조1반": "#ddeeff", "제조2반": "#d4f0e2", "제조3반": "#ede0f5"}
     oqc_ban  = st.radio("반 선택", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="oqc_ban_radio")
-    db_oqc   = db_oqc_all[db_oqc_all['반'] == oqc_ban] if oqc_ban != "전체" else db_oqc_all.copy()
+    db_oqc   = db_oqc_all[db_oqc_all['반'] == oqc_ban] if oqc_ban != "전체" else db_oqc_all
 
     # ── 요약 KPI (선택 반 기준) ───────────────────────────────────
     oqc_wait  = len(db_oqc[db_oqc['상태'] == 'OQC대기'])
@@ -4770,7 +4771,7 @@ elif curr_l == "OQC 라인":
     st.markdown("<div class='section-title'>📥 입고 대기 (검사 합격 제품)</div>", unsafe_allow_html=True)
     packing_done = db_oqc[
         db_oqc['상태'] == 'OQC대기'
-    ].sort_values('시간', ascending=False)
+    ].sort_values('시간', ascending=False).reset_index(drop=True)
 
     _oqc_in_ck_key = f"oqc_in_ck_{oqc_ban}"
     _oqc_in_sc_cnt = f"oqc_in_sc_cnt_{oqc_ban}"
@@ -4823,7 +4824,7 @@ elif curr_l == "OQC 라인":
         for col, txt in zip(hh, ["☑", "시간", "모델", "반", "시리얼", "OQC 시작"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
         _oqc_in_cb_ver = st.session_state[_oqc_in_sc_cnt]
-        for idx, row in packing_done.iterrows():
+        for idx, row in enumerate(packing_done.to_dict('records')):
             rr = st.columns([0.4, 2, 2, 1.5, 2, 1.5])
             _oqc_in_cb = rr[0].checkbox("", key=f"oqc_in_cb_{idx}_{_oqc_in_cb_ver}",
                 value=st.session_state[_oqc_in_ck_key].get(str(idx), False),
@@ -4848,7 +4849,7 @@ elif curr_l == "OQC 라인":
 
     # ── OQC 검사 진행 ─────────────────────────────────────────────
     st.markdown("<div class='section-title'>🔍 OQC 검사 진행</div>", unsafe_allow_html=True)
-    oqc_wait_list = db_oqc[db_oqc['상태'] == 'OQC중'].sort_values('시간', ascending=False)
+    oqc_wait_list = db_oqc[db_oqc['상태'] == 'OQC중'].sort_values('시간', ascending=False).reset_index(drop=True)
 
     _oqc_ck_key = f"oqc_ck_{oqc_ban}"
     _oqc_sc_cnt = f"oqc_sc_cnt_{oqc_ban}"
@@ -4930,7 +4931,7 @@ elif curr_l == "OQC 라인":
         # 자재 시리얼 일괄 조회 (N+1 방지)
         _oqc_bulk_sns = tuple(oqc_wait_list['시리얼'].unique().tolist())
         _oqc_bulk_mats = load_material_serials_bulk(_oqc_bulk_sns) if _oqc_bulk_sns else pd.DataFrame()
-        for idx, row in oqc_wait_list.iterrows():
+        for idx, row in enumerate(oqc_wait_list.to_dict('records')):
             with st.container(border=True):
                 ic1, ic2, ic3, ic4, ic5 = st.columns([0.4, 2, 1.5, 1.5, 1.5])
                 _oqc_cb = ic1.checkbox("", key=f"oqc_cb_{idx}_{_oqc_cb_ver}",
@@ -4995,7 +4996,7 @@ elif curr_l == "OQC 라인":
                 _mat_label = f"🔩 자재 시리얼 {len(_row_mats)}개 등록됨" if not _row_mats.empty else "🔩 자재 시리얼 미등록 ⚠️"
                 with st.expander(_mat_label, expanded=False):
                     if not _row_mats.empty:
-                        for _, _rm in _row_mats.iterrows():
+                        for _rm in _row_mats.to_dict('records'):
                             rmc1, rmc2 = st.columns([2, 4])
                             rmc1.caption(_rm.get('자재명', ''))
                             rmc2.caption(f"`{_rm.get('자재시리얼', '')}`")
@@ -5120,7 +5121,7 @@ elif curr_l == "OQC 라인":
                 with st.container(border=True):
                     st.caption(f"🔩 자재 시리얼 — `{_oqc_done_sn}`")
                     if not _oqcd_row_mats.empty:
-                        for _, _dm in _oqcd_row_mats.iterrows():
+                        for _dm in _oqcd_row_mats.to_dict('records'):
                             dmc1, dmc2 = st.columns([2, 4])
                             dmc1.caption(_dm.get('자재명', ''))
                             dmc2.caption(f"`{_dm.get('자재시리얼', '')}`")
@@ -5825,7 +5826,7 @@ elif curr_l == "마스터 관리":
                     "schedule_manager": "📅 일정 관리자", "control_tower": "🗼 컨트롤 타워",
                     "admin": "👤 관리자",             "master": "👤 마스터 관리자",
                 }
-                for _, rq in req_df.iterrows():
+                for rq in req_df.to_dict('records'):
                     with st.container():
                         rc1, rc2, rc3 = st.columns([3, 2, 2])
                         rc1.markdown(
