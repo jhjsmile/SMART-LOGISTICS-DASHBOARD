@@ -2460,95 +2460,54 @@ _adm_tg_token = _TELEGRAM_BOT_TOKEN
 _adm_tg_chat  = _TELEGRAM_CHAT_ID
 _adm_caller   = st.session_state.get("user_id", "미상")
 
-st.components.v1.html(f"""
+_adm_vars_js = (
+    f"<script>"
+    f"var _ADM_TG_TOKEN={json.dumps(_adm_tg_token)};"
+    f"var _ADM_TG_CHAT={json.dumps(_adm_tg_chat)};"
+    f"var _ADM_CALLER={json.dumps(_adm_caller)};"
+    f"</script>"
+)
+_adm_main_js = """
 <script>
 (function(){
     var pdoc = window.parent.document;
     var _old = pdoc.getElementById('adm_float_btn');
     if (_old) _old.remove();
-    var _oldOverlay = pdoc.getElementById('adm_modal_overlay');
-    if (_oldOverlay) _oldOverlay.remove();
-    var _oldStyle = pdoc.getElementById('adm_float_style');
-    if (_oldStyle) _oldStyle.remove();
+    var _oldO = pdoc.getElementById('adm_modal_overlay');
+    if (_oldO) _oldO.remove();
+    var _oldS = pdoc.getElementById('adm_float_style');
+    if (_oldS) _oldS.remove();
 
-    /* ── 스타일 ── */
     var s = pdoc.createElement('style');
     s.id = 'adm_float_style';
-    s.textContent = `
-        #adm_float_btn {
-            position: fixed;
-            bottom: 70px;
-            right: 28px;
-            z-index: 999990;
-            background: #e74c3c;
-            color: #fff;
-            border: none;
-            border-radius: 50px;
-            padding: 13px 22px;
-            font-size: 0.92rem;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 4px 18px rgba(231,76,60,0.45);
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            transition: background 0.18s, transform 0.15s;
-        }
-        #adm_float_btn:hover { background:#c0392b; transform:scale(1.06); }
-        #adm_modal_overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.52);
-            z-index: 999995;
-            align-items: center;
-            justify-content: center;
-        }
-        #adm_modal_box {
-            background: #fff;
-            border-radius: 18px;
-            padding: 38px 44px 32px;
-            min-width: 340px;
-            max-width: 460px;
-            box-shadow: 0 12px 48px rgba(0,0,0,0.35);
-            text-align: center;
-            animation: admPopIn 0.25s ease;
-        }
-        @keyframes admPopIn {
-            from { transform: scale(0.75); opacity: 0; }
-            to   { transform: scale(1);    opacity: 1; }
-        }
-        #adm_msg_input {
-            width: 100%;
-            padding: 10px 14px;
-            border: 1.5px solid #ddd;
-            border-radius: 10px;
-            font-size: 0.95rem;
-            margin: 14px 0 20px;
-            box-sizing: border-box;
-            outline: none;
-        }
-        #adm_msg_input:focus { border-color: #e74c3c; }
-        .adm_btn_row { display: flex; gap: 10px; justify-content: center; }
-        .adm_submit_btn {
-            background: #e74c3c; color: #fff;
-            border: none; border-radius: 10px;
-            padding: 11px 30px; font-size: 0.97rem;
-            font-weight: 700; cursor: pointer;
-        }
-        .adm_submit_btn:hover { background: #c0392b; }
-        .adm_cancel_btn {
-            background: #eee; color: #555;
-            border: none; border-radius: 10px;
-            padding: 11px 24px; font-size: 0.97rem;
-            cursor: pointer;
-        }
-        .adm_cancel_btn:hover { background: #ddd; }
-    `;
+    s.textContent = [
+        '#adm_float_btn{position:fixed;bottom:70px;right:28px;z-index:999990;',
+        'background:#e74c3c;color:#fff;border:none;border-radius:50px;',
+        'padding:13px 22px;font-size:0.92rem;font-weight:700;cursor:pointer;',
+        'box-shadow:0 4px 18px rgba(231,76,60,0.45);',
+        'transition:background 0.18s,transform 0.15s;}',
+        '#adm_float_btn:hover{background:#c0392b;transform:scale(1.06);}',
+        '#adm_modal_overlay{display:none;position:fixed;top:0;left:0;',
+        'width:100%;height:100%;background:rgba(0,0,0,0.52);',
+        'z-index:999995;align-items:center;justify-content:center;}',
+        '#adm_modal_box{background:#fff;border-radius:18px;padding:38px 44px 32px;',
+        'min-width:340px;max-width:460px;',
+        'box-shadow:0 12px 48px rgba(0,0,0,0.35);text-align:center;}',
+        '@keyframes admPopIn{from{transform:scale(0.75);opacity:0}to{transform:scale(1);opacity:1}}',
+        '#adm_msg_input{width:100%;padding:10px 14px;border:1.5px solid #ddd;',
+        'border-radius:10px;font-size:0.95rem;margin:14px 0 20px;',
+        'box-sizing:border-box;outline:none;}',
+        '#adm_msg_input:focus{border-color:#e74c3c;}',
+        '.adm_btn_row{display:flex;gap:10px;justify-content:center;}',
+        '.adm_submit_btn{background:#e74c3c;color:#fff;border:none;border-radius:10px;',
+        'padding:11px 30px;font-size:0.97rem;font-weight:700;cursor:pointer;}',
+        '.adm_submit_btn:hover{background:#c0392b;}',
+        '.adm_cancel_btn{background:#eee;color:#555;border:none;border-radius:10px;',
+        'padding:11px 24px;font-size:0.97rem;cursor:pointer;}',
+        '.adm_cancel_btn:hover{background:#ddd;}'
+    ].join('');
     pdoc.head.appendChild(s);
 
-    /* ── 플로팅 버튼 ── */
     var btn = pdoc.createElement('button');
     btn.id = 'adm_float_btn';
     btn.innerHTML = '🚨 관리자 호출';
@@ -2558,34 +2517,26 @@ st.components.v1.html(f"""
     };
     pdoc.body.appendChild(btn);
 
-    /* ── 함수를 parent window에 등록 ── */
     window.parent._admClose = function() {
         pdoc.getElementById('adm_modal_overlay').style.display = 'none';
         pdoc.getElementById('adm_msg_input').value = '';
     };
-    var TG_TOKEN = {json.dumps(_adm_tg_token)};
-    var TG_CHAT  = {json.dumps(_adm_tg_chat)};
-    var CALLER   = {json.dumps(_adm_caller)};
 
-    window.parent._admSubmit = function() {{
+    window.parent._admSubmit = function() {
         var msg = pdoc.getElementById('adm_msg_input').value.trim() || '(사유 없음)';
         window.parent._admClose();
-
-        if (!TG_TOKEN || !TG_CHAT) {{
+        if (!_ADM_TG_TOKEN || !_ADM_TG_CHAT) {
             alert('텔레그램 설정이 없어 전송할 수 없습니다.');
             return;
-        }}
-
-        var now = new Date().toLocaleString('ko-KR', {{timeZone: 'Asia/Seoul'}});
-        var text = '🚨 관리자 호출\\n작업자: ' + CALLER + '\\n메시지: ' + msg + '\\n시각: ' + now;
-
-        fetch('https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage', {{
+        }
+        var now = new Date().toLocaleString('ko-KR', {timeZone:'Asia/Seoul'});
+        var text = '🚨 관리자 호출\n작업자: ' + _ADM_CALLER + '\n메시지: ' + msg + '\n시각: ' + now;
+        fetch('https://api.telegram.org/bot' + _ADM_TG_TOKEN + '/sendMessage', {
             method: 'POST',
-            headers: {{'Content-Type': 'application/json'}},
-            body: JSON.stringify({{chat_id: TG_CHAT, text: text, parse_mode: 'HTML'}})
-        }}).then(function(r) {{
-            if (r.ok) {{
-                /* 성공 토스트 */
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({chat_id: _ADM_TG_CHAT, text: text, parse_mode: 'HTML'})
+        }).then(function(r) {
+            if (r.ok) {
                 var toast = pdoc.createElement('div');
                 toast.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);'
                     + 'background:#1e8449;color:#fff;padding:12px 28px;border-radius:50px;'
@@ -2593,42 +2544,38 @@ st.components.v1.html(f"""
                     + 'box-shadow:0 4px 16px rgba(0,0,0,0.3);animation:admPopIn 0.25s ease;';
                 toast.textContent = '✅ 관리자에게 호출을 전송했습니다';
                 pdoc.body.appendChild(toast);
-                setTimeout(function() {{ toast.remove(); }}, 3000);
-            }} else {{
+                setTimeout(function() { toast.remove(); }, 3000);
+            } else {
                 alert('전송 실패. 텔레그램 설정을 확인해주세요.');
-            }}
-        }}).catch(function() {{
+            }
+        }).catch(function() {
             alert('네트워크 오류로 전송에 실패했습니다.');
-        }});
-    }};
+        });
+    };
 
-    /* ── 모달 ── */
     var overlay = pdoc.createElement('div');
     overlay.id = 'adm_modal_overlay';
-    overlay.innerHTML = `
-        <div id="adm_modal_box">
-            <div style="font-size:2.4rem;margin-bottom:6px;">🚨</div>
-            <div style="font-size:1.25rem;font-weight:800;color:#1a1a2e;margin-bottom:4px;">관리자 호출</div>
-            <div style="font-size:0.85rem;color:#888;margin-bottom:2px;">호출 사유를 입력하세요 (선택)</div>
-            <input id="adm_msg_input" type="text" placeholder="예: 라인 이상, 자재 부족, 품질 문제..." maxlength="100"/>
-            <div class="adm_btn_row">
-                <button id="adm_submit_btn" class="adm_submit_btn">📣 호출하기</button>
-                <button id="adm_cancel_btn" class="adm_cancel_btn">취소</button>
-            </div>
-        </div>
-    `;
+    overlay.innerHTML = '<div id="adm_modal_box">'
+        + '<div style="font-size:2.4rem;margin-bottom:6px;">🚨</div>'
+        + '<div style="font-size:1.25rem;font-weight:800;color:#1a1a2e;margin-bottom:4px;">관리자 호출</div>'
+        + '<div style="font-size:0.85rem;color:#888;margin-bottom:2px;">호출 사유를 입력하세요 (선택)</div>'
+        + '<input id="adm_msg_input" type="text" placeholder="예: 라인 이상, 자재 부족, 품질 문제..." maxlength="100"/>'
+        + '<div class="adm_btn_row">'
+        + '<button id="adm_submit_btn" class="adm_submit_btn">📣 호출하기</button>'
+        + '<button id="adm_cancel_btn" class="adm_cancel_btn">취소</button>'
+        + '</div></div>';
     pdoc.body.appendChild(overlay);
 
-    /* ── 이벤트 리스너 (inline onclick 대신) ── */
-    pdoc.getElementById('adm_submit_btn').addEventListener('click', function() {{ window.parent._admSubmit(); }});
-    pdoc.getElementById('adm_cancel_btn').addEventListener('click', function() {{ window.parent._admClose(); }});
-    pdoc.getElementById('adm_msg_input').addEventListener('keydown', function(e) {{
+    pdoc.getElementById('adm_submit_btn').addEventListener('click', function() { window.parent._admSubmit(); });
+    pdoc.getElementById('adm_cancel_btn').addEventListener('click', function() { window.parent._admClose(); });
+    pdoc.getElementById('adm_msg_input').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') window.parent._admSubmit();
         if (e.key === 'Escape') window.parent._admClose();
-    }});
-}})();
+    });
+})();
 </script>
-""", height=0)
+"""
+st.components.v1.html(_adm_vars_js + _adm_main_js, height=0)
 
 # ── 현황판 ──────────────────────────────────────────────────────
 if curr_l == "현황판":
