@@ -755,19 +755,35 @@ if "supabase_alive_checked" not in st.session_state:
 def get_now_kst_str() -> str:
     return datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
 
-def _inject_autofocus():
-    """스캔 입력 후 재렌더 시 첫 번째 활성 text input에 자동 포커스 (JS 주입)."""
+def _inject_autofocus(label: str = None):
+    """스캔 입력 후 재렌더 시 지정 라벨의 text input에 자동 포커스 (JS 주입).
+    label이 주어지면 해당 라벨과 연결된 입력란을 특정하고, 없으면 첫 번째 활성 입력란 사용."""
     import streamlit.components.v1 as components
-    components.html(
-        "<script>(function(){function f(){var els=window.parent.document"
-        ".querySelectorAll('input[type=text]');for(var i=0;i<els.length;i++)"
-        "{var e=els[i];if(!e.disabled&&!e.readOnly&&e.offsetParent!==null)"
-        "{e.focus();return true;}}return false;}"
-        "if(!f()){setTimeout(function(){if(!f())setTimeout(f,200);},80);}})();"
-        "</script>",
-        height=0,
-        scrolling=False,
-    )
+    if label:
+        safe = label.replace("'", "\\'")
+        js = (
+            "<script>(function(){function f(){"
+            "var lbs=window.parent.document.querySelectorAll('label');"
+            "for(var i=0;i<lbs.length;i++){"
+            f"if(lbs[i].textContent.trim()==='{safe}'){{"
+            "var p=lbs[i].closest('div[data-testid]')||lbs[i].parentElement;"
+            "var inp=p?p.querySelector('input[type=text]'):null;"
+            "if(inp&&!inp.disabled&&!inp.readOnly&&inp.offsetParent!==null)"
+            "{inp.focus();return true;}}}"
+            "return false;}"
+            "if(!f()){setTimeout(function(){if(!f())setTimeout(f,200);},80);}})();"
+            "</script>"
+        )
+    else:
+        js = (
+            "<script>(function(){function f(){var els=window.parent.document"
+            ".querySelectorAll('input[type=text]');for(var i=0;i<els.length;i++)"
+            "{var e=els[i];if(!e.disabled&&!e.readOnly&&e.offsetParent!==null)"
+            "{e.focus();return true;}}return false;}"
+            "if(!f()){setTimeout(function(){if(!f())setTimeout(f,200);},80);}})();"
+            "</script>"
+        )
+    components.html(js, height=0, scrolling=False)
 
 def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
     """입고 대기 수량이 증가하면 가운데 팝업 알림 + 사운드를 출력한다."""
@@ -2629,7 +2645,7 @@ elif curr_l == "조립 라인":
             key=_scan_field_key,
         )
         if st.session_state.pop("_autofocus_after_rerun", None) == _scan_field_key:
-            _inject_autofocus()
+            _inject_autofocus("자재 S/N 스캔")
         sc2.caption("💡 스캐너로 스캔하면 Enter가 자동 입력됩니다")
 
         if scan_input.strip():
@@ -2760,7 +2776,7 @@ elif curr_l == "조립 라인":
                 _add_scan_field_key = f"add_scan_sn_{curr_g}_{st.session_state[_add_scan_cnt_key]}"
                 add_scan_input = asc2.text_input("자재 S/N 스캔", placeholder="바코드 스캔 → 자동 추가 (Enter)", key=_add_scan_field_key)
                 if st.session_state.pop("_autofocus_after_rerun", None) == _add_scan_field_key:
-                    _inject_autofocus()
+                    _inject_autofocus("자재 S/N 스캔")
                 asc2.caption("💡 스캐너로 스캔하면 Enter가 자동 입력됩니다")
 
                 if add_scan_input.strip():
@@ -3125,7 +3141,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     placeholder="바코드 스캔 → 자동 추가 (Enter)",
                     key=_ql_scan_field_key)
                 if st.session_state.pop("_autofocus_after_rerun", None) == _ql_scan_field_key:
-                    _inject_autofocus()
+                    _inject_autofocus("자재 S/N 스캔")
                 qsc2.caption("💡 스캐너로 스캔하면 Enter가 자동 입력됩니다")
 
                 if ql_scan_input.strip():
