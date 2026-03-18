@@ -3787,34 +3787,37 @@ elif curr_l == "생산 지표 관리":
             st.info("데이터 없음")
 
     with rt_col:
-        st.markdown("<div class='db-section' style='background:#1e8449;'>⚡ 실시간 진행 중</div>", unsafe_allow_html=True)
         rt_df = st.session_state.production_db.copy()
         if ban_filter != "전체": rt_df = rt_df[rt_df['반'] == ban_filter]
-        WIP_STATES = ['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)']
+        WIP_STATES = ['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)','불량 처리 중']
         rt_wip = rt_df[rt_df['상태'].isin(WIP_STATES)].sort_values('시간', ascending=False) if not rt_df.empty else pd.DataFrame()
 
-        if not rt_wip.empty:
-            BAN_BG = {"제조1반":"#ddeeff","제조2반":"#d4f0e2","제조3반":"#ede0f5"}
-            BAN_CL = {"제조1반":"#2471a3","제조2반":"#1e8449","제조3반":"#6c3483"}
-            LINE_BG = {"조립 라인":"#fff3d4","검사 라인":"#d4f0e2","포장 라인":"#fde8d4"}
-            rt_html = "<div style='font-size:0.7rem;font-weight:600;color:#aaa;display:flex;gap:0;padding:0 0 4px 0;border-bottom:2px solid #e8e2d8;margin-bottom:2px;'><span style='flex:1.2;'>반</span><span style='flex:1.5;'>라인</span><span style='flex:2.5;'>모델</span><span style='flex:2;'>시리얼</span><span style='flex:1.8;'>시작</span></div>"
-            # 성능: iterrows → to_dict('records')
-            for row in rt_wip.to_dict('records'):
-                ban_v  = row.get('반','')
-                line_v = row.get('라인','')
-                bbg = BAN_BG.get(ban_v, "#f0f0f0"); bcl = BAN_CL.get(ban_v, "#666")
-                lbg = LINE_BG.get(line_v, "#f0f0f0")
-                rt_html += f"""
-<div class='rt-row'>
+        with st.expander(f"⚡ 실시간 진행 중 ({len(rt_wip)}건)", expanded=False):
+            if not rt_wip.empty:
+                BAN_BG = {"제조1반":"#ddeeff","제조2반":"#d4f0e2","제조3반":"#ede0f5"}
+                BAN_CL = {"제조1반":"#2471a3","제조2반":"#1e8449","제조3반":"#6c3483"}
+                LINE_BG = {"조립 라인":"#fff3d4","검사 라인":"#d4f0e2","포장 라인":"#fde8d4","OQC 라인":"#e8d4f0"}
+                STATE_BG = {"불량 처리 중":"#fde8e7"}
+                rt_html = "<div style='font-size:0.7rem;font-weight:600;color:#aaa;display:flex;gap:0;padding:0 0 4px 0;border-bottom:2px solid #e8e2d8;margin-bottom:2px;'><span style='flex:1.2;'>반</span><span style='flex:1.5;'>라인</span><span style='flex:2.5;'>모델</span><span style='flex:2;'>시리얼</span><span style='flex:1.8;'>상태</span></div>"
+                for row in rt_wip.to_dict('records'):
+                    ban_v   = row.get('반','')
+                    line_v  = row.get('라인','')
+                    state_v = row.get('상태','')
+                    bbg = BAN_BG.get(ban_v, "#f0f0f0"); bcl = BAN_CL.get(ban_v, "#666")
+                    lbg = LINE_BG.get(line_v, "#f0f0f0")
+                    row_bg = "background:#fdf5f5;" if state_v == '불량 처리 중' else ""
+                    state_color = "#c0392b" if state_v == '불량 처리 중' else "#5a5048"
+                    rt_html += f"""
+<div class='rt-row' style='{row_bg}'>
   <span style='flex:1.2;'><span class='rt-chip' style='background:{bbg};color:{bcl};'>{ban_v[:3]}</span></span>
   <span style='flex:1.5;'><span class='rt-chip' style='background:{lbg};color:#555;'>{line_v[:2]}</span></span>
   <span style='flex:2.5;font-weight:600;'>{row.get('모델','')}</span>
   <span style='flex:2;color:#5a5048;font-family:monospace;'>{row.get('시리얼','')}</span>
-  <span style='flex:1.8;color:#aaa;'>{str(row.get('시간',''))[:16]}</span>
+  <span style='flex:1.8;color:{state_color};font-size:0.68rem;'>{state_v}</span>
 </div>"""
-            st.markdown(rt_html, unsafe_allow_html=True)
-        else:
-            st.info("현재 진행 중인 작업 없음")
+                st.markdown(rt_html, unsafe_allow_html=True)
+            else:
+                st.info("현재 진행 중인 작업 없음")
 
     # ══════════════════════════════════════════════════════════════
     # [F] 계획 수량 입력 + 월별 달성률 그래프
