@@ -6051,27 +6051,25 @@ elif curr_l == "마스터 관리":
             if _d_sn.strip():    prod_df = prod_df[prod_df['시리얼'].str.contains(_d_sn.strip(), case=False, na=False)]
 
             if not prod_df.empty:
-                # 개별 삭제
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                ph = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
-                for c, t in zip(ph, ["시간","반","라인","시리얼","상태","삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                # 성능: iterrows → enumerate + to_dict('records')
-                for i, row in enumerate(prod_df.sort_values('시간', ascending=False).head(200).to_dict('records')):
-                    pr = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
-                    pr[0].caption(str(row.get('시간',''))[:16])
-                    pr[1].caption(row.get('반',''))
-                    pr[2].caption(row.get('라인',''))
-                    pr[3].caption(f"`{row.get('시리얼','')}`")
-                    pr[4].caption(row.get('상태',''))
-                    if pr[5].button("🗑️", key=f"del_prod_{i}", help="이 행 삭제"):
-                        if delete_production_row_by_sn(row['시리얼']):
-                            _clear_production_cache()
-                            st.session_state.production_db = load_realtime_ledger()
-                            st.toast(f"삭제 완료: {row['시리얼']}")
-                            st.rerun()
-                if len(prod_df) > 200:
-                    st.caption(f"※ 최대 200건만 표시. 필터로 범위를 좁혀주세요.")
+                with st.expander(f"📋 개별 삭제 목록 ({len(prod_df)}건)", expanded=False):
+                    ph = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
+                    for c, t in zip(ph, ["시간","반","라인","시리얼","상태","삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                    for i, row in enumerate(prod_df.sort_values('시간', ascending=False).head(200).to_dict('records')):
+                        pr = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
+                        pr[0].caption(str(row.get('시간',''))[:16])
+                        pr[1].caption(row.get('반',''))
+                        pr[2].caption(row.get('라인',''))
+                        pr[3].caption(f"`{row.get('시리얼','')}`")
+                        pr[4].caption(row.get('상태',''))
+                        if pr[5].button("🗑️", key=f"del_prod_{i}", help="이 행 삭제"):
+                            if delete_production_row_by_sn(row['시리얼']):
+                                _clear_production_cache()
+                                st.session_state.production_db = load_realtime_ledger()
+                                st.toast(f"삭제 완료: {row['시리얼']}")
+                                st.rerun()
+                    if len(prod_df) > 200:
+                        st.caption(f"※ 최대 200건만 표시. 필터로 범위를 좁혀주세요.")
             else:
                 st.info("조건에 맞는 데이터가 없습니다.")
 
@@ -6133,24 +6131,23 @@ elif curr_l == "마스터 관리":
             if _a_sn.strip():   adf = adf[adf['시리얼'].str.contains(_a_sn.strip(), case=False, na=False)]
 
             if not adf.empty:
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                ah = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
-                for c, t in zip(ah, ["시간","반","시리얼","모델","이전상태","이후상태","삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
-                for row in adf.to_dict('records'):
-                    ar = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
-                    ar[0].caption(str(row.get('시간',''))[:16])
-                    ar[1].caption(row.get('반',''))
-                    ar[2].caption(f"`{row.get('시리얼','')}`")
-                    ar[3].caption(row.get('모델',''))
-                    ar[4].caption(row.get('이전상태',''))
-                    ar[5].caption(row.get('이후상태',''))
-                    _row_id = row.get('id')
-                    if _row_id and ar[6].button("🗑️", key=f"del_audit_{_row_id}", help="이 행 삭제"):
-                        if delete_audit_log_row(_row_id):
-                            _clear_audit_cache()
-                            st.session_state["_del_mgr_toast"] = "✅ 감사 로그 삭제 완료"; st.rerun()
+                with st.expander(f"📋 개별 삭제 목록 ({len(adf)}건)", expanded=False):
+                    ah = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
+                    for c, t in zip(ah, ["시간","반","시리얼","모델","이전상태","이후상태","삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                    for row in adf.to_dict('records'):
+                        ar = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
+                        ar[0].caption(str(row.get('시간',''))[:16])
+                        ar[1].caption(row.get('반',''))
+                        ar[2].caption(f"`{row.get('시리얼','')}`")
+                        ar[3].caption(row.get('모델',''))
+                        ar[4].caption(row.get('이전상태',''))
+                        ar[5].caption(row.get('이후상태',''))
+                        _row_id = row.get('id')
+                        if _row_id and ar[6].button("🗑️", key=f"del_audit_{_row_id}", help="이 행 삭제"):
+                            if delete_audit_log_row(_row_id):
+                                _clear_audit_cache()
+                                st.session_state["_del_mgr_toast"] = "✅ 감사 로그 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 감사 로그가 없습니다.")
 
@@ -6199,23 +6196,22 @@ elif curr_l == "마스터 관리":
                 ]
 
             if not mdf.empty:
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                mh = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
-                for c, t in zip(mh, ["시간","메인S/N","모델","자재명","자재S/N","삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
-                for row in mdf.to_dict('records'):
-                    mr = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
-                    mr[0].caption(str(row.get('시간',''))[:16])
-                    mr[1].caption(f"`{row.get('메인시리얼','')}`")
-                    mr[2].caption(row.get('모델',''))
-                    mr[3].caption(row.get('자재명',''))
-                    mr[4].caption(f"`{row.get('자재시리얼','')}`")
-                    _mid = row.get('id')
-                    if _mid and mr[5].button("🗑️", key=f"del_mat_{_mid}", help="이 행 삭제"):
-                        if delete_material_serial_row(_mid):
-                            load_material_serials.clear()
-                            st.session_state["_del_mgr_toast"] = "✅ 자재 시리얼 삭제 완료"; st.rerun()
+                with st.expander(f"📋 개별 삭제 목록 ({len(mdf)}건)", expanded=False):
+                    mh = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
+                    for c, t in zip(mh, ["시간","메인S/N","모델","자재명","자재S/N","삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                    for row in mdf.to_dict('records'):
+                        mr = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
+                        mr[0].caption(str(row.get('시간',''))[:16])
+                        mr[1].caption(f"`{row.get('메인시리얼','')}`")
+                        mr[2].caption(row.get('모델',''))
+                        mr[3].caption(row.get('자재명',''))
+                        mr[4].caption(f"`{row.get('자재시리얼','')}`")
+                        _mid = row.get('id')
+                        if _mid and mr[5].button("🗑️", key=f"del_mat_{_mid}", help="이 행 삭제"):
+                            if delete_material_serial_row(_mid):
+                                load_material_serials.clear()
+                                st.session_state["_del_mgr_toast"] = "✅ 자재 시리얼 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 자재 시리얼이 없습니다.")
 
@@ -6254,25 +6250,24 @@ elif curr_l == "마스터 관리":
                 ]
 
             if not sdf.empty:
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                sh = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
-                for c, t in zip(sh, ["날짜","반","카테고리","모델명","조립수","출하계획","삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
-                for row in sdf.sort_values('날짜', ascending=False).to_dict('records'):
-                    sr = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
-                    sr[0].caption(str(row.get('날짜',''))[:10])
-                    sr[1].caption(row.get('반',''))
-                    sr[2].caption(row.get('카테고리',''))
-                    sr[3].caption(row.get('모델명',''))
-                    sr[4].caption(str(row.get('조립수','')))
-                    sr[5].caption(str(row.get('출하계획','')))
-                    _sid = row.get('id')
-                    if _sid and sr[6].button("🗑️", key=f"del_sch_{_sid}", help="이 행 삭제"):
-                        if delete_schedule(int(_sid)):
-                            _clear_schedule_cache()
-                            st.session_state.schedule_db = load_schedule()
-                            st.session_state["_del_mgr_toast"] = "✅ 생산 일정 삭제 완료"; st.rerun()
+                with st.expander(f"📋 개별 삭제 목록 ({len(sdf)}건)", expanded=False):
+                    sh = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
+                    for c, t in zip(sh, ["날짜","반","카테고리","모델명","조립수","출하계획","삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                    for row in sdf.sort_values('날짜', ascending=False).to_dict('records'):
+                        sr = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
+                        sr[0].caption(str(row.get('날짜',''))[:10])
+                        sr[1].caption(row.get('반',''))
+                        sr[2].caption(row.get('카테고리',''))
+                        sr[3].caption(row.get('모델명',''))
+                        sr[4].caption(str(row.get('조립수','')))
+                        sr[5].caption(str(row.get('출하계획','')))
+                        _sid = row.get('id')
+                        if _sid and sr[6].button("🗑️", key=f"del_sch_{_sid}", help="이 행 삭제"):
+                            if delete_schedule(int(_sid)):
+                                _clear_schedule_cache()
+                                st.session_state.schedule_db = load_schedule()
+                                st.session_state["_del_mgr_toast"] = "✅ 생산 일정 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 일정이 없습니다.")
 
@@ -6319,27 +6314,26 @@ elif curr_l == "마스터 관리":
             if _pl_kw.strip():   pldf = pldf[pldf['월'].astype(str).str.contains(_pl_kw.strip(), na=False)]
 
             if not pldf.empty:
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                plh = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
-                for c, t in zip(plh, ["시간","반","월","이전수량","변경수량","증감","변경사유","삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
-                for row in pldf.to_dict('records'):
-                    plr = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
-                    plr[0].caption(str(row.get('시간',''))[:16])
-                    plr[1].caption(row.get('반',''))
-                    plr[2].caption(str(row.get('월','')))
-                    plr[3].caption(str(row.get('이전수량','')))
-                    plr[4].caption(str(row.get('변경수량','')))
-                    _inc = row.get('증감', 0)
-                    _inc_color = "#1f6640" if _inc >= 0 else "#c8605a"
-                    plr[5].markdown(f"<span style='color:{_inc_color};font-weight:bold;font-size:0.8rem;'>{'+' if _inc>0 else ''}{_inc}</span>", unsafe_allow_html=True)
-                    plr[6].caption(row.get('변경사유',''))
-                    _plid = row.get('id')
-                    if _plid and plr[7].button("🗑️", key=f"del_plog_{_plid}", help="이 행 삭제"):
-                        if delete_plan_change_log_row(_plid):
-                            _clear_plan_cache()
-                            st.session_state["_del_mgr_toast"] = "✅ 계획 변경 이력 삭제 완료"; st.rerun()
+                with st.expander(f"📋 개별 삭제 목록 ({len(pldf)}건)", expanded=False):
+                    plh = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
+                    for c, t in zip(plh, ["시간","반","월","이전수량","변경수량","증감","변경사유","삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                    for row in pldf.to_dict('records'):
+                        plr = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
+                        plr[0].caption(str(row.get('시간',''))[:16])
+                        plr[1].caption(row.get('반',''))
+                        plr[2].caption(str(row.get('월','')))
+                        plr[3].caption(str(row.get('이전수량','')))
+                        plr[4].caption(str(row.get('변경수량','')))
+                        _inc = row.get('증감', 0)
+                        _inc_color = "#1f6640" if _inc >= 0 else "#c8605a"
+                        plr[5].markdown(f"<span style='color:{_inc_color};font-weight:bold;font-size:0.8rem;'>{'+' if _inc>0 else ''}{_inc}</span>", unsafe_allow_html=True)
+                        plr[6].caption(row.get('변경사유',''))
+                        _plid = row.get('id')
+                        if _plid and plr[7].button("🗑️", key=f"del_plog_{_plid}", help="이 행 삭제"):
+                            if delete_plan_change_log_row(_plid):
+                                _clear_plan_cache()
+                                st.session_state["_del_mgr_toast"] = "✅ 계획 변경 이력 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 계획 변경 이력이 없습니다.")
 
@@ -6385,24 +6379,23 @@ elif curr_l == "마스터 관리":
             if _sl_kw.strip():   sldf = sldf[sldf['모델명'].astype(str).str.contains(_sl_kw.strip(), case=False, na=False)]
 
             if not sldf.empty:
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                slh = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
-                for c, t in zip(slh, ["시간","반","날짜","모델명","변경사유","작업자","삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
-                # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
-                for row in sldf.to_dict('records'):
-                    slr = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
-                    slr[0].caption(str(row.get('시간',''))[:16])
-                    slr[1].caption(row.get('반',''))
-                    slr[2].caption(str(row.get('날짜',''))[:10])
-                    slr[3].caption(row.get('모델명',''))
-                    slr[4].caption(row.get('변경사유',''))
-                    slr[5].caption(row.get('작업자',''))
-                    _slid = row.get('id')
-                    if _slid and slr[6].button("🗑️", key=f"del_slog_{_slid}", help="이 행 삭제"):
-                        if delete_schedule_change_log_row(_slid):
-                            _clear_schedule_cache()
-                            st.session_state["_del_mgr_toast"] = "✅ 일정 변경 이력 삭제 완료"; st.rerun()
+                with st.expander(f"📋 개별 삭제 목록 ({len(sldf)}건)", expanded=False):
+                    slh = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
+                    for c, t in zip(slh, ["시간","반","날짜","모델명","변경사유","작업자","삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                    for row in sldf.to_dict('records'):
+                        slr = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
+                        slr[0].caption(str(row.get('시간',''))[:16])
+                        slr[1].caption(row.get('반',''))
+                        slr[2].caption(str(row.get('날짜',''))[:10])
+                        slr[3].caption(row.get('모델명',''))
+                        slr[4].caption(row.get('변경사유',''))
+                        slr[5].caption(row.get('작업자',''))
+                        _slid = row.get('id')
+                        if _slid and slr[6].button("🗑️", key=f"del_slog_{_slid}", help="이 행 삭제"):
+                            if delete_schedule_change_log_row(_slid):
+                                _clear_schedule_cache()
+                                st.session_state["_del_mgr_toast"] = "✅ 일정 변경 이력 삭제 완료"; st.rerun()
             else:
                 st.info("조건에 맞는 일정 변경 이력이 없습니다.")
 
@@ -6450,25 +6443,24 @@ elif curr_l == "마스터 관리":
             ppdf = ppdf.sort_values('월', ascending=False) if not ppdf.empty else ppdf
 
             if not ppdf.empty:
-                st.markdown("<p style='font-weight:bold;margin:8px 0 4px 0;'>개별 삭제</p>", unsafe_allow_html=True)
-                pph = st.columns([2, 2, 2, 1])
-                for c, t in zip(pph, ["반", "월", "계획 수량", "삭제"]):
-                    c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>",
-                               unsafe_allow_html=True)
-                # 성능: iterrows → enumerate + to_dict('records')
-                for _pi, row in enumerate(ppdf.to_dict('records')):
-                    ppr = st.columns([2, 2, 2, 1])
-                    ppr[0].write(row.get('반', ''))
-                    ppr[1].write(str(row.get('월', '')))
-                    ppr[2].write(f"{int(row.get('계획수량', 0)):,} EA")
-                    _p_ban = row.get('반', '')
-                    _p_wol = row.get('월', '')
-                    if ppr[3].button("🗑️", key=f"del_plan_{_pi}", help="이 행 삭제"):
-                        if delete_production_plan_row(_p_ban, _p_wol):
-                            _clear_plan_cache()
-                            st.session_state.production_plan = load_production_plan()
-                            st.session_state["_del_mgr_toast"] = f"✅ 삭제 완료: {_p_ban} {_p_wol}"
-                            st.rerun()
+                with st.expander(f"📋 개별 삭제 목록 ({len(ppdf)}건)", expanded=False):
+                    pph = st.columns([2, 2, 2, 1])
+                    for c, t in zip(pph, ["반", "월", "계획 수량", "삭제"]):
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>",
+                                   unsafe_allow_html=True)
+                    for _pi, row in enumerate(ppdf.to_dict('records')):
+                        ppr = st.columns([2, 2, 2, 1])
+                        ppr[0].write(row.get('반', ''))
+                        ppr[1].write(str(row.get('월', '')))
+                        ppr[2].write(f"{int(row.get('계획수량', 0)):,} EA")
+                        _p_ban = row.get('반', '')
+                        _p_wol = row.get('월', '')
+                        if ppr[3].button("🗑️", key=f"del_plan_{_pi}", help="이 행 삭제"):
+                            if delete_production_plan_row(_p_ban, _p_wol):
+                                _clear_plan_cache()
+                                st.session_state.production_plan = load_production_plan()
+                                st.session_state["_del_mgr_toast"] = f"✅ 삭제 완료: {_p_ban} {_p_wol}"
+                                st.rerun()
             else:
                 st.info("조건에 맞는 계획 수량이 없습니다.")
 
