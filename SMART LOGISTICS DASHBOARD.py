@@ -873,10 +873,17 @@ def insert_row(row: dict) -> bool:
             #   2) 3개월 날짜 필터 밖(오래된 데이터)인 경우
             # → soft-deleted 레코드이면 hard-delete 후 재등록 허용
             try:
-                existing = sb.table("production").select("시리얼,deleted_at").eq("시리얼", sn).execute()
+                existing = sb.table("production").select("시리얼,deleted_at,시간").eq("시리얼", sn).execute()
                 if existing.data:
                     rec = existing.data[0]
                     if rec.get("deleted_at"):  # soft-delete된 레코드
+                        sb.table("production").delete().eq("시리얼", sn).execute()
+                        sb.table("production").insert(row).execute()
+                        return True
+                    # 3개월 날짜 필터 밖(오래된 데이터) → 화면에 안 보이므로 재등록 허용
+                    cutoff = (date.today().replace(day=1) - timedelta(days=2*28)).strftime('%Y-%m-%d')
+                    rec_time = str(rec.get("시간", ""))
+                    if rec_time and rec_time < cutoff:
                         sb.table("production").delete().eq("시리얼", sn).execute()
                         sb.table("production").insert(row).execute()
                         return True
