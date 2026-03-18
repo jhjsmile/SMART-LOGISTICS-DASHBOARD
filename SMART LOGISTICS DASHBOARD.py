@@ -2628,6 +2628,8 @@ elif curr_l == "조립 라인":
             placeholder="바코드 스캔 → 자동 추가 (Enter)",
             key=_scan_field_key,
         )
+        if st.session_state.pop("_autofocus_after_rerun", None) == _scan_field_key:
+            _inject_autofocus()
         sc2.caption("💡 스캐너로 스캔하면 Enter가 자동 입력됩니다")
 
         if scan_input.strip():
@@ -2640,6 +2642,7 @@ elif curr_l == "조립 라인":
                 })
             else:
                 st.toast(f"⚠️ 이미 추가된 자재 S/N: {scan_input.strip()}", icon="⚠️")
+            st.session_state["_autofocus_after_rerun"] = f"{_scan_sn_key}_{st.session_state[_scan_counter_key] + 1}"
             st.session_state[_scan_counter_key] += 1
             st.rerun()
 
@@ -2756,6 +2759,8 @@ elif curr_l == "조립 라인":
                 add_sel_mat_name = asc1.selectbox("자재명 선택", MAT_NAME_OPTIONS, key=f"add_mat_nm_sel_{curr_g}")
                 _add_scan_field_key = f"add_scan_sn_{curr_g}_{st.session_state[_add_scan_cnt_key]}"
                 add_scan_input = asc2.text_input("자재 S/N 스캔", placeholder="바코드 스캔 → 자동 추가 (Enter)", key=_add_scan_field_key)
+                if st.session_state.pop("_autofocus_after_rerun", None) == _add_scan_field_key:
+                    _inject_autofocus()
                 asc2.caption("💡 스캐너로 스캔하면 Enter가 자동 입력됩니다")
 
                 if add_scan_input.strip():
@@ -2764,6 +2769,7 @@ elif curr_l == "조립 라인":
                         st.session_state[_add_mat_list_key].append({"자재명": add_sel_mat_name, "자재시리얼": add_scan_input.strip()})
                     else:
                         st.toast(f"⚠️ 이미 추가된 자재 S/N: {add_scan_input.strip()}", icon="⚠️")
+                    st.session_state["_autofocus_after_rerun"] = f"add_scan_sn_{curr_g}_{st.session_state[_add_scan_cnt_key] + 1}"
                     st.session_state[_add_scan_cnt_key] += 1
                     st.rerun()
 
@@ -3114,9 +3120,12 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 else:
                     ql_sel_mat = qsc1.text_input("자재명 입력", placeholder="예: PCB, 배터리",
                                                  key=f"ql_mat_nm_txt_{curr_g}_{curr_l}")
+                _ql_scan_field_key = f"ql_scan_{curr_g}_{curr_l}_{st.session_state[_ql_scan_cnt_key]}"
                 ql_scan_input = qsc2.text_input("자재 S/N 스캔",
                     placeholder="바코드 스캔 → 자동 추가 (Enter)",
-                    key=f"ql_scan_{curr_g}_{curr_l}_{st.session_state[_ql_scan_cnt_key]}")
+                    key=_ql_scan_field_key)
+                if st.session_state.pop("_autofocus_after_rerun", None) == _ql_scan_field_key:
+                    _inject_autofocus()
                 qsc2.caption("💡 스캐너로 스캔하면 Enter가 자동 입력됩니다")
 
                 if ql_scan_input.strip():
@@ -3124,6 +3133,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         st.session_state[_ql_mat_list_key].append({"자재명": ql_sel_mat, "자재시리얼": ql_scan_input.strip()})
                     else:
                         st.toast(f"⚠️ 이미 추가된 S/N: {ql_scan_input.strip()}", icon="⚠️")
+                    st.session_state["_autofocus_after_rerun"] = f"ql_scan_{curr_g}_{curr_l}_{st.session_state[_ql_scan_cnt_key] + 1}"
                     st.session_state[_ql_scan_cnt_key] += 1
                     st.rerun()
 
