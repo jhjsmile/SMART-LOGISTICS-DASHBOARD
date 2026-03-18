@@ -7,3 +7,5 @@ streamlit-autorefresh
 supabase
 openpyxl
 bcrypt
+requests
+python-dotenv
