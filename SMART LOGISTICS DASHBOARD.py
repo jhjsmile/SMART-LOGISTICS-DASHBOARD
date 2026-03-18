@@ -34,9 +34,6 @@ from streamlit_autorefresh import st_autorefresh
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 # =================================================================
@@ -790,8 +787,8 @@ def _inject_autofocus(label: str = None):
 # =================================================================
 # 텔레그램 알림
 # =================================================================
-_TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-_TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
+_TELEGRAM_BOT_TOKEN = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
+_TELEGRAM_CHAT_ID   = st.secrets.get("TELEGRAM_CHAT_ID", "")
 
 def _send_telegram(message: str) -> None:
     """텔레그램 메시지 전송 (백그라운드 스레드, 실패 시 무시)."""
