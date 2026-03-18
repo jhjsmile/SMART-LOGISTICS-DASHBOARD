@@ -2451,6 +2451,163 @@ def render_calendar_monthly(
 curr_g = st.session_state.selected_group
 curr_l = st.session_state.current_line
 
+# =================================================================
+# 관리자 호출 플로팅 버튼 (항상 표시)
+# =================================================================
+
+# query param으로 호출 수신 처리
+_acall_msg = st.query_params.get("admin_call_msg", "")
+if _acall_msg:
+    _caller = st.session_state.get("user_id", "미상")
+    _now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
+    _send_telegram(
+        f"🚨 <b>관리자 호출</b>\n"
+        f"작업자: {_caller}\n"
+        f"메시지: {_acall_msg}\n"
+        f"시각: {_now_str}"
+    )
+    st.session_state["_admin_call_sent"] = True
+    st.query_params.clear()
+    st.rerun()
+
+if st.session_state.pop("_admin_call_sent", False):
+    st.toast("✅ 관리자에게 호출을 전송했습니다.", icon="🚨")
+
+# 플로팅 버튼 + 모달 주입 (window.parent.document)
+st.components.v1.html("""
+<script>
+(function(){
+    var pdoc = window.parent.document;
+    if (pdoc.getElementById('adm_float_btn')) return;
+
+    /* ── 스타일 ── */
+    var s = pdoc.createElement('style');
+    s.id = 'adm_float_style';
+    s.textContent = `
+        #adm_float_btn {
+            position: fixed;
+            bottom: 28px;
+            right: 28px;
+            z-index: 999990;
+            background: #e74c3c;
+            color: #fff;
+            border: none;
+            border-radius: 50px;
+            padding: 13px 22px;
+            font-size: 0.92rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 18px rgba(231,76,60,0.45);
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            transition: background 0.18s, transform 0.15s;
+        }
+        #adm_float_btn:hover { background:#c0392b; transform:scale(1.06); }
+        #adm_modal_overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.52);
+            z-index: 999995;
+            align-items: center;
+            justify-content: center;
+        }
+        #adm_modal_box {
+            background: #fff;
+            border-radius: 18px;
+            padding: 38px 44px 32px;
+            min-width: 340px;
+            max-width: 460px;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.35);
+            text-align: center;
+            animation: admPopIn 0.25s ease;
+        }
+        @keyframes admPopIn {
+            from { transform: scale(0.75); opacity: 0; }
+            to   { transform: scale(1);    opacity: 1; }
+        }
+        #adm_msg_input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1.5px solid #ddd;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            margin: 14px 0 20px;
+            box-sizing: border-box;
+            outline: none;
+        }
+        #adm_msg_input:focus { border-color: #e74c3c; }
+        .adm_btn_row { display: flex; gap: 10px; justify-content: center; }
+        .adm_submit_btn {
+            background: #e74c3c; color: #fff;
+            border: none; border-radius: 10px;
+            padding: 11px 30px; font-size: 0.97rem;
+            font-weight: 700; cursor: pointer;
+        }
+        .adm_submit_btn:hover { background: #c0392b; }
+        .adm_cancel_btn {
+            background: #eee; color: #555;
+            border: none; border-radius: 10px;
+            padding: 11px 24px; font-size: 0.97rem;
+            cursor: pointer;
+        }
+        .adm_cancel_btn:hover { background: #ddd; }
+    `;
+    pdoc.head.appendChild(s);
+
+    /* ── 플로팅 버튼 ── */
+    var btn = pdoc.createElement('button');
+    btn.id = 'adm_float_btn';
+    btn.innerHTML = '🚨 관리자 호출';
+    btn.onclick = function() {
+        pdoc.getElementById('adm_modal_overlay').style.display = 'flex';
+        pdoc.getElementById('adm_msg_input').focus();
+    };
+    pdoc.body.appendChild(btn);
+
+    /* ── 모달 ── */
+    var overlay = pdoc.createElement('div');
+    overlay.id = 'adm_modal_overlay';
+    overlay.innerHTML = `
+        <div id="adm_modal_box">
+            <div style="font-size:2.4rem;margin-bottom:6px;">🚨</div>
+            <div style="font-size:1.25rem;font-weight:800;color:#1a1a2e;margin-bottom:4px;">관리자 호출</div>
+            <div style="font-size:0.85rem;color:#888;margin-bottom:2px;">호출 사유를 입력하세요 (선택)</div>
+            <input id="adm_msg_input" type="text" placeholder="예: 라인 이상, 자재 부족, 품질 문제..." maxlength="100"/>
+            <div class="adm_btn_row">
+                <button class="adm_submit_btn" onclick="admSubmit()">📣 호출하기</button>
+                <button class="adm_cancel_btn" onclick="admClose()">취소</button>
+            </div>
+        </div>
+    `;
+    pdoc.body.appendChild(overlay);
+
+    /* ── Enter 키 지원 ── */
+    pdoc.getElementById('adm_msg_input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') admSubmit();
+        if (e.key === 'Escape') admClose();
+    });
+})();
+
+function admClose() {
+    var pdoc = window.parent.document;
+    pdoc.getElementById('adm_modal_overlay').style.display = 'none';
+    pdoc.getElementById('adm_msg_input').value = '';
+}
+
+function admSubmit() {
+    var pdoc = window.parent.document;
+    var msg = pdoc.getElementById('adm_msg_input').value.trim() || '(사유 없음)';
+    var url = new URL(window.parent.location.href);
+    url.searchParams.set('admin_call_msg', msg);
+    admClose();
+    window.parent.location.href = url.toString();
+}
+</script>
+""", height=0)
+
 # ── 현황판 ──────────────────────────────────────────────────────
 if curr_l == "현황판":
     st.markdown("<h2 class='centered-title'>🏭 생산 통합 현황판</h2>", unsafe_allow_html=True)
