@@ -910,6 +910,30 @@ def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
             st.warning(f"데이터 로드 실패: {e}")
         return pd.DataFrame(columns=_EMPTY_COLS)
 
+def submit_help_request(requester: str, role: str, page: str, message: str) -> bool:
+    try:
+        get_supabase().table("help_requests").insert({
+            "requester": requester, "role": role,
+            "page": page, "message": message,
+            "status": "open", "created_at": get_now_kst_str()
+        }).execute()
+        return True
+    except Exception:
+        return False
+
+@st.cache_data(ttl=20)
+def load_help_requests(status: str = "open") -> pd.DataFrame:
+    try:
+        res = (get_supabase().table("help_requests")
+               .select("*").eq("status", status)
+               .order("created_at", desc=True).execute())
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+def _clear_help_request_cache():
+    load_help_requests.clear()
+
 def submit_access_request(username: str, pw_hash: str, name: str,
                            department: str, requested_role: str, reason: str) -> bool:
     try:
@@ -2122,6 +2146,66 @@ if "관리자 매뉴얼" in allowed_nav:
         clear_cal()
         st.session_state.current_line = "관리자 매뉴얼"
         st.rerun()
+
+# ── 관리자 도움 요청 (항상 표시) ─────────────────────────────────
+st.sidebar.divider()
+_is_admin = st.session_state.user_role in ['admin', 'master']
+if _is_admin:
+    _help_open = load_help_requests(status="open")
+    _help_cnt  = len(_help_open)
+    _help_badge = f" 🔴 {_help_cnt}건" if _help_cnt > 0 else ""
+    _help_exp_label = f"🆘 도움 요청 관리{_help_badge}"
+    with st.sidebar.expander(_help_exp_label, expanded=(_help_cnt > 0)):
+        if not _help_open.empty:
+            for _hr in _help_open.to_dict('records'):
+                st.markdown(
+                    f"**{_hr.get('requester','')}** ({_hr.get('role','')})"
+                    f"  \n📍 {_hr.get('page','')}  \n💬 {_hr.get('message','')}"
+                    f"  \n<small style='color:#aaa;'>{str(_hr.get('created_at',''))[:16]}</small>",
+                    unsafe_allow_html=True
+                )
+                _hr_id = _hr.get('id')
+                if st.button("✅ 처리 완료", key=f"hr_close_{_hr_id}", use_container_width=True):
+                    try:
+                        get_supabase().table("help_requests").update({
+                            "status": "closed",
+                            "reviewed_by": st.session_state.user_id,
+                            "reviewed_at": get_now_kst_str()
+                        }).eq("id", _hr_id).execute()
+                        _clear_help_request_cache()
+                        st.rerun()
+                    except Exception:
+                        st.error("처리 실패")
+                st.markdown("---")
+        else:
+            st.caption("대기 중인 도움 요청이 없습니다.")
+else:
+    with st.sidebar.expander("🆘 관리자 도움 요청", expanded=False):
+        if 'help_sent' not in st.session_state: st.session_state.help_sent = False
+        if st.session_state.help_sent:
+            st.success("✅ 요청이 전송됐습니다.")
+            if st.button("다시 요청하기", key="help_reset", use_container_width=True):
+                st.session_state.help_sent = False
+                st.rerun()
+        else:
+            with st.form("help_request_form"):
+                _help_msg = st.text_area("요청 내용",
+                    placeholder="도움이 필요한 내용을 입력해 주세요.", height=80, label_visibility="collapsed")
+                if st.form_submit_button("📨 요청 전송", use_container_width=True, type="primary"):
+                    if _help_msg.strip():
+                        _ok = submit_help_request(
+                            requester=st.session_state.user_id,
+                            role=st.session_state.user_role,
+                            page=st.session_state.current_line,
+                            message=_help_msg.strip()
+                        )
+                        if _ok:
+                            st.session_state.help_sent = True
+                            st.rerun()
+                        else:
+                            st.error("전송 실패. 다시 시도해 주세요.")
+                    else:
+                        st.warning("내용을 입력해 주세요.")
 
 if st.sidebar.button("🚪 로그아웃", use_container_width=True):
     for k in ['login_status','user_role','user_id','admin_authenticated']:
@@ -5439,127 +5523,114 @@ elif curr_l == "불량 공정":
         wait = db[(db['반']==g)&(db['상태']=="불량 처리 중")]
         if wait.empty: continue
         has_any = True
-        st.markdown(f"#### 📍 {g} 불량 처리 대기")
-        # 성능: iterrows → enumerate + to_dict('records')
-        for idx, row in enumerate(wait.to_dict('records')):
-            with st.container(border=True):
-                # 발생 정보
-                # 불량 입고 출처 파싱
-                _증상_raw = str(row.get('증상', ''))
-                _from_line = ''
-                if '불량입고출처:' in _증상_raw:
-                    _from_line = _증상_raw.split('불량입고출처:')[-1].strip().split()[0]
+        with st.expander(f"📍 {g} 불량 처리 대기 ({len(wait)}건)", expanded=True):
+            for idx, row in enumerate(wait.to_dict('records')):
+                with st.container(border=True):
+                    # 불량 입고 출처 파싱
+                    _증상_raw = str(row.get('증상', ''))
+                    _from_line = ''
+                    if '불량입고출처:' in _증상_raw:
+                        _from_line = _증상_raw.split('불량입고출처:')[-1].strip().split()[0]
 
-                ic1, ic2, ic3, ic4, ic5 = st.columns([2, 1.3, 1.5, 1.5, 1.2])
-                ic1.markdown(f"**{row['모델']}**")
-                ic2.markdown(f"`{row['품목코드']}`")
-                ic3.markdown(f"`{row['시리얼']}`")
-                ic4.caption(f"🕐 {str(row.get('시간',''))[:16]}")
-                if _from_line:
-                    ic5.markdown(
-                        f"<div style='background:#fff3d4;color:#7a5c00;padding:2px 6px;"
-                        f"border-radius:5px;font-size:0.72rem;font-weight:700;text-align:center;"
-                        f"border:1px solid #f0c878;'>📍 {_from_line}</div>",
-                        unsafe_allow_html=True)
-                else:
-                    ic5.caption("출처 미기록")
+                    ic1, ic2, ic3, ic4, ic5 = st.columns([2, 1.3, 1.5, 1.5, 1.2])
+                    ic1.markdown(f"**{row['모델']}**")
+                    ic2.markdown(f"`{row['품목코드']}`")
+                    ic3.markdown(f"`{row['시리얼']}`")
+                    ic4.caption(f"🕐 {str(row.get('시간',''))[:16]}")
+                    if _from_line:
+                        ic5.markdown(
+                            f"<div style='background:#fff3d4;color:#7a5c00;padding:2px 6px;"
+                            f"border-radius:5px;font-size:0.72rem;font-weight:700;text-align:center;"
+                            f"border:1px solid #f0c878;'>📍 {_from_line}</div>",
+                            unsafe_allow_html=True)
+                    else:
+                        ic5.caption("출처 미기록")
 
-                # OQC 부적합 사유 표시
-                if '부적합사유:' in _증상_raw:
-                    _oqc_reason = _증상_raw.split('부적합사유:')[-1].strip().rstrip(')')
-                    st.markdown(
-                        f"<div style='background:#fde8e8;color:#7a1a1a;padding:4px 10px;"
-                        f"border-radius:5px;font-size:0.78rem;margin:4px 0 2px 0;"
-                        f"border-left:3px solid #e87878;'>🚫 OQC 부적합 사유: <b>{_oqc_reason}</b></div>",
-                        unsafe_allow_html=True)
+                    # OQC 부적합 사유 표시
+                    if '부적합사유:' in _증상_raw:
+                        _oqc_reason = _증상_raw.split('부적합사유:')[-1].strip().rstrip(')')
+                        st.markdown(
+                            f"<div style='background:#fde8e8;color:#7a1a1a;padding:4px 10px;"
+                            f"border-radius:5px;font-size:0.78rem;margin:4px 0 2px 0;"
+                            f"border-left:3px solid #e87878;'>🚫 OQC 부적합 사유: <b>{_oqc_reason}</b></div>",
+                            unsafe_allow_html=True)
 
-                r1, r2 = st.columns(2)
-                # 불량 원인 드롭다운 + 직접입력
-                cause_sel = r1.selectbox("불량 원인", DEFECT_CAUSES, key=f"cs_{idx}")
-                if cause_sel == "기타 (직접 입력)":
-                    v_c = r1.text_input("직접 입력", key=f"c_{idx}", placeholder="원인 직접 입력")
-                elif cause_sel == "(선택)":
-                    v_c = ""
-                else:
-                    v_c = cause_sel
+                    r1, r2 = st.columns(2)
+                    cause_sel = r1.selectbox("불량 원인", DEFECT_CAUSES, key=f"cs_{idx}")
+                    if cause_sel == "기타 (직접 입력)":
+                        v_c = r1.text_input("직접 입력", key=f"c_{idx}", placeholder="원인 직접 입력")
+                    elif cause_sel == "(선택)":
+                        v_c = ""
+                    else:
+                        v_c = cause_sel
 
-                # 수리 조치 드롭다운 + 직접입력
-                action_sel = r2.selectbox("수리 조치", REPAIR_ACTIONS, key=f"as_{idx}")
-                if action_sel == "기타 (직접 입력)":
-                    v_a = r2.text_input("직접 입력", key=f"a_{idx}", placeholder="조치 직접 입력")
-                elif action_sel == "(선택)":
-                    v_a = ""
-                else:
-                    v_a = action_sel
+                    action_sel = r2.selectbox("수리 조치", REPAIR_ACTIONS, key=f"as_{idx}")
+                    if action_sel == "기타 (직접 입력)":
+                        v_a = r2.text_input("직접 입력", key=f"a_{idx}", placeholder="조치 직접 입력")
+                    elif action_sel == "(선택)":
+                        v_a = ""
+                    else:
+                        v_a = action_sel
 
-                # 교체 시리얼 입력 (선택)
-                replace_sn = st.text_input(
-                    "🔄 교체 시리얼 (선택)",
-                    placeholder="기존 불량품 대신 새 S/N으로 교체 시 입력 (없으면 비워두세요)",
-                    key=f"rep_{idx}"
-                )
+                    replace_sn = st.text_input(
+                        "🔄 교체 시리얼 (선택)",
+                        placeholder="기존 불량품 대신 새 S/N으로 교체 시 입력 (없으면 비워두세요)",
+                        key=f"rep_{idx}"
+                    )
 
-                c_f, c_b = st.columns([3, 1])
-                img = c_f.file_uploader("사진 첨부", type=['jpg','png'], key=f"i_{idx}")
-                c_b.markdown("<div class='button-spacer'></div>", unsafe_allow_html=True)
-                if c_b.button("✅ 확정", key=f"b_{idx}", type="primary", use_container_width=True):
-                    if v_c and v_a:
-                        img_link = f" [사진: {upload_img_to_drive(img, row['시리얼'])}]" if img else ""
-                        _rep_sn = replace_sn.strip()
-                        if _rep_sn:
-                            # 교체 시리얼이 이미 등록된 S/N인지 최신 데이터로 확인
-                            _fresh_db = load_realtime_ledger()
-                            _rep_exist = _fresh_db[_fresh_db['시리얼'] == _rep_sn]
-                            if not _rep_exist.empty:
-                                st.warning(f"⚠️ 교체 시리얼이 이미 등록되어 있습니다: **{_rep_sn}**")
+                    if st.button("✅ 확정", key=f"b_{idx}", type="primary", use_container_width=True):
+                        if v_c and v_a:
+                            _rep_sn = replace_sn.strip()
+                            if _rep_sn:
+                                _fresh_db = load_realtime_ledger()
+                                _rep_exist = _fresh_db[_fresh_db['시리얼'] == _rep_sn]
+                                if not _rep_exist.empty:
+                                    st.warning(f"⚠️ 교체 시리얼이 이미 등록되어 있습니다: **{_rep_sn}**")
+                                else:
+                                    update_row(row['시리얼'], {
+                                        '상태': "교체됨", '시간': get_now_kst_str(),
+                                        '증상': v_c, '수리': f"교체처리({_rep_sn})"
+                                    })
+                                    insert_audit_log(
+                                        시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                                        이전상태="불량 처리 중", 이후상태="교체됨",
+                                        작업자=st.session_state.user_id,
+                                        비고=f"원인:{v_c} / 교체S/N:{_rep_sn}"
+                                    )
+                                    insert_row({
+                                        '시간': get_now_kst_str(), '반': row['반'],
+                                        '라인': row.get('라인', '조립 라인'),
+                                        '모델': row['모델'], '품목코드': row['품목코드'],
+                                        '시리얼': _rep_sn, '상태': '조립중',
+                                        '증상': f"교체투입(구S/N:{row['시리얼']})",
+                                        '수리': '', '작업자': st.session_state.user_id
+                                    })
+                                    insert_audit_log(
+                                        시리얼=_rep_sn, 모델=row['모델'], 반=row['반'],
+                                        이전상태="-", 이후상태="조립중",
+                                        작업자=st.session_state.user_id,
+                                        비고=f"교체투입 (구S/N:{row['시리얼']})"
+                                    )
+                                    _clear_production_cache()
+                                    st.session_state.production_db = load_realtime_ledger()
+                                    st.toast(f"✅ 교체 완료: {row['시리얼']} → {_rep_sn}", icon="✅")
+                                    st.rerun()
                             else:
-                                # 기존 불량 S/N → 교체됨 처리
                                 update_row(row['시리얼'], {
-                                    '상태': "교체됨", '시간': get_now_kst_str(),
-                                    '증상': v_c, '수리': f"교체처리({_rep_sn}){img_link}"
+                                    '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
+                                    '증상': v_c, '수리': v_a
                                 })
                                 insert_audit_log(
                                     시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
-                                    이전상태="불량 처리 중", 이후상태="교체됨",
+                                    이전상태="불량 처리 중", 이후상태="수리 완료(재투입)",
                                     작업자=st.session_state.user_id,
-                                    비고=f"원인:{v_c} / 교체S/N:{_rep_sn}"
-                                )
-                                # 새 교체 S/N → 조립중으로 신규 등록
-                                insert_row({
-                                    '시간': get_now_kst_str(), '반': row['반'],
-                                    '라인': row.get('라인', '조립 라인'),
-                                    '모델': row['모델'], '품목코드': row['품목코드'],
-                                    '시리얼': _rep_sn, '상태': '조립중',
-                                    '증상': f"교체투입(구S/N:{row['시리얼']})",
-                                    '수리': '', '작업자': st.session_state.user_id
-                                })
-                                insert_audit_log(
-                                    시리얼=_rep_sn, 모델=row['모델'], 반=row['반'],
-                                    이전상태="-", 이후상태="조립중",
-                                    작업자=st.session_state.user_id,
-                                    비고=f"교체투입 (구S/N:{row['시리얼']})"
+                                    비고=f"원인:{v_c} / 조치:{v_a}"
                                 )
                                 _clear_production_cache()
                                 st.session_state.production_db = load_realtime_ledger()
-                                st.toast(f"✅ 교체 완료: {row['시리얼']} → {_rep_sn}", icon="✅")
                                 st.rerun()
                         else:
-                            # 교체 없이 수리 완료(재투입)
-                            update_row(row['시리얼'], {
-                                '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
-                                '증상': v_c, '수리': v_a + img_link
-                            })
-                            insert_audit_log(
-                                시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
-                                이전상태="불량 처리 중", 이후상태="수리 완료(재투입)",
-                                작업자=st.session_state.user_id,
-                                비고=f"원인:{v_c} / 조치:{v_a}"
-                            )
-                            _clear_production_cache()
-                            st.session_state.production_db = load_realtime_ledger()
-                            st.rerun()
-                    else:
-                        st.warning("불량 원인과 수리 조치를 모두 선택해주세요.")
+                            st.warning("불량 원인과 수리 조치를 모두 선택해주세요.")
     if not has_any:
         st.success("현재 처리 대기 중인 불량 이슈가 없습니다.")
 
