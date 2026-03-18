@@ -4746,11 +4746,15 @@ elif curr_l == "OQC 라인":
                         _oi_int = int(_oi)
                         if _oi_int in oqc_wait_list.index:
                             _orow = oqc_wait_list.loc[_oi_int]
-                            update_row(_orow['시리얼'], {'상태': '부적합(OQC)', '시간': get_now_kst_str(),
-                                                         '증상': _dflt, '수리': f"사유:{_dflt}"})
+                            update_row(_orow['시리얼'], {
+                                '상태': '불량 처리 중',
+                                '시간': get_now_kst_str(),
+                                '증상': f"불량입고출처: OQC 라인 (부적합사유: {_dflt})",
+                                '수리': f"OQC 부적합 판정 - 사유: {_dflt}"
+                            })
                             insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
-                                이전상태='OQC중', 이후상태='부적합(OQC)',
-                                작업자=st.session_state.user_id, 비고=f"사유:{_dflt}")
+                                이전상태='OQC중', 이후상태='불량 처리 중',
+                                작업자=st.session_state.user_id, 비고=f"OQC 부적합 - 사유: {_dflt}")
                     st.session_state[_oqc_ck_key] = {}
                     st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                     st.session_state.production_db = load_realtime_ledger()
@@ -4808,11 +4812,15 @@ elif curr_l == "OQC 라인":
                         st.warning("⚠️ 부적합 사유를 먼저 선택해주세요.")
                     else:
                         _clear_production_cache()
-                        update_row(row['시리얼'], {'상태': '부적합(OQC)', '시간': get_now_kst_str(),
-                                                   '증상': defect_txt, '수리': f"사유:{defect_txt}"})
+                        update_row(row['시리얼'], {
+                            '상태': '불량 처리 중',
+                            '시간': get_now_kst_str(),
+                            '증상': f"불량입고출처: OQC 라인 (부적합사유: {defect_txt})",
+                            '수리': f"OQC 부적합 판정 - 사유: {defect_txt}"
+                        })
                         insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
-                            이전상태='OQC중', 이후상태='부적합(OQC)',
-                            작업자=st.session_state.user_id, 비고=f"사유:{defect_txt}")
+                            이전상태='OQC중', 이후상태='불량 처리 중',
+                            작업자=st.session_state.user_id, 비고=f"OQC 부적합 - 사유: {defect_txt}")
                         st.session_state[_oqc_ck_key].pop(str(idx), None)
                         st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                         st.session_state.production_db = load_realtime_ledger()
@@ -5276,6 +5284,15 @@ elif curr_l == "불량 공정":
                         unsafe_allow_html=True)
                 else:
                     ic5.caption("출처 미기록")
+
+                # OQC 부적합 사유 표시
+                if '부적합사유:' in _증상_raw:
+                    _oqc_reason = _증상_raw.split('부적합사유:')[-1].strip().rstrip(')')
+                    st.markdown(
+                        f"<div style='background:#fde8e8;color:#7a1a1a;padding:4px 10px;"
+                        f"border-radius:5px;font-size:0.78rem;margin:4px 0 2px 0;"
+                        f"border-left:3px solid #e87878;'>🚫 OQC 부적합 사유: <b>{_oqc_reason}</b></div>",
+                        unsafe_allow_html=True)
 
                 r1, r2 = st.columns(2)
                 # 불량 원인 드롭다운 + 직접입력
