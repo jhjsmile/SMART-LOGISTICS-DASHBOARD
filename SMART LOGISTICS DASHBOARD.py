@@ -35,6 +35,45 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
+# ── 모듈 임포트 ──────────────────────────────────────────────────
+from modules.utils import (
+    get_now_kst_str, _inject_autofocus, notify_new_arrivals,
+    _send_telegram, _get_tg_creds, upload_img_to_drive,
+    _TELEGRAM_BOT_TOKEN, _TELEGRAM_CHAT_ID, _TG_SENT_CACHE,
+)
+from modules.auth import (
+    hash_pw, verify_pw, get_master_pw_hash,
+    _parse_custom_perms, check_perm,
+)
+from modules.database import (
+    get_supabase, keep_supabase_alive,
+    _clear_production_cache, _clear_schedule_cache, _clear_plan_cache,
+    _clear_master_cache, _clear_audit_cache, _clear_all_cache,
+    _clear_help_request_cache, _clear_access_request_cache,
+    load_realtime_ledger, insert_row, update_row,
+    delete_all_rows, delete_production_row_by_sn,
+    load_app_setting, save_app_setting,
+    submit_help_request, load_help_requests,
+    submit_access_request, load_access_requests, review_access_request,
+    insert_audit_log, load_audit_log,
+    delete_all_audit_log, delete_audit_log_row,
+    insert_material_serials, load_material_serials,
+    load_material_serials_bulk, search_material_by_sn,
+    update_material_serial_sn,
+    delete_all_material_serial, delete_material_serial_row,
+    load_schedule, insert_schedule, update_schedule, delete_schedule,
+    delete_all_production_schedule,
+    insert_schedule_change_log,
+    delete_all_schedule_change_log, delete_schedule_change_log_row,
+    load_model_master, upsert_model_master,
+    delete_model_from_master, delete_item_from_master,
+    delete_all_master_by_group, sync_master_to_session,
+    load_production_plan, save_production_plan,
+    delete_production_plan_row, delete_all_production_plan,
+    insert_plan_change_log, load_plan_change_log,
+    delete_all_plan_change_log, delete_plan_change_log_row,
+)
+
 
 # =================================================================
 # 상수 정의
@@ -628,872 +667,16 @@ st.markdown("""
 # 2. 보안 유틸리티
 # =================================================================
 
-try:
-    import bcrypt as _bcrypt
-    _BCRYPT_AVAILABLE = True
-except ImportError:
-    _BCRYPT_AVAILABLE = False
-
-def hash_pw(password: str) -> str:
-    """bcrypt 사용 가능 시 bcrypt, 아니면 SHA-256 (fallback)"""
-    if _BCRYPT_AVAILABLE:
-        return _bcrypt.hashpw(password.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
-
-def verify_pw(plain: str, hashed: str) -> bool:
-    """bcrypt 해시($2b$)와 SHA-256 해시(64자 hex) 모두 검증"""
-    if _BCRYPT_AVAILABLE and hashed.startswith("$2"):
-        try:
-            return _bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
-        except (ValueError, AttributeError):
-            return False
-    # SHA-256 fallback (기존 계정 호환)
-    return hashlib.sha256(plain.encode("utf-8")).hexdigest() == hashed
-
-
-# =================================================================
-# 에러 핸들링 베스트 프랙티스
-# =================================================================
-# 1. 구체적인 예외 타입 사용 (Exception보다 ValueError, KeyError 등)
-# 2. 에러 로깅 추가 (st.error()와 함께 로그 기록)
-# 3. 사용자 친화적 메시지 제공
-# 4. 복구 가능한 에러는 graceful degradation
-# =================================================================
-
-def get_master_pw_hash() -> str | None:
-    """
-    ✅ 보안 개선: 마스터 비밀번호 해시를 안전하게 로드
-    우선순위:
-    1. Supabase RLS 보호된 테이블에서 로드
-    2. 환경변수 (secrets.toml이 아닌 Key Vault)
-    3. 없으면 None (초기 설정 필요)
-    """
-    try:
-        # 1순위: Supabase에서 로드 (RLS 보호)
-        sb = get_supabase()
-        result = sb.table("system_config").select("master_hash").eq("key", "master_password").execute()
-        if result.data and len(result.data) > 0:
-            return result.data[0].get("master_hash")
-    except Exception as e:
-        pass
-    
-    try:
-        # 2순위: st.secrets에서 로드 (Streamlit Cloud / secrets.toml)
-        # 최상위 키 체크
-        secrets_hash = st.secrets.get("master_admin_pw_hash") or st.secrets.get("MASTER_PASSWORD_HASH")
-        # connections.gsheets 하위 키도 체크 (구 구조 호환)
-        if not secrets_hash:
-            try:
-                secrets_hash = st.secrets["connections"]["gsheets"].get("master_admin_pw_hash")
-            except Exception:
-                pass
-        if secrets_hash:
-            return secrets_hash
-    except Exception:
-        pass
-
-    try:
-        # 3순위: 환경변수
-        env_hash = _os.getenv("MASTER_PASSWORD_HASH")
-        if env_hash:
-            return env_hash
-    except Exception:
-        pass
-
-    # 4순위: 설정 없음 → None (호출 측에서 처리)
-    # 보안: 하드코딩 해시 제거 - Supabase system_config 또는 secrets.toml에 master_admin_pw_hash 설정 필요
-    return None
-
 # =================================================================
 # 3. Supabase 연결 및 DB 함수
 # =================================================================
-
-@st.cache_resource
-def get_supabase() -> Client:
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["key"]
-    return create_client(url, key)
-
-def _clear_production_cache() -> None:
-    """생산 데이터 캐시만 초기화"""
-    load_realtime_ledger.clear()
-
-def _clear_schedule_cache() -> None:
-    """일정 캐시만 초기화"""
-    load_schedule.clear()
-
-def _clear_plan_cache() -> None:
-    """계획 관련 캐시 초기화"""
-    load_production_plan.clear()
-    load_plan_change_log.clear()
-
-def _clear_master_cache() -> None:
-    """모델 마스터 캐시 초기화"""
-    load_model_master.clear()
-
-def _clear_audit_cache() -> None:
-    """감사 로그 캐시 초기화"""
-    load_audit_log.clear()
-
-def _clear_all_cache() -> None:
-    """전체 캐시 일괄 초기화"""
-    _clear_production_cache()
-    _clear_schedule_cache()
-    _clear_plan_cache()
-    _clear_master_cache()
-    _clear_audit_cache()
-
-def keep_supabase_alive() -> None:
-    try:
-        get_supabase().table("production").select("id").limit(1).execute()
-    except Exception as e:
-        # 연결 실패 시 사이드바에 경고 (디버깅용)
-        st.sidebar.warning(f"⚠️ Supabase 연결 확인 실패: {e}")
 
 # 앱 최초 기동 시 1회만 실행 (30초 자동 새로고침마다 재실행 방지)
 if "supabase_alive_checked" not in st.session_state:
     keep_supabase_alive()
     st.session_state["supabase_alive_checked"] = True
 
-def get_now_kst_str() -> str:
-    return datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
 
-def _inject_autofocus(label: str = None):
-    """스캔 입력 후 재렌더 시 지정 라벨의 text input에 자동 포커스 (JS 주입).
-    label이 주어지면 aria-label로 해당 입력란을 특정하고, 없으면 첫 번째 활성 입력란 사용."""
-    import streamlit.components.v1 as components
-    if label:
-        safe = label.replace('"', '\\"')
-        js = (
-            f'<script>(function(){{'
-            f'function f(){{'
-            f'var inp=window.parent.document.querySelector(\'input[aria-label="{safe}"]\');'
-            f'if(inp&&!inp.disabled&&!inp.readOnly&&inp.offsetParent!==null)'
-            f'{{inp.focus();return true;}}return false;}}'
-            f'if(!f()){{setTimeout(function(){{if(!f())setTimeout(f,300);}},100);}}'
-            f'}})();</script>'
-        )
-    else:
-        js = (
-            "<script>(function(){function f(){var els=window.parent.document"
-            ".querySelectorAll('input[type=text]');for(var i=0;i<els.length;i++)"
-            "{var e=els[i];if(!e.disabled&&!e.readOnly&&e.offsetParent!==null)"
-            "{e.focus();return true;}}return false;}"
-            "if(!f()){setTimeout(function(){if(!f())setTimeout(f,300);},100);}})();"
-            "</script>"
-        )
-    components.html(js, height=0, scrolling=False)
-
-# =================================================================
-# 텔레그램 알림
-# =================================================================
-def _get_tg_creds():
-    """TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID를 최상위 또는 theme 섹션에서 찾아 반환."""
-    token, chat = "", ""
-    for _key in ("TELEGRAM_BOT_TOKEN",):
-        try: token = str(st.secrets[_key]).strip(); break
-        except Exception: pass
-        try: token = str(st.secrets["theme"][_key]).strip(); break
-        except Exception: pass
-    for _key in ("TELEGRAM_CHAT_ID",):
-        try: chat = str(st.secrets[_key]).strip(); break
-        except Exception: pass
-        try: chat = str(st.secrets["theme"][_key]).strip(); break
-        except Exception: pass
-    return token, chat
-
-_TELEGRAM_BOT_TOKEN, _TELEGRAM_CHAT_ID = _get_tg_creds()
-_TG_SENT_CACHE: set = set()   # 프로세스 내 중복 전송 방지 캐시
-
-def _send_telegram(message: str) -> str:
-    """텔레그램 메시지 전송. 성공 시 'ok', 실패 시 오류 문자열 반환."""
-    _token, _chat = _get_tg_creds()
-    if not _token or not _chat:
-        return "전송 실패: TELEGRAM 시크릿 없음"
-    try:
-        url = f"https://api.telegram.org/bot{_token}/sendMessage"
-        res = requests.post(url, json={"chat_id": _chat, "text": message, "parse_mode": "HTML"}, timeout=10)
-        if res.ok:
-            return "ok"
-        return f"HTTP {res.status_code}: {res.text}"
-    except Exception as e:
-        return str(e)
-
-
-def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
-    """입고 대기 수량이 증가하면 가운데 팝업 알림 + 사운드를 출력한다."""
-    import html as _html_mod
-    prev = st.session_state.get(notif_key, -1)
-    if curr_cnt > 0 and curr_cnt > prev:
-        _safe_label = _html_mod.escape(str(label))
-        now_str = datetime.now(KST).strftime('%Y-%m-%d %H:%M')
-        st.components.v1.html(f"""
-        <script>
-        (function(){{
-            var pdoc = window.parent.document;
-
-            // ── 사운드 ──
-            try {{
-                var AudioCtx = window.parent.AudioContext || window.parent.webkitAudioContext;
-                var ctx = new AudioCtx();
-                function beep(freq, t, dur) {{
-                    var o = ctx.createOscillator();
-                    var g = ctx.createGain();
-                    o.connect(g); g.connect(ctx.destination);
-                    o.type = 'sine';
-                    o.frequency.setValueAtTime(freq, t);
-                    g.gain.setValueAtTime(0.4, t);
-                    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-                    o.start(t); o.stop(t + dur);
-                }}
-                var t = ctx.currentTime;
-                beep(880,  t,       0.18);
-                beep(1100, t+0.22,  0.18);
-                beep(1320, t+0.44,  0.25);
-            }} catch(e) {{}}
-
-            // ── 기존 팝업 제거 ──
-            var existing = pdoc.getElementById('sld_notif_overlay');
-            if (existing) existing.remove();
-
-            // ── 애니메이션 스타일 ──
-            if (!pdoc.getElementById('sld_notif_style')) {{
-                var s = pdoc.createElement('style');
-                s.id = 'sld_notif_style';
-                s.textContent = '@keyframes sldPopIn {{from{{transform:scale(0.6);opacity:0}}to{{transform:scale(1);opacity:1}}}}';
-                pdoc.head.appendChild(s);
-            }}
-
-            // ── 오버레이 ──
-            var overlay = pdoc.createElement('div');
-            overlay.id = 'sld_notif_overlay';
-            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:999999;display:flex;align-items:center;justify-content:center;';
-
-            // ── 팝업 박스 ──
-            var box = pdoc.createElement('div');
-            box.style.cssText = 'background:#fff;border-radius:20px;padding:44px 60px;text-align:center;box-shadow:0 12px 48px rgba(0,0,0,0.4);animation:sldPopIn 0.3s ease;min-width:340px;';
-            box.innerHTML =
-                '<div style="font-size:3.5rem;margin-bottom:12px;">📥</div>'
-                + '<div style="font-size:1.6rem;font-weight:800;color:#1a1a2e;margin-bottom:8px;">입고 대기 알림</div>'
-                + '<div style="font-size:1.05rem;color:#2E75B6;font-weight:600;margin-bottom:8px;">{_safe_label}</div>'
-                + '<div style="font-size:2.6rem;font-weight:900;color:#c8605a;margin-bottom:28px;">{curr_cnt}건 도착!</div>'
-                + '<button id="sld_notif_btn" style="background:#2E75B6;color:#fff;border:none;border-radius:10px;padding:14px 44px;font-size:1.15rem;cursor:pointer;font-weight:700;">✅ 확인</button>';
-
-            overlay.appendChild(box);
-            pdoc.body.appendChild(overlay);
-
-            pdoc.getElementById('sld_notif_btn').addEventListener('click', function(){{
-                overlay.remove();
-            }});
-        }})();
-        </script>
-        """, height=0)
-    st.session_state[notif_key] = curr_cnt
-
-@st.cache_data(ttl=30)
-def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
-    """최근 N개월 데이터만 로드 (기본 3개월, 성능 최적화)"""
-    _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','작업자']
-    try:
-        sb = get_supabase()
-        cutoff = (date.today().replace(day=1) -
-                  timedelta(days=(months-1)*28)).strftime('%Y-%m-%d')
-        try:
-            # deleted_at IS NULL 필터 적용 (Soft-delete된 행 제외)
-            res = (sb.table("production")
-                     .select("*")
-                     .gte("시간", cutoff)
-                     .is_("deleted_at", "null")
-                     .order("시간", desc=False)
-                     .execute())
-        except Exception:
-            # deleted_at 컬럼이 없는 경우 필터 없이 조회 (하위 호환)
-            res = (sb.table("production")
-                     .select("*")
-                     .gte("시간", cutoff)
-                     .order("시간", desc=False)
-                     .execute())
-        if res.data:
-            df = pd.DataFrame(res.data)
-            if 'created_at' in df.columns:
-                df = df.rename(columns={'created_at': '투입일'})
-            df = df.drop(columns=[c for c in ['id','deleted_at','deleted_by'] if c in df.columns])
-            return df.fillna("")
-        return pd.DataFrame(columns=_EMPTY_COLS)
-    except Exception as e:
-        # 로그인 후에만 오류 표시 (로그인 화면에서 노출 방지)
-        if st.session_state.get('login_status', False):
-            st.warning(f"데이터 로드 실패: {e}")
-        return pd.DataFrame(columns=_EMPTY_COLS)
-
-def submit_help_request(requester: str, role: str, page: str, message: str) -> tuple:
-    try:
-        get_supabase().table("help_requests").insert({
-            "requester": requester, "role": role,
-            "page": page, "message": message,
-            "status": "open", "created_at": get_now_kst_str()
-        }).execute()
-    except Exception:
-        pass
-    _now = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
-    _tg_result = _send_telegram(
-        f"🆘 <b>관리자 도움 요청</b>\n"
-        f"작업자: {requester}\n"
-        f"페이지: {page}\n"
-        f"내용: {message}\n"
-        f"시각: {_now}"
-    )
-    return _tg_result == "ok", _tg_result
-
-@st.cache_data(ttl=20)
-def load_help_requests(status: str = "open") -> pd.DataFrame:
-    try:
-        res = (get_supabase().table("help_requests")
-               .select("*").eq("status", status)
-               .order("created_at", desc=True).execute())
-        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
-    except Exception:
-        return pd.DataFrame()
-
-def _clear_help_request_cache():
-    load_help_requests.clear()
-
-def submit_access_request(username: str, pw_hash: str, name: str,
-                           department: str, requested_role: str, reason: str) -> bool:
-    try:
-        get_supabase().table("access_requests").insert({
-            "username": username, "password_hash": pw_hash,
-            "name": name, "department": department,
-            "requested_role": requested_role, "reason": reason,
-            "status": "pending", "created_at": get_now_kst_str()
-        }).execute()
-        return True
-    except Exception:
-        return False
-
-@st.cache_data(ttl=30)
-def load_access_requests(status: str = "pending") -> pd.DataFrame:
-    try:
-        res = (get_supabase().table("access_requests")
-               .select("*").eq("status", status)
-               .order("created_at", desc=True).execute())
-        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
-    except Exception:
-        return pd.DataFrame()
-
-def _clear_access_request_cache():
-    load_access_requests.clear()
-
-def review_access_request(req_id: int, action: str,
-                           reviewed_by: str, reject_reason: str = "") -> bool:
-    try:
-        get_supabase().table("access_requests").update({
-            "status": action, "reviewed_by": reviewed_by,
-            "reviewed_at": get_now_kst_str(), "reject_reason": reject_reason
-        }).eq("id", req_id).execute()
-        return True
-    except Exception:
-        return False
-
-def insert_row(row: dict) -> bool:
-    sn = row.get('시리얼', '')
-    sb = get_supabase()
-    try:
-        sb.table("production").insert(row).execute()
-        return True
-    except Exception as e:
-        err_str = str(e)
-        if "23505" in err_str or "duplicate key" in err_str or "already exists" in err_str:
-            # ── 화면에 실제로 보이는 레코드인지 확인 ─────────────────────
-            # production_db는 3개월 필터 + deleted_at IS NULL 적용된 현재 화면 데이터
-            # → 화면에 없으면 soft-deleted 또는 날짜 밖 레코드이므로 재등록 허용
-            prod_db = st.session_state.get('production_db', pd.DataFrame())
-            if not prod_db.empty and sn in prod_db['시리얼'].values:
-                # 화면에 보이는 활성 레코드와 충돌 → 진짜 중복
-                st.error(f"⚠️ 이미 등록된 시리얼입니다: **{sn}**\n\n동일한 S/N이 이미 생산 이력에 존재합니다. 시리얼을 확인해주세요.")
-                return False
-            # 화면에 없는 레코드 (soft-deleted / 날짜 필터 밖) → upsert로 덮어쓰기
-            # deleted_at/deleted_by를 NULL로 초기화해야 deleted_at IS NULL 필터에 표시됨
-            try:
-                upsert_row = {**row, 'deleted_at': None, 'deleted_by': None}
-                sb.table("production").upsert(upsert_row, on_conflict="시리얼").execute()
-                return True
-            except Exception as e2:
-                st.error(f"등록 실패: {e2}")
-                return False
-        else:
-            st.error(f"등록 실패: {e}")
-        return False
-
-def update_row(시리얼: str, data: dict) -> bool:
-    try:
-        get_supabase().table("production").update(data).eq("시리얼", 시리얼).execute()
-        return True
-    except Exception as e:
-        st.error(f"업데이트 실패: {e}"); return False
-
-def delete_all_rows() -> bool:
-    """
-    ✅ 보안 개선: Soft delete + 백업 자동 생성 + 2단계 확인 강화
-    """
-    # rerun 이후에도 메시지가 유지되도록 session_state에 수집
-    msgs = []
-    try:
-        sb = get_supabase()
-        
-        # 1. 백업 생성 (삭제 전 필수)
-        backup_time = get_now_kst_str()
-        all_data = sb.table("production").select("*").execute()
-        
-        if all_data.data:
-            backup_records = [{
-                **record,
-                'deleted_at': backup_time,
-                'deleted_by': st.session_state.get('user_id', 'unknown')
-            } for record in all_data.data]
-            
-            try:
-                sb.table("production_backup").insert(backup_records).execute()
-            except Exception as e:
-                msgs.append(("warning", f"⚠️ 백업 실패 (데이터 복구 불가능): {e}"))
-        
-        # 2. Soft Delete (deleted_at 컬럼 사용)
-        try:
-            sb.table("production").update({
-                'deleted_at': backup_time,
-                'deleted_by': st.session_state.get('user_id', 'unknown')
-            }).is_('deleted_at', 'null').execute()
-        except Exception as e:
-            msgs.append(("warning", f"⚠️ Soft delete 불가 — Hard delete 실행됨: {e}"))
-            sb.table("production").delete().gte("id", 0).execute()
-        
-        st.session_state['_delete_msgs'] = msgs
-        return True
-    except Exception as e:
-        st.session_state['_delete_msgs'] = [("error", f"삭제 실패: {e}")]
-        return False
-
-def delete_production_row_by_sn(시리얼: str) -> bool:
-    try:
-        get_supabase().table("production").delete().eq("시리얼", 시리얼).execute()
-        return True
-    except Exception as e:
-        st.error(f"삭제 실패: {e}"); return False
-
-def load_app_setting(key: str):
-    """app_settings 테이블에서 값 로드. 없으면 None 반환."""
-    try:
-        import json as _j
-        res = get_supabase().table("app_settings").select("value").eq("key", key).execute()
-        if res.data:
-            return _j.loads(res.data[0]["value"])
-    except Exception:
-        pass
-    return None
-
-def save_app_setting(key: str, value):
-    """app_settings 테이블에 upsert 저장. 성공 시 True, 실패 시 오류 메시지 문자열 반환."""
-    try:
-        import json as _j
-        get_supabase().table("app_settings").upsert(
-            {"key": key, "value": _j.dumps(value, ensure_ascii=False)},
-            on_conflict="key"
-        ).execute()
-        return True
-    except Exception as e:
-        return str(e)
-
-def delete_all_audit_log() -> bool:
-    try:
-        get_supabase().table("audit_log").delete().gte("id", 0).execute()
-        return True
-    except Exception as e:
-        st.error(f"감사로그 삭제 실패: {e}"); return False
-
-def delete_audit_log_row(row_id) -> bool:
-    try:
-        get_supabase().table("audit_log").delete().eq("id", row_id).execute()
-        return True
-    except Exception as e:
-        st.error(f"감사로그 행 삭제 실패: {e}"); return False
-
-def delete_all_material_serial() -> bool:
-    try:
-        get_supabase().table("material_serial").delete().gte("id", 0).execute()
-        return True
-    except Exception as e:
-        st.error(f"자재시리얼 삭제 실패: {e}"); return False
-
-def delete_material_serial_row(row_id) -> bool:
-    try:
-        get_supabase().table("material_serial").delete().eq("id", row_id).execute()
-        return True
-    except Exception as e:
-        st.error(f"자재시리얼 행 삭제 실패: {e}"); return False
-
-def update_material_serial_sn(메인시리얼: str, 구자재시리얼: str, 신자재시리얼: str) -> bool:
-    """material_serial 테이블에서 특정 자재 시리얼을 새 값으로 교체"""
-    try:
-        get_supabase().table("material_serial").update({
-            "자재시리얼": 신자재시리얼,
-            "시간": get_now_kst_str()
-        }).eq("메인시리얼", 메인시리얼).eq("자재시리얼", 구자재시리얼).execute()
-        return True
-    except Exception as e:
-        st.error(f"자재 시리얼 교체 실패: {e}"); return False
-
-def delete_all_production_schedule() -> bool:
-    try:
-        get_supabase().table("production_schedule").delete().gte("id", 0).execute()
-        return True
-    except Exception as e:
-        st.error(f"생산일정 삭제 실패: {e}"); return False
-
-def delete_all_plan_change_log() -> bool:
-    try:
-        get_supabase().table("plan_change_log").delete().gte("id", 0).execute()
-        return True
-    except Exception as e:
-        st.error(f"계획변경이력 삭제 실패: {e}"); return False
-
-def delete_plan_change_log_row(row_id) -> bool:
-    try:
-        get_supabase().table("plan_change_log").delete().eq("id", row_id).execute()
-        return True
-    except Exception as e:
-        st.error(f"계획변경이력 행 삭제 실패: {e}"); return False
-
-def delete_all_schedule_change_log() -> bool:
-    try:
-        get_supabase().table("schedule_change_log").delete().gte("id", 0).execute()
-        return True
-    except Exception as e:
-        st.error(f"일정변경이력 삭제 실패: {e}"); return False
-
-def delete_schedule_change_log_row(row_id) -> bool:
-    try:
-        get_supabase().table("schedule_change_log").delete().eq("id", row_id).execute()
-        return True
-    except Exception as e:
-        st.error(f"일정변경이력 행 삭제 실패: {e}"); return False
-
-
-
-@st.cache_data(ttl=60)
-def load_schedule() -> pd.DataFrame:
-    try:
-        sb  = get_supabase()
-        res = sb.table("production_schedule").select("*").order("날짜", desc=False).execute()
-        if res.data:
-            return pd.DataFrame(res.data).fillna("")
-        return pd.DataFrame(columns=['id','날짜','반','카테고리','pn','모델명','조립수','출하계획','특이사항','작성자'])
-    except Exception as e:
-        if st.session_state.get('login_status', False):
-            st.warning(f"일정 로드 실패: {e}")
-        return pd.DataFrame(columns=['id','날짜','반','카테고리','pn','모델명','조립수','출하계획','특이사항','작성자'])
-
-# ── 모델 마스터 DB 함수 ──────────────────────────────────────────
-@st.cache_data(ttl=300)
-def load_model_master() -> pd.DataFrame:
-    try:
-        res = get_supabase().table("model_master").select("*").execute()
-        if res.data:
-            return pd.DataFrame(res.data)
-        return pd.DataFrame(columns=['id','반','모델명','품목코드'])
-    except Exception as e:
-        return pd.DataFrame(columns=['id','반','모델명','품목코드'])
-
-def upsert_model_master(반: str, 모델명: str, 품목코드: str) -> bool:
-    """반+모델명+품목코드 조합이 없으면 insert, 있으면 스킵 (UNIQUE 제약)"""
-    try:
-        get_supabase().table("model_master").upsert(
-            {"반": 반, "모델명": 모델명, "품목코드": 품목코드},
-            on_conflict="반,모델명,품목코드"
-        ).execute()
-        return True
-    except Exception:
-        return False
-
-def delete_model_from_master(반: str, 모델명: str) -> bool:
-    """반+모델명 전체 삭제 (해당 모델의 모든 품목 포함)"""
-    try:
-        get_supabase().table("model_master").delete()\
-            .eq("반", 반).eq("모델명", 모델명).execute()
-        return True
-    except Exception:
-        return False
-
-def delete_item_from_master(반: str, 모델명: str, 품목코드: str) -> bool:
-    """특정 품목코드만 삭제"""
-    try:
-        get_supabase().table("model_master").delete()\
-            .eq("반", 반).eq("모델명", 모델명).eq("품목코드", 품목코드).execute()
-        return True
-    except Exception:
-        return False
-
-def delete_all_master_by_group(반: str) -> bool:
-    """특정 반의 모델/품목 전체 삭제"""
-    try:
-        get_supabase().table("model_master").delete().eq("반", 반).execute()
-        return True
-    except Exception:
-        return False
-
-def sync_master_to_session():
-    """DB model_master → session_state group_master_models/items 동기화"""
-    df = load_model_master()
-    if df.empty:
-        return
-    models_map = {g: [] for g in PRODUCTION_GROUPS}
-    items_map  = {g: {} for g in PRODUCTION_GROUPS}
-    # 벡터화: iterrows 대신 groupby 사용
-    valid_df = df[df['반'].isin(PRODUCTION_GROUPS)].copy()
-    valid_df['반']      = valid_df['반'].astype(str)
-    valid_df['모델명']   = valid_df['모델명'].astype(str)
-    valid_df['품목코드'] = valid_df['품목코드'].astype(str)
-    for g, gdf in valid_df.groupby('반'):
-        for m, mdf in gdf.groupby('모델명'):
-            models_map[g].append(m)
-            items_map[g][m] = [pn for pn in mdf['품목코드'].unique() if pn and pn != 'nan']
-    # 기존 session 값과 병합 (수동 등록분 유지)
-    for g in PRODUCTION_GROUPS:
-        for m in models_map[g]:
-            if m not in st.session_state.group_master_models[g]:
-                st.session_state.group_master_models[g].append(m)
-            if m not in st.session_state.group_master_items[g]:
-                st.session_state.group_master_items[g][m] = []
-            for pn in items_map[g].get(m, []):
-                if pn not in st.session_state.group_master_items[g][m]:
-                    st.session_state.group_master_items[g][m].append(pn)
-
-def insert_schedule(row: dict) -> bool:
-    try:
-        # Supabase에 넣을 컬럼만 추출 (id, created_at 등 자동생성 컬럼 제외)
-        allowed = {'날짜', '반', '카테고리', 'pn', '모델명', '조립수', '출하계획', '특이사항', '작성자'}
-        clean_row = {k: v for k, v in row.items() if k in allowed}
-        # 날짜 문자열 보정
-        if '날짜' in clean_row and hasattr(clean_row['날짜'], 'strftime'):
-            clean_row['날짜'] = clean_row['날짜'].strftime('%Y-%m-%d')
-        get_supabase().table("production_schedule").insert(clean_row).execute()
-        # ── 일정 등록 시 해당 반 모델/품목 마스터 자동 등록 ──
-        반   = str(clean_row.get('반', '')).strip()
-        모델 = str(clean_row.get('모델명', '')).strip()
-        pn   = str(clean_row.get('pn', '')).strip()
-        if 반 in PRODUCTION_GROUPS and 모델:
-            upsert_model_master(반, 모델, pn if pn else 모델)
-            if 모델 not in st.session_state.group_master_models.get(반, []):
-                st.session_state.group_master_models.setdefault(반, []).append(모델)
-            if 모델 not in st.session_state.group_master_items.get(반, {}):
-                st.session_state.group_master_items.setdefault(반, {})[모델] = []
-            if pn and pn not in st.session_state.group_master_items[반][모델]:
-                st.session_state.group_master_items[반][모델].append(pn)
-        return True
-    except Exception as e:
-        st.error(f"일정 등록 실패: {e}")
-        return False
-
-def update_schedule(row_id: int, data: dict) -> bool:
-    try:
-        get_supabase().table("production_schedule").update(data).eq("id", row_id).execute()
-        return True
-    except Exception as e:
-        st.error(f"일정 수정 실패: {e}"); return False
-
-def delete_schedule(row_id: int) -> bool:
-    try:
-        get_supabase().table("production_schedule").delete().eq("id", row_id).execute()
-        return True
-    except Exception as e:
-        st.error(f"일정 삭제 실패: {e}"); return False
-
-
-# ── 감사 로그 ────────────────────────────────────────────────────
-@st.cache_data(ttl=30)
-def load_audit_log(limit: int = MAX_AUDIT_LOG_ROWS) -> pd.DataFrame:
-    try:
-        sb  = get_supabase()
-        res = sb.table("audit_log").select("*").order("시간", desc=True).limit(limit).execute()
-        if res.data:
-            return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
-        return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
-    except Exception:
-        return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
-
-# ── 생산 계획 수량 (대시보드용) ──────────────────────────────────
-@st.cache_data(ttl=300)
-def load_production_plan() -> dict:
-    """Supabase production_plan 테이블에서 {반_YYYY-MM: 계획수량} 로드"""
-    try:
-        sb  = get_supabase()
-        res = sb.table("production_plan").select("*").execute()
-        if res.data:
-            return {f"{r['반']}_{r['월']}": int(r.get('계획수량', 0)) for r in res.data}
-        return {}
-    except Exception:
-        return {}
-
-def save_production_plan(반: str, 월: str, 계획수량: int) -> bool:
-    """production_plan upsert (반+월 복합키)"""
-    try:
-        sb = get_supabase()
-        sb.table("production_plan").upsert({
-            "반": 반, "월": 월, "계획수량": 계획수량
-        }, on_conflict="반,월").execute()
-        return True
-    except Exception as e:
-        st.error(f"계획 수량 저장 실패: {e}")
-        return False
-
-def delete_production_plan_row(반: str, 월: str) -> bool:
-    """production_plan 특정 반+월 행 삭제"""
-    try:
-        get_supabase().table("production_plan").delete().eq("반", 반).eq("월", 월).execute()
-        return True
-    except Exception as e:
-        st.error(f"계획 수량 삭제 실패: {e}"); return False
-
-def delete_all_production_plan() -> bool:
-    """production_plan 전체 삭제"""
-    try:
-        get_supabase().table("production_plan").delete().neq("반", "").execute()
-        return True
-    except Exception as e:
-        st.error(f"계획 수량 전체 삭제 실패: {e}"); return False
-
-
-# ── 감사 로그 (Audit Log) ────────────────────────────────────────
-def insert_audit_log(시리얼: str, 모델: str, 반: str,
-                     이전상태: str, 이후상태: str,
-                     작업자: str, 비고: str = "") -> bool:
-    """audit_log 테이블에 상태 변경 이력 기록"""
-    try:
-        sb = get_supabase()
-        sb.table("audit_log").insert({
-            "시간":    get_now_kst_str(),
-            "시리얼":  시리얼,
-            "모델":    모델,
-            "반":      반,
-            "이전상태": 이전상태,
-            "이후상태": 이후상태,
-            "작업자":  작업자,
-            "비고":    비고,
-        }).execute()
-        return True
-    except Exception:
-        return False  # 로그 실패는 무시 (주요 흐름 방해 안 함)
-
-
-# ── 생산 계획 변경 로그 ──────────────────────────────────────────
-def insert_plan_change_log(반: str, 월: str, 이전수량: int, 변경수량: int,
-                            변경사유: str, 사유상세: str, 작업자: str) -> bool:
-    """plan_change_log 테이블에 계획 변경 이력 기록"""
-    try:
-        sb = get_supabase()
-        sb.table("plan_change_log").insert({
-            "시간":     get_now_kst_str(),
-            "반":       반,
-            "월":       월,
-            "이전수량": 이전수량,
-            "변경수량": 변경수량,
-            "증감":     변경수량 - 이전수량,
-            "변경사유": 변경사유,
-            "사유상세": 사유상세,
-            "작업자":   작업자,
-        }).execute()
-        return True
-    except Exception:
-        return False
-
-@st.cache_data(ttl=60)
-def load_plan_change_log(limit: int = DEFAULT_PAGE_SIZE) -> pd.DataFrame:
-    """plan_change_log 최근 N건 조회"""
-    try:
-        sb  = get_supabase()
-        res = sb.table("plan_change_log").select("*").order("시간", desc=True).limit(limit).execute()
-        if res.data:
-            return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
-        return pd.DataFrame(columns=['시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
-    except Exception:
-        return pd.DataFrame(columns=['시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
-
-
-# ── 자재 시리얼 관리 ─────────────────────────────────────────────
-def insert_material_serials(메인시리얼: str, 모델: str, 반: str,
-                             자재목록: list, 작업자: str) -> bool:
-    """material_serial 테이블에 자재 S/N 등록 (메인 1 : 자재 N)"""
-    try:
-        sb = get_supabase()
-        rows = [{
-            "시간":     get_now_kst_str(),
-            "메인시리얼": 메인시리얼,
-            "모델":     모델,
-            "반":       반,
-            "자재명":   m.get("자재명",""),
-            "자재시리얼": m.get("자재시리얼",""),
-            "작업자":   작업자,
-        } for m in 자재목록 if m.get("자재시리얼","").strip()]
-        if rows:
-            sb.table("material_serial").insert(rows).execute()
-        return True
-    except Exception as e:
-        st.error(f"자재 시리얼 등록 실패: {e}")
-        return False
-
-@st.cache_data(ttl=60)
-def load_material_serials(메인시리얼: str = "") -> pd.DataFrame:
-    """material_serial 조회. 메인시리얼 지정 시 해당 건만 반환"""
-    try:
-        sb  = get_supabase()
-        q   = sb.table("material_serial").select("*")
-        if 메인시리얼:
-            q = q.eq("메인시리얼", 메인시리얼)
-        res = q.order("시간", desc=False).execute()
-        if res.data:
-            return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
-        return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
-    except Exception:
-        return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
-
-@st.cache_data(ttl=60)
-def load_material_serials_bulk(serials: tuple) -> pd.DataFrame:
-    """여러 메인시리얼에 대한 자재 시리얼을 한 번에 조회 (N+1 방지)"""
-    if not serials:
-        return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
-    try:
-        sb  = get_supabase()
-        res = sb.table("material_serial").select("*").in_("메인시리얼", list(serials)).order("시간", desc=False).execute()
-        if res.data:
-            return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
-        return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
-    except Exception:
-        return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
-
-def search_material_by_sn(자재시리얼: str) -> pd.DataFrame:
-    """자재 S/N으로 메인 S/N 역추적"""
-    try:
-        sb  = get_supabase()
-        자재시리얼_cleaned = re.sub(r'[^\w가-힣-]', '', 자재시리얼) if 자재시리얼 else ""
-        # SQL Injection 방지: 입력값 검증
-        res = sb.table("material_serial").select("*").ilike("자재시리얼", f"%{자재시리얼_cleaned}%").execute()
-        if res.data:
-            return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
-        return pd.DataFrame()
-    except Exception:
-        return pd.DataFrame()
-
-def upload_img_to_drive(file_obj, serial_no: str) -> str:
-    try:
-        gcp_info  = st.secrets["connections"]["gsheets"]
-        creds     = service_account.Credentials.from_service_account_info(gcp_info)
-        drive_svc = build('drive', 'v3', credentials=creds)
-        folder_id = gcp_info.get("image_folder_id")
-        meta      = {'name': f"REPAIR_{serial_no}.jpg", 'parents': [folder_id]}
-        media     = MediaIoBaseUpload(file_obj, mimetype=file_obj.type)
-        uploaded  = drive_svc.files().create(body=meta, media_body=media, fields='id,webViewLink').execute()
-        return uploaded.get('webViewLink', "")
-    except Exception as e:
-        return "⚠️ 이미지 업로드에 실패했습니다. 관리자에게 문의하세요."
 
 # =================================================================
 # 4. 캘린더 다이얼로그
@@ -3692,7 +2875,27 @@ elif curr_l == "생산 현황 리포트":
 
         # ── 이력 테이블 ───────────────────────────────────────────────
         with st.expander("📋 전체 이력 테이블", expanded=False):
-            st.dataframe(df_rpt.sort_values('시간', ascending=False).reset_index(drop=True),
+            _RPT_PAGE_SIZE = 50
+            _rpt_sorted = df_rpt.sort_values('시간', ascending=False).reset_index(drop=True)
+            _rpt_total = len(_rpt_sorted)
+            _rpt_total_pages = max(1, (_rpt_total + _RPT_PAGE_SIZE - 1) // _RPT_PAGE_SIZE)
+            if "prod_rpt_page" not in st.session_state:
+                st.session_state["prod_rpt_page"] = 1
+            _pr_page = st.session_state["prod_rpt_page"]
+
+            _pr1, _pr2, _pr3 = st.columns([1, 2, 1])
+            if _pr1.button("◀ 이전", key="pr_prev", disabled=(_pr_page <= 1)):
+                st.session_state["prod_rpt_page"] -= 1; st.rerun()
+            _pr2.markdown(
+                f"<p style='text-align:center;font-size:0.82rem;color:#8a7f72;margin:6px 0;'>"
+                f"페이지 <b>{_pr_page}</b> / {_rpt_total_pages}　"
+                f"(전체 <b>{_rpt_total:,}</b>건, {_RPT_PAGE_SIZE}건/페이지)</p>",
+                unsafe_allow_html=True)
+            if _pr3.button("다음 ▶", key="pr_next", disabled=(_pr_page >= _rpt_total_pages)):
+                st.session_state["prod_rpt_page"] += 1; st.rerun()
+
+            _pr_start = (_pr_page - 1) * _RPT_PAGE_SIZE
+            st.dataframe(_rpt_sorted.iloc[_pr_start:_pr_start + _RPT_PAGE_SIZE],
                          use_container_width=True, hide_index=True)
     else:
         st.info("조회 가능한 데이터가 없습니다.")
@@ -5866,7 +5069,28 @@ elif curr_l == "수리 현황 리포트":
         with c_r:
             st.plotly_chart(px.pie(hist_df.groupby('모델').size().reset_index(name='수량'),
                 values='수량', names='모델', hole=0.4, title="모델별 불량 비중"), use_container_width=True)
-        st.dataframe(hist_df, use_container_width=True, hide_index=True)
+        # ── 이력 테이블 (페이지네이션) ─────────────────────────────
+        _HIST_PAGE_SIZE = 50
+        _hist_total = len(hist_df)
+        _hist_total_pages = max(1, (_hist_total + _HIST_PAGE_SIZE - 1) // _HIST_PAGE_SIZE)
+        if "repair_hist_page" not in st.session_state:
+            st.session_state["repair_hist_page"] = 1
+        _rh_page = st.session_state["repair_hist_page"]
+        _rh_start = (_rh_page - 1) * _HIST_PAGE_SIZE
+        hist_page_df = hist_df.iloc[_rh_start:_rh_start + _HIST_PAGE_SIZE]
+
+        _rh1, _rh2, _rh3 = st.columns([1, 2, 1])
+        if _rh1.button("◀ 이전", key="rh_prev", disabled=(_rh_page <= 1)):
+            st.session_state["repair_hist_page"] -= 1; st.rerun()
+        _rh2.markdown(
+            f"<p style='text-align:center;font-size:0.82rem;color:#8a7f72;margin:6px 0;'>"
+            f"페이지 <b>{_rh_page}</b> / {_hist_total_pages}　"
+            f"(전체 <b>{_hist_total:,}</b>건, {_HIST_PAGE_SIZE}건/페이지)</p>",
+            unsafe_allow_html=True)
+        if _rh3.button("다음 ▶", key="rh_next", disabled=(_rh_page >= _hist_total_pages)):
+            st.session_state["repair_hist_page"] += 1; st.rerun()
+
+        st.dataframe(hist_page_df, use_container_width=True, hide_index=True)
     else:
         st.info("기록된 이슈 내역이 없습니다.")
 
@@ -5901,22 +5125,48 @@ elif curr_l == "수리 현황 리포트":
             # 상태별 색상 (전역 STATUS_BG 재사용)
             STATE_CLR = STATUS_BG
 
+            # ── 페이지네이션 ──────────────────────────────────────────
+            _AUDIT_PAGE_SIZE = 50
+            _audit_total = len(audit_df)
+            _audit_total_pages = max(1, (_audit_total + _AUDIT_PAGE_SIZE - 1) // _AUDIT_PAGE_SIZE)
+            if "audit_page" not in st.session_state:
+                st.session_state["audit_page"] = 1
+            # 필터 변경 시 첫 페이지로 리셋
+            _audit_filter_key = f"{a_ban}|{a_state}|{a_sn.strip()}"
+            if st.session_state.get("_audit_filter_key") != _audit_filter_key:
+                st.session_state["audit_page"] = 1
+                st.session_state["_audit_filter_key"] = _audit_filter_key
+
+            _audit_page = st.session_state["audit_page"]
+            _audit_start = (_audit_page - 1) * _AUDIT_PAGE_SIZE
+            _audit_end   = _audit_start + _AUDIT_PAGE_SIZE
+            audit_page_df = audit_df.iloc[_audit_start:_audit_end]
+
+            # 페이지 네비게이션
+            _pn1, _pn2, _pn3 = st.columns([1, 2, 1])
+            if _pn1.button("◀ 이전", key="audit_prev", disabled=(_audit_page <= 1)):
+                st.session_state["audit_page"] -= 1; st.rerun()
+            _pn2.markdown(
+                f"<p style='text-align:center;font-size:0.82rem;color:#8a7f72;margin:6px 0;'>"
+                f"페이지 <b>{_audit_page}</b> / {_audit_total_pages}　"
+                f"(전체 <b>{_audit_total:,}</b>건, {_AUDIT_PAGE_SIZE}건/페이지)</p>",
+                unsafe_allow_html=True)
+            if _pn3.button("다음 ▶", key="audit_next", disabled=(_audit_page >= _audit_total_pages)):
+                st.session_state["audit_page"] += 1; st.rerun()
+
             # 테이블 헤더
             th = st.columns([1.8, 1.5, 2.2, 1.2, 1.5, 1.5, 1.2, 2.5])
             for col, txt in zip(th, ["시간", "시리얼", "모델", "반", "이전 상태", "이후 상태", "작업자", "비고"]):
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
 
-            # 성능: iterrows → to_dict('records')
-            for row in audit_df.to_dict('records'):
+            for row in audit_page_df.to_dict('records'):
                 tr = st.columns([1.8, 1.5, 2.2, 1.2, 1.5, 1.5, 1.2, 2.5])
                 tr[0].caption(str(row.get('시간',''))[:16])
                 tr[1].markdown(f"`{row.get('시리얼','')}`")
                 tr[2].write(row.get('모델',''))
                 tr[3].write(row.get('반',''))
-                # 이전 상태
                 prev_clr = STATE_CLR.get(row.get('이전상태',''), '#f5f2ec')
                 tr[4].markdown(f"<span style='background:{prev_clr};padding:1px 6px;border-radius:4px;font-size:0.75rem;'>{row.get('이전상태','')}</span>", unsafe_allow_html=True)
-                # 이후 상태
                 next_clr = STATE_CLR.get(row.get('이후상태',''), '#f5f2ec')
                 tr[5].markdown(f"<span style='background:{next_clr};padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:bold;'>{row.get('이후상태','')}</span>", unsafe_allow_html=True)
                 tr[6].caption(row.get('작업자',''))
