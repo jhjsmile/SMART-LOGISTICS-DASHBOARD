@@ -792,11 +792,14 @@ _TELEGRAM_CHAT_ID   = st.secrets.get("TELEGRAM_CHAT_ID", "")
 
 def _send_telegram(message: str) -> str:
     """텔레그램 메시지 전송. 성공 시 'ok', 실패 시 오류 문자열 반환."""
-    if not _TELEGRAM_BOT_TOKEN or not _TELEGRAM_CHAT_ID:
-        return "secrets 없음 (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 미설정)"
+    _token = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
+    _chat  = st.secrets.get("TELEGRAM_CHAT_ID", "")
+    if not _token or not _chat:
+        _keys = list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else '알 수 없음'
+        return f"secrets 없음 — 등록된 키 목록: {_keys}"
     try:
-        url = f"https://api.telegram.org/bot{_TELEGRAM_BOT_TOKEN}/sendMessage"
-        res = requests.post(url, json={"chat_id": _TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}, timeout=10)
+        url = f"https://api.telegram.org/bot{_token}/sendMessage"
+        res = requests.post(url, json={"chat_id": _chat, "text": message, "parse_mode": "HTML"}, timeout=10)
         if res.ok:
             return "ok"
         return f"HTTP {res.status_code}: {res.text}"
