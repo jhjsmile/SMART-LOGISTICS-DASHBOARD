@@ -2498,16 +2498,6 @@ elif curr_l == "조립 라인":
         _remain_days = 0
     _daily_required = round(_month_remain / _remain_days, 1) if _remain_days > 0 else _month_remain
 
-    # ── [DEBUG] 미래 스케줄 데이터 확인 (임시) ──────────────────────
-    with st.expander("🔍 [DEBUG] 미래 조립계획 스케줄 확인", expanded=True):
-        st.caption(f"기준: {_tomorrow_str} 이후 / 반: {curr_g} / 카테고리: 조립계획")
-        if not sch_all.empty and '_future_sch' in dir():
-            st.dataframe(_future_sch[['날짜','반','카테고리','모델명','조립수']].sort_values('날짜'), use_container_width=True, hide_index=True)
-            st.info(f"남은일수: {_remain_days}일 | 남은수량 합계: {_month_remain}개 | 일평균필요: {_daily_required}개/일")
-        else:
-            st.warning("미래 스케줄 데이터 없음")
-    # ── [DEBUG END] ──────────────────────────────────────────────────
-
     if _plan_qty > 0 or _monthly_plan > 0:
         # 오늘 달성 계산
         if _plan_qty > 0:
