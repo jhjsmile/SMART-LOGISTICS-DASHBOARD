@@ -910,6 +910,43 @@ def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
             st.warning(f"데이터 로드 실패: {e}")
         return pd.DataFrame(columns=_EMPTY_COLS)
 
+def submit_access_request(username: str, pw_hash: str, name: str,
+                           department: str, requested_role: str, reason: str) -> bool:
+    try:
+        get_supabase().table("access_requests").insert({
+            "username": username, "password_hash": pw_hash,
+            "name": name, "department": department,
+            "requested_role": requested_role, "reason": reason,
+            "status": "pending", "created_at": get_now_kst_str()
+        }).execute()
+        return True
+    except Exception:
+        return False
+
+@st.cache_data(ttl=30)
+def load_access_requests(status: str = "pending") -> pd.DataFrame:
+    try:
+        res = (get_supabase().table("access_requests")
+               .select("*").eq("status", status)
+               .order("created_at", desc=True).execute())
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+def _clear_access_request_cache():
+    load_access_requests.clear()
+
+def review_access_request(req_id: int, action: str,
+                           reviewed_by: str, reject_reason: str = "") -> bool:
+    try:
+        get_supabase().table("access_requests").update({
+            "status": action, "reviewed_by": reviewed_by,
+            "reviewed_at": get_now_kst_str(), "reject_reason": reject_reason
+        }).eq("id", req_id).execute()
+        return True
+    except Exception:
+        return False
+
 def insert_row(row: dict) -> bool:
     sn = row.get('시리얼', '')
     sb = get_supabase()
@@ -1876,59 +1913,100 @@ if not st.session_state.login_status:
     _, c_col, _ = st.columns([1, 1.2, 1])
     with c_col:
         st.markdown("<h2 class='centered-title'>🔐 생산 통합 관리 시스템</h2>", unsafe_allow_html=True)
-        with st.form("gate_login"):
-            in_id = st.text_input("아이디(ID)")
-            in_pw = st.text_input("비밀번호(PW)", type="password")
-            if st.form_submit_button("인증 시작", use_container_width=True):
-                # ── 로그인 시도 제한 (Brute-force 방어) ──
-                _now_ts = datetime.now(KST).timestamp()
-                _attempt_key = f"login_attempts_{in_id}"
-                _lockout_key = f"login_lockout_{in_id}"
-                _lockout_until = st.session_state.get(_lockout_key, 0)
-                if _now_ts < _lockout_until:
-                    _remain = int(_lockout_until - _now_ts)
-                    st.error(f"⛔ 로그인 잠금 중입니다. {_remain}초 후 다시 시도하세요.")
-                    st.stop()
-                user_info = st.session_state.user_db.get(in_id)
-                if user_info and verify_pw(in_pw, user_info["pw_hash"]):
-                    # 로그인 성공 → 시도 카운터 초기화
-                    st.session_state[_attempt_key] = 0
-                    # bcrypt 설치 후 최초 로그인 시 SHA-256 → bcrypt 자동 업그레이드
-                    if _BCRYPT_AVAILABLE and not user_info["pw_hash"].startswith("$2"):
-                        new_hash = hash_pw(in_pw)
-                        st.session_state.user_db[in_id]["pw_hash"] = new_hash
-                        try:
-                            get_supabase().table("users").update(
-                                {"password_hash": new_hash}
-                            ).eq("username", in_id).execute()
-                        except Exception:
-                            pass  # 업그레이드 실패해도 로그인은 허용
-                    # 역할 유효성 검사 (허용되지 않은 role이면 로그인 차단)
-                    _role = user_info.get("role", "")
-                    if _role not in ROLES:
-                        st.error(f"❌ 허용되지 않은 계정 권한입니다. (role={_role})")
+        login_tab, req_tab = st.tabs(["🔑 로그인", "📝 계정 신청"])
+
+        with login_tab:
+            with st.form("gate_login"):
+                in_id = st.text_input("아이디(ID)")
+                in_pw = st.text_input("비밀번호(PW)", type="password")
+                if st.form_submit_button("인증 시작", use_container_width=True):
+                    # ── 로그인 시도 제한 (Brute-force 방어) ──
+                    _now_ts = datetime.now(KST).timestamp()
+                    _attempt_key = f"login_attempts_{in_id}"
+                    _lockout_key = f"login_lockout_{in_id}"
+                    _lockout_until = st.session_state.get(_lockout_key, 0)
+                    if _now_ts < _lockout_until:
+                        _remain = int(_lockout_until - _now_ts)
+                        st.error(f"⛔ 로그인 잠금 중입니다. {_remain}초 후 다시 시도하세요.")
                         st.stop()
-                    st.session_state.user_id       = in_id
-                    st.session_state.user_role     = _role
-                    # ✨ 커스텀 권한 적용 (nav 접근 목록 + 읽기/쓰기/수정 레벨)
-                    _raw_perms = user_info.get("custom_permissions", None)
-                    _pages, _levels = _parse_custom_perms(_raw_perms)
-                    st.session_state.user_custom_permissions = _pages   # None = 역할 기본값 사용
-                    st.session_state.user_permission_levels  = _levels
-                    # 데이터 로드 전에 login_status를 False로 유지 → 로드 중 st.warning() 억제
-                    st.session_state.production_db = load_realtime_ledger()
-                    st.session_state.schedule_db   = load_schedule()
-                    st.session_state.login_status  = True
-                    st.rerun()
-                else:
-                    _attempts = st.session_state.get(_attempt_key, 0) + 1
-                    st.session_state[_attempt_key] = _attempts
-                    _remain_attempts = MAX_LOGIN_ATTEMPTS - _attempts
-                    if _attempts >= MAX_LOGIN_ATTEMPTS:
-                        st.session_state[_lockout_key] = _now_ts + LOGIN_LOCKOUT_SECONDS
-                        st.error(f"⛔ 로그인 {MAX_LOGIN_ATTEMPTS}회 실패로 {LOGIN_LOCKOUT_SECONDS//60}분 동안 잠금됩니다.")
+                    user_info = st.session_state.user_db.get(in_id)
+                    if user_info and verify_pw(in_pw, user_info["pw_hash"]):
+                        # 로그인 성공 → 시도 카운터 초기화
+                        st.session_state[_attempt_key] = 0
+                        # bcrypt 설치 후 최초 로그인 시 SHA-256 → bcrypt 자동 업그레이드
+                        if _BCRYPT_AVAILABLE and not user_info["pw_hash"].startswith("$2"):
+                            new_hash = hash_pw(in_pw)
+                            st.session_state.user_db[in_id]["pw_hash"] = new_hash
+                            try:
+                                get_supabase().table("users").update(
+                                    {"password_hash": new_hash}
+                                ).eq("username", in_id).execute()
+                            except Exception:
+                                pass  # 업그레이드 실패해도 로그인은 허용
+                        # 역할 유효성 검사 (허용되지 않은 role이면 로그인 차단)
+                        _role = user_info.get("role", "")
+                        if _role not in ROLES:
+                            st.error(f"❌ 허용되지 않은 계정 권한입니다. (role={_role})")
+                            st.stop()
+                        st.session_state.user_id       = in_id
+                        st.session_state.user_role     = _role
+                        # ✨ 커스텀 권한 적용 (nav 접근 목록 + 읽기/쓰기/수정 레벨)
+                        _raw_perms = user_info.get("custom_permissions", None)
+                        _pages, _levels = _parse_custom_perms(_raw_perms)
+                        st.session_state.user_custom_permissions = _pages   # None = 역할 기본값 사용
+                        st.session_state.user_permission_levels  = _levels
+                        # 데이터 로드 전에 login_status를 False로 유지 → 로드 중 st.warning() 억제
+                        st.session_state.production_db = load_realtime_ledger()
+                        st.session_state.schedule_db   = load_schedule()
+                        st.session_state.login_status  = True
+                        st.rerun()
                     else:
-                        st.error(f"로그인 정보가 올바르지 않습니다. (남은 시도: {_remain_attempts}회)")
+                        _attempts = st.session_state.get(_attempt_key, 0) + 1
+                        st.session_state[_attempt_key] = _attempts
+                        _remain_attempts = MAX_LOGIN_ATTEMPTS - _attempts
+                        if _attempts >= MAX_LOGIN_ATTEMPTS:
+                            st.session_state[_lockout_key] = _now_ts + LOGIN_LOCKOUT_SECONDS
+                            st.error(f"⛔ 로그인 {MAX_LOGIN_ATTEMPTS}회 실패로 {LOGIN_LOCKOUT_SECONDS//60}분 동안 잠금됩니다.")
+                        else:
+                            st.error(f"로그인 정보가 올바르지 않습니다. (남은 시도: {_remain_attempts}회)")
+
+        with req_tab:
+            st.caption("계정이 없으시면 아래 양식을 작성해 주세요. 관리자 승인 후 로그인 가능합니다.")
+            _REQ_ROLES = {
+                "assembly_team":    "🔧 조립 담당자",
+                "qc_team":          "🔍 검사 담당자",
+                "oqc_team":         "🏅 OQC 품질팀",
+                "packing_team":     "📦 포장 담당자",
+                "schedule_manager": "📅 일정 관리자",
+                "control_tower":    "🗼 컨트롤 타워",
+            }
+            with st.form("access_request_form"):
+                rq_name  = st.text_input("이름 *", placeholder="홍길동")
+                rq_id    = st.text_input("사용할 아이디 *", placeholder="영문/숫자 조합")
+                rq_pw    = st.text_input("비밀번호 *", type="password")
+                rq_pw2   = st.text_input("비밀번호 확인 *", type="password")
+                rq_dept  = st.selectbox("소속 반", ["전체/공통"] + PRODUCTION_GROUPS)
+                rq_role  = st.selectbox("요청 권한",
+                                        list(_REQ_ROLES.keys()),
+                                        format_func=lambda k: _REQ_ROLES[k])
+                rq_reason = st.text_area("신청 사유 *", placeholder="업무 내용 및 접근이 필요한 이유를 입력해 주세요.", height=80)
+                if st.form_submit_button("📨 신청 제출", use_container_width=True, type="primary"):
+                    if not all([rq_name.strip(), rq_id.strip(), rq_pw, rq_reason.strip()]):
+                        st.error("이름·아이디·비밀번호·신청 사유는 필수 입력 항목입니다.")
+                    elif rq_pw != rq_pw2:
+                        st.error("비밀번호가 일치하지 않습니다.")
+                    elif rq_id.strip() in st.session_state.user_db:
+                        st.error("이미 사용 중인 아이디입니다. 다른 아이디를 입력해 주세요.")
+                    else:
+                        _ok = submit_access_request(
+                            username=rq_id.strip(), pw_hash=hash_pw(rq_pw),
+                            name=rq_name.strip(), department=rq_dept,
+                            requested_role=rq_role, reason=rq_reason.strip()
+                        )
+                        if _ok:
+                            st.success("✅ 신청이 완료됐습니다. 관리자 승인 후 로그인 가능합니다.")
+                        else:
+                            st.error("신청 중 오류가 발생했습니다. 관리자에게 문의해 주세요.")
     st.stop()
 
 # =================================================================
@@ -5716,6 +5794,93 @@ elif curr_l == "마스터 관리":
                             st.info("등록된 모델이 없습니다.")
 
         st.divider()
+
+        # ── 계정 신청 관리 ─────────────────────────────────────────
+        _pending_reqs = load_access_requests(status="pending")
+        _pending_cnt  = len(_pending_reqs)
+        _req_label    = f"📬 계정 신청 관리 ({_pending_cnt}건 대기 중)" if _pending_cnt > 0 else "📬 계정 신청 관리"
+        with st.expander(_req_label, expanded=(_pending_cnt > 0)):
+            _req_tabs = st.tabs(["⏳ 대기 중", "✅ 승인됨", "❌ 반려됨"])
+
+            def _render_requests(req_df: pd.DataFrame, tab_status: str):
+                if req_df.empty:
+                    st.info("해당 내역이 없습니다.")
+                    return
+                _REQ_ROLE_LBL = {
+                    "assembly_team": "🔧 조립 담당자", "qc_team": "🔍 검사 담당자",
+                    "oqc_team": "🏅 OQC 품질팀",    "packing_team": "📦 포장 담당자",
+                    "schedule_manager": "📅 일정 관리자", "control_tower": "🗼 컨트롤 타워",
+                    "admin": "👤 관리자",             "master": "👤 마스터 관리자",
+                }
+                for _, rq in req_df.iterrows():
+                    with st.container():
+                        rc1, rc2, rc3 = st.columns([3, 2, 2])
+                        rc1.markdown(
+                            f"**{rq.get('name','')}** (`{rq.get('username','')}`)"
+                            f"  \n소속: {rq.get('department','')} · "
+                            f"요청 권한: {_REQ_ROLE_LBL.get(rq.get('requested_role',''), rq.get('requested_role',''))}"
+                        )
+                        rc2.caption(f"신청일: {str(rq.get('created_at',''))[:16]}")
+                        rc2.caption(f"사유: {rq.get('reason','')}")
+                        if tab_status == "pending":
+                            _rq_id = rq.get('id') or rq.get('ID')
+                            with rc3:
+                                ap_col, rj_col = st.columns(2)
+                                if ap_col.button("✅ 승인", key=f"req_approve_{_rq_id}",
+                                                 use_container_width=True, type="primary"):
+                                    # 사용자 계정 생성
+                                    _nu = rq.get('username','')
+                                    _nh = rq.get('password_hash','')
+                                    _nr = rq.get('requested_role','assembly_team')
+                                    st.session_state.user_db[_nu] = {"pw_hash": _nh, "role": _nr}
+                                    try:
+                                        get_supabase().table("users").upsert(
+                                            {"username": _nu, "password_hash": _nh, "role": _nr},
+                                            on_conflict="username"
+                                        ).execute()
+                                    except Exception:
+                                        pass
+                                    review_access_request(
+                                        int(_rq_id), "approved",
+                                        st.session_state.user_id
+                                    )
+                                    _clear_access_request_cache()
+                                    st.toast(f"✅ [{_nu}] 계정 승인 완료")
+                                    st.rerun()
+                                _rj_reason_key = f"rj_reason_{_rq_id}"
+                                if rj_col.button("❌ 반려", key=f"req_reject_{_rq_id}",
+                                                 use_container_width=True):
+                                    st.session_state[_rj_reason_key] = True
+                                    st.rerun()
+                                if st.session_state.get(_rj_reason_key):
+                                    _rj_txt = st.text_input("반려 사유", key=f"rj_txt_{_rq_id}")
+                                    if st.button("반려 확인", key=f"rj_confirm_{_rq_id}",
+                                                 use_container_width=True):
+                                        review_access_request(
+                                            int(_rq_id), "rejected",
+                                            st.session_state.user_id, _rj_txt
+                                        )
+                                        st.session_state[_rj_reason_key] = False
+                                        _clear_access_request_cache()
+                                        st.toast(f"반려 처리됐습니다.")
+                                        st.rerun()
+                        elif tab_status == "approved":
+                            rc3.success(f"승인자: {rq.get('reviewed_by','')}")
+                            rc3.caption(str(rq.get('reviewed_at',''))[:16])
+                        else:
+                            rc3.error(f"반려자: {rq.get('reviewed_by','')}")
+                            rc3.caption(f"사유: {rq.get('reject_reason','')}")
+                        st.markdown("<hr style='margin:4px 0; border-color:#e8e2d8;'>", unsafe_allow_html=True)
+
+            with _req_tabs[0]:
+                _render_requests(_pending_reqs, "pending")
+                if st.button("🔄 새로고침", key="req_refresh_pending"):
+                    _clear_access_request_cache(); st.rerun()
+            with _req_tabs[1]:
+                _render_requests(load_access_requests(status="approved"), "approved")
+            with _req_tabs[2]:
+                _render_requests(load_access_requests(status="rejected"), "rejected")
+
         st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin:16px 0 10px 0;'>계정 및 데이터 관리</h4>", unsafe_allow_html=True)
         ac1, ac2 = st.columns(2)
 
