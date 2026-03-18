@@ -1131,6 +1131,17 @@ def delete_material_serial_row(row_id) -> bool:
     except Exception as e:
         st.error(f"자재시리얼 행 삭제 실패: {e}"); return False
 
+def update_material_serial_sn(메인시리얼: str, 구자재시리얼: str, 신자재시리얼: str) -> bool:
+    """material_serial 테이블에서 특정 자재 시리얼을 새 값으로 교체"""
+    try:
+        get_supabase().table("material_serial").update({
+            "자재시리얼": 신자재시리얼,
+            "시간": get_now_kst_str()
+        }).eq("메인시리얼", 메인시리얼).eq("자재시리얼", 구자재시리얼).execute()
+        return True
+    except Exception as e:
+        st.error(f"자재 시리얼 교체 실패: {e}"); return False
+
 def delete_all_production_schedule() -> bool:
     try:
         get_supabase().table("production_schedule").delete().gte("id", 0).execute()
@@ -5740,45 +5751,83 @@ elif curr_l == "불량 공정":
                         key=f"rep_{idx}"
                     )
 
+                    # 등록된 자재 시리얼 표시 (기존 시리얼란에 자재 S/N 입력 가능 안내)
+                    _def_mats = load_material_serials(row['시리얼'])
+                    if not _def_mats.empty:
+                        with st.expander(f"🔩 등록된 자재 시리얼 ({len(_def_mats)}개) — 자재 교체 시 기존 시리얼란에 입력", expanded=False):
+                            for _, _dm in _def_mats.iterrows():
+                                _dmc1, _dmc2 = st.columns([1, 1])
+                                _dmc1.caption(f"**{_dm.get('자재명', '')}**")
+                                _dmc2.caption(f"`{_dm.get('자재시리얼', '')}`")
+
                     _btn_col, _ = st.columns([1, 2])
                     if _btn_col.button("✅ 확정", key=f"b_{idx}", type="primary", use_container_width=True):
                         if v_c and v_a:
                             _target_sn = target_sn.strip() or row['시리얼']
                             _rep_sn = replace_sn.strip()
                             if _rep_sn:
-                                _fresh_db = load_realtime_ledger()
-                                _rep_exist = _fresh_db[_fresh_db['시리얼'] == _rep_sn]
-                                if not _rep_exist.empty:
-                                    st.warning(f"⚠️ 교체 시리얼이 이미 등록되어 있습니다: **{_rep_sn}**")
+                                # 기존 시리얼이 자재 시리얼인지 확인
+                                _def_mats_check = load_material_serials(row['시리얼'])
+                                _is_mat_sn = (
+                                    not _def_mats_check.empty and
+                                    _target_sn != row['시리얼'] and
+                                    _target_sn in _def_mats_check['자재시리얼'].values
+                                )
+                                if _is_mat_sn:
+                                    # 자재 시리얼 교체
+                                    _mat_info = _def_mats_check[_def_mats_check['자재시리얼'] == _target_sn].iloc[0]
+                                    _mat_name = _mat_info.get('자재명', '')
+                                    if update_material_serial_sn(row['시리얼'], _target_sn, _rep_sn):
+                                        load_material_serials.clear()
+                                        update_row(row['시리얼'], {
+                                            '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
+                                            '증상': v_c, '수리': f"자재교체({_mat_name}:{_target_sn}→{_rep_sn})"
+                                        })
+                                        insert_audit_log(
+                                            시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
+                                            이전상태="불량 처리 중", 이후상태="수리 완료(재투입)",
+                                            작업자=st.session_state.user_id,
+                                            비고=f"원인:{v_c} / 자재교체:{_mat_name} {_target_sn}→{_rep_sn}"
+                                        )
+                                        _clear_production_cache()
+                                        st.session_state.production_db = load_realtime_ledger()
+                                        st.toast(f"✅ 자재 시리얼 교체 완료: {_target_sn} → {_rep_sn}", icon="✅")
+                                        st.rerun()
                                 else:
-                                    update_row(_target_sn, {
-                                        '상태': "교체됨", '시간': get_now_kst_str(),
-                                        '증상': v_c, '수리': f"교체처리({_rep_sn})"
-                                    })
-                                    insert_audit_log(
-                                        시리얼=_target_sn, 모델=row['모델'], 반=row['반'],
-                                        이전상태="불량 처리 중", 이후상태="교체됨",
-                                        작업자=st.session_state.user_id,
-                                        비고=f"원인:{v_c} / 교체S/N:{_rep_sn}"
-                                    )
-                                    insert_row({
-                                        '시간': get_now_kst_str(), '반': row['반'],
-                                        '라인': row.get('라인', '조립 라인'),
-                                        '모델': row['모델'], '품목코드': row['품목코드'],
-                                        '시리얼': _rep_sn, '상태': '조립중',
-                                        '증상': f"교체투입(구S/N:{_target_sn})",
-                                        '수리': '', '작업자': st.session_state.user_id
-                                    })
-                                    insert_audit_log(
-                                        시리얼=_rep_sn, 모델=row['모델'], 반=row['반'],
-                                        이전상태="-", 이후상태="조립중",
-                                        작업자=st.session_state.user_id,
-                                        비고=f"교체투입 (구S/N:{_target_sn})"
-                                    )
-                                    _clear_production_cache()
-                                    st.session_state.production_db = load_realtime_ledger()
-                                    st.toast(f"✅ 교체 완료: {_target_sn} → {_rep_sn}", icon="✅")
-                                    st.rerun()
+                                    # 메인 시리얼 교체 (기존 로직)
+                                    _fresh_db = load_realtime_ledger()
+                                    _rep_exist = _fresh_db[_fresh_db['시리얼'] == _rep_sn]
+                                    if not _rep_exist.empty:
+                                        st.warning(f"⚠️ 교체 시리얼이 이미 등록되어 있습니다: **{_rep_sn}**")
+                                    else:
+                                        update_row(_target_sn, {
+                                            '상태': "교체됨", '시간': get_now_kst_str(),
+                                            '증상': v_c, '수리': f"교체처리({_rep_sn})"
+                                        })
+                                        insert_audit_log(
+                                            시리얼=_target_sn, 모델=row['모델'], 반=row['반'],
+                                            이전상태="불량 처리 중", 이후상태="교체됨",
+                                            작업자=st.session_state.user_id,
+                                            비고=f"원인:{v_c} / 교체S/N:{_rep_sn}"
+                                        )
+                                        insert_row({
+                                            '시간': get_now_kst_str(), '반': row['반'],
+                                            '라인': row.get('라인', '조립 라인'),
+                                            '모델': row['모델'], '품목코드': row['품목코드'],
+                                            '시리얼': _rep_sn, '상태': '조립중',
+                                            '증상': f"교체투입(구S/N:{_target_sn})",
+                                            '수리': '', '작업자': st.session_state.user_id
+                                        })
+                                        insert_audit_log(
+                                            시리얼=_rep_sn, 모델=row['모델'], 반=row['반'],
+                                            이전상태="-", 이후상태="조립중",
+                                            작업자=st.session_state.user_id,
+                                            비고=f"교체투입 (구S/N:{_target_sn})"
+                                        )
+                                        _clear_production_cache()
+                                        st.session_state.production_db = load_realtime_ledger()
+                                        st.toast(f"✅ 교체 완료: {_target_sn} → {_rep_sn}", icon="✅")
+                                        st.rerun()
                             else:
                                 update_row(row['시리얼'], {
                                     '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
