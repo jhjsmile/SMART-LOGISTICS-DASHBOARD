@@ -3344,24 +3344,6 @@ elif curr_l == "생산 현황 리포트":
 
         st.divider()
 
-        # ── 불량 현황 차트 ────────────────────────────────────────────
-        if not _rpt_defect.empty:
-            st.markdown("<div class='section-title'>🚫 불량/부적합 현황</div>", unsafe_allow_html=True)
-            cc5, cc6 = st.columns(2)
-            with cc5:
-                _ng_model = _rpt_defect.groupby('모델').size().reset_index(name='건수')
-                _fig_ng = px.bar(_ng_model, x='모델', y='건수', color='모델',
-                                 title="<b>모델별 불량 건수</b>", template="plotly_white")
-                _fig_ng.update_layout(showlegend=False, margin=dict(t=40, b=20))
-                st.plotly_chart(_fig_ng, use_container_width=True)
-            with cc6:
-                _ng_state = _rpt_defect.groupby('상태').size().reset_index(name='건수')
-                _fig_ngs = px.pie(_ng_state, values='건수', names='상태', hole=0.4,
-                                  title="<b>불량 유형 분포</b>")
-                _fig_ngs.update_layout(margin=dict(t=40, b=20))
-                st.plotly_chart(_fig_ngs, use_container_width=True)
-            st.divider()
-
         # ── 이력 테이블 ───────────────────────────────────────────────
         with st.expander("📋 전체 이력 테이블", expanded=False):
             st.dataframe(df_rpt.sort_values('시간', ascending=False).reset_index(drop=True),
