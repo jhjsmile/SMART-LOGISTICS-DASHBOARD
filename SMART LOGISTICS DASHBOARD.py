@@ -2510,30 +2510,32 @@ elif curr_l == "조립 라인":
         # 월간 프로그레스 바 색상
         _mbar_color = "#28a745" if _month_pct >= 100 else "#2471a3" if _month_pct >= 50 else "#ffc107"
 
-        # 월간 섹션 HTML
+        # 월간 섹션 HTML (들여쓰기 제거: 4칸+ 시작 시 markdown이 코드블록으로 처리하는 문제 방지)
         if _monthly_plan > 0:
-            _month_section = f"""
-            <div style='background:#f0f4ff;border-radius:10px;padding:14px 16px;margin-bottom:14px;'>
-                <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;'>
-                    <span style='color:#2471a3;font-size:0.95rem;font-weight:700;'>📅 {_month_str} 월간 계획 대비 현황</span>
-                    <span style='color:{_mbar_color};font-size:0.9rem;font-weight:700;'>{_month_pct}%</span>
-                </div>
-                <div style='display:flex;gap:16px;margin-bottom:8px;flex-wrap:wrap;'>
-                    <span style='font-size:0.85rem;color:#555;'>📦 계획 <b style='color:#1a1a2e;'>{_monthly_plan:,}개</b></span>
-                    <span style='font-size:0.85rem;color:#555;'>✅ 완료 <b style='color:#28a745;'>{_done_month:,}개</b></span>
-                    <span style='font-size:0.85rem;color:#555;'>🔲 남은수량 <b style='color:#e67e22;'>{_month_remain:,}개</b></span>
-                    <span style='font-size:0.85rem;color:#555;'>📆 남은일수 <b style='color:#2471a3;'>{_remain_days}일</b></span>
-                    <span style='font-size:0.85rem;color:#555;'>📊 일평균필요 <b style='color:#8e44ad;'>{_daily_required}개/일</b></span>
-                </div>
-                <div style='background:#d0dff5;border-radius:6px;height:10px;overflow:hidden;'>
-                    <div style='background:{_mbar_color};width:{min(_month_pct,100)}%;height:100%;border-radius:6px;'></div>
-                </div>
-            </div>"""
+            _month_section = (
+                f"<div style='background:#f0f4ff;border-radius:10px;padding:14px 16px;margin-bottom:14px;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;'>"
+                f"<span style='color:#2471a3;font-size:0.95rem;font-weight:700;'>📅 {_month_str} 월간 계획 대비 현황</span>"
+                f"<span style='color:{_mbar_color};font-size:0.9rem;font-weight:700;'>{_month_pct}%</span>"
+                f"</div>"
+                f"<div style='display:flex;gap:16px;margin-bottom:8px;flex-wrap:wrap;'>"
+                f"<span style='font-size:0.85rem;color:#555;'>📦 계획 <b style='color:#1a1a2e;'>{_monthly_plan:,}개</b></span>"
+                f"<span style='font-size:0.85rem;color:#555;'>✅ 완료 <b style='color:#28a745;'>{_done_month:,}개</b></span>"
+                f"<span style='font-size:0.85rem;color:#555;'>🔲 남은수량 <b style='color:#e67e22;'>{_month_remain:,}개</b></span>"
+                f"<span style='font-size:0.85rem;color:#555;'>📆 남은일수 <b style='color:#2471a3;'>{_remain_days}일</b></span>"
+                f"<span style='font-size:0.85rem;color:#555;'>📊 일평균필요 <b style='color:#8e44ad;'>{_daily_required}개/일</b></span>"
+                f"</div>"
+                f"<div style='background:#d0dff5;border-radius:6px;height:10px;overflow:hidden;'>"
+                f"<div style='background:{_mbar_color};width:{min(_month_pct,100)}%;height:100%;border-radius:6px;'></div>"
+                f"</div>"
+                f"</div>"
+            )
         else:
-            _month_section = f"""
-            <div style='background:#f8f9fa;border-radius:10px;padding:10px 16px;margin-bottom:14px;'>
-                <span style='color:#888;font-size:0.85rem;'>📅 {_month_str} 월간 계획 미등록 — 생산 계획 탭에서 등록하세요.</span>
-            </div>"""
+            _month_section = (
+                f"<div style='background:#f8f9fa;border-radius:10px;padding:10px 16px;margin-bottom:14px;'>"
+                f"<span style='color:#888;font-size:0.85rem;'>📅 {_month_str} 월간 계획 미등록 — 생산 계획 탭에서 등록하세요.</span>"
+                f"</div>"
+            )
 
         st.markdown(f"""
         <div style='background:#ffffff;border-radius:16px;padding:24px 28px;margin-bottom:16px;
