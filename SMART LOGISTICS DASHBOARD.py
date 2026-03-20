@@ -631,21 +631,38 @@ st.markdown("""
 (function() {
     var _busy = false;
     var _SEARCH_RE = /검색|S\/N|스캔|시리얼/;
-    document.addEventListener('input', function(e) {
-        if (_busy || !e.target || e.target.tagName !== 'INPUT') return;
-        var box = e.target.closest('[data-testid="stTextInput"]');
-        if (!box) return;
+
+    function isSearchInput(el) {
+        var box = el.closest('[data-testid="stTextInput"]');
+        if (!box) return false;
         var lbl = box.querySelector('label');
-        if (!lbl || !_SEARCH_RE.test(lbl.textContent)) return;
-        var val = e.target.value;
+        return lbl && _SEARCH_RE.test(lbl.textContent);
+    }
+
+    function cleanValue(el) {
+        var val = el.value;
         var cleaned = val.replace(/[^a-zA-Z0-9]/g, '');
         if (cleaned === val) return;
         _busy = true;
         var setter = Object.getOwnPropertyDescriptor(
             window.HTMLInputElement.prototype, 'value').set;
-        setter.call(e.target, cleaned);
-        e.target.dispatchEvent(new Event('input', {bubbles: true}));
+        setter.call(el, cleaned);
+        el.dispatchEvent(new Event('input', {bubbles: true}));
         _busy = false;
+    }
+
+    /* 일반 입력 (영문/숫자/특수문자) */
+    document.addEventListener('input', function(e) {
+        if (_busy || !e.target || e.target.tagName !== 'INPUT') return;
+        if (!isSearchInput(e.target)) return;
+        cleanValue(e.target);
+    }, true);
+
+    /* 한글 IME 조합 완료 시 */
+    document.addEventListener('compositionend', function(e) {
+        if (!e.target || e.target.tagName !== 'INPUT') return;
+        if (!isSearchInput(e.target)) return;
+        cleanValue(e.target);
     }, true);
 })();
 </script>
