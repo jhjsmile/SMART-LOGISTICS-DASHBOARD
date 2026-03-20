@@ -4879,9 +4879,9 @@ elif curr_l == "OQC 라인":
                     marker_color=CLR_MAP[col]))
             fig1.update_layout(
                 title="반별 OQC 결과", barmode='stack',
-                template='plotly_white', height=320,
-                margin=dict(t=40,b=110,l=10,r=10),
-                legend=dict(orientation='h', yanchor='top', y=-0.38,
+                template='plotly_white', height=380,
+                margin=dict(t=40,b=90,l=10,r=10),
+                legend=dict(orientation='h', yanchor='top', y=-0.28,
                             xanchor='center', x=0.5, font=dict(size=10))
             )
             st.plotly_chart(fig1, use_container_width=True)
