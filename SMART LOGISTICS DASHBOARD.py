@@ -3065,33 +3065,45 @@ elif curr_l == "생산 현황 리포트":
                     _df_trend['_kst'] = _parsed.dt.tz_convert('Asia/Seoul')
                 else:
                     _df_trend['_kst'] = _parsed
-                _df_trend['_hour'] = _df_trend['_kst'].dt.hour
-                _df_trend['_min']  = _df_trend['_kst'].dt.minute
-                _df_trend['_hhmm'] = _df_trend['_hour'] * 60 + _df_trend['_min']
-                # 근무시간 필터: 08:30(510분) ~ 17:30(1050분)
-                _work = _df_trend[
-                    _df_trend['_hhmm'].notna() &
-                    (_df_trend['_hhmm'] >= 510) &
-                    (_df_trend['_hhmm'] <= 1050)
+                _df_trend['_date'] = _df_trend['_kst'].dt.strftime('%Y-%m-%d')
+                _df_trend['_hhmm'] = _df_trend['_kst'].dt.hour * 60 + _df_trend['_kst'].dt.minute
+
+                # 오늘 날짜 기준으로 데이터 선택 → 없으면 가장 최근 근무일
+                _today_str = get_now_kst_str()[:10]
+                _today_data = _df_trend[_df_trend['_date'] == _today_str]
+                if _today_data.empty:
+                    # 오늘 데이터 없으면 가장 최근 날짜
+                    _latest_date = _df_trend['_date'].dropna().max()
+                    _today_data = _df_trend[_df_trend['_date'] == _latest_date]
+                    _chart_date = _latest_date
+                else:
+                    _chart_date = _today_str
+
+                # 근무시간 슬롯 필터: 08:30(510분) ~ 17:30(1050분)
+                _work = _today_data[
+                    _today_data['_hhmm'].notna() &
+                    (_today_data['_hhmm'] >= 510) &
+                    (_today_data['_hhmm'] <= 1050)
                 ].copy()
-                # 30분 단위 버킷
-                _work['시간대'] = _work['_kst'].dt.floor('30min').dt.strftime('%H:%M')
-                # 전체 근무 슬롯 (08:30~17:30, 30분 간격)
+
+                # 30분 단위 버킷 — 전체 근무 슬롯 고정 표시
                 _slots = pd.date_range('2000-01-01 08:30', '2000-01-01 17:30', freq='30min').strftime('%H:%M').tolist()
-                _hourly = _work.groupby('시간대').size().reset_index(name='수량')
+                if not _work.empty:
+                    _work['시간대'] = _work['_kst'].dt.floor('30min').dt.strftime('%H:%M')
+                    _hourly = _work.groupby('시간대').size().reset_index(name='수량')
+                else:
+                    _hourly = pd.DataFrame(columns=['시간대', '수량'])
                 _hourly = pd.DataFrame({'시간대': _slots}).merge(_hourly, on='시간대', how='left').fillna(0)
                 _hourly['수량'] = _hourly['수량'].astype(int)
-                if not _work.empty:
-                    _fig_tr = px.bar(_hourly, x='시간대', y='수량',
-                                     title="<b>근무시간대별 생산 투입 현황</b>", template="plotly_white",
-                                     text='수량')
-                    _fig_tr.update_traces(marker_color='#2471a3', textposition='outside', textfont_size=9)
-                    _fig_tr.update_xaxes(tickangle=-45)
-                    _fig_tr.update_yaxes(dtick=5)
-                    _fig_tr.update_layout(margin=dict(t=50, b=60))
-                    st.plotly_chart(_fig_tr, use_container_width=True)
-                else:
-                    st.info("근무시간대 데이터 없음")
+
+                _fig_tr = px.bar(_hourly, x='시간대', y='수량',
+                                 title=f"<b>근무시간대별 생산 투입 현황</b> ({_chart_date})",
+                                 template="plotly_white", text='수량')
+                _fig_tr.update_traces(marker_color='#2471a3', textposition='outside', textfont_size=9)
+                _fig_tr.update_xaxes(tickangle=-45)
+                _fig_tr.update_yaxes(dtick=5)
+                _fig_tr.update_layout(margin=dict(t=50, b=60))
+                st.plotly_chart(_fig_tr, use_container_width=True)
             except Exception:
                 st.info("추이 차트 데이터 처리 중 오류")
 
