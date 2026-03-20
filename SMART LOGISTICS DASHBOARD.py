@@ -3023,9 +3023,11 @@ elif curr_l == "생산 현황 리포트":
         with cc1:
             _st_cnt = df_rpt.groupby('상태').size().reset_index(name='수량').sort_values('수량', ascending=False)
             _fig_st = px.bar(_st_cnt, x='상태', y='수량', color='상태',
-                             title="<b>현재 상태별 제품 분포</b>", template="plotly_white")
-            _fig_st.update_layout(showlegend=False, margin=dict(t=40, b=20))
-            _fig_st.update_yaxes(dtick=1)
+                             title="<b>현재 상태별 제품 분포</b>", template="plotly_white",
+                             text='수량')
+            _fig_st.update_traces(textposition='outside', textfont_size=11)
+            _fig_st.update_layout(showlegend=False, margin=dict(t=50, b=20))
+            _fig_st.update_yaxes(dtick=5)
             st.plotly_chart(_fig_st, use_container_width=True)
         with cc2:
             _md_cnt = df_rpt.groupby('모델').size().reset_index(name='수량')
