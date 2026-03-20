@@ -2695,36 +2695,40 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 if hba2.button(f"✅ 일괄 {btn_lbl}", key=f"hist_bulk_ok_{curr_g}_{curr_l}",
                                type="primary", use_container_width=True,
                                disabled=not check_perm(f"{curr_l}::{curr_g}", "write")):
-                    _clear_production_cache()
                     _ok_s  = 'OQC대기' if curr_l == '검사 라인' else '완료'
                     _prv_s = '검사중'  if curr_l == '검사 라인' else '포장중'
+                    _bulk = []
                     for ci in _h_checked:
                         ci_int = int(ci)
                         if ci_int in f_df.index:
                             _r = f_df.loc[ci_int]
                             if _r['상태'] in ["검사중","포장중","수리 완료(재투입)"]:
-                                update_row(_r['시리얼'], {'상태':_ok_s,'시간':get_now_kst_str()})
+                                _upd = {'상태':_ok_s,'시간':get_now_kst_str()}
+                                update_row(_r['시리얼'], _upd)
                                 insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                     이전상태=_r['상태'], 이후상태=_ok_s, 작업자=st.session_state.user_id)
+                                _bulk.append({"sn": _r['시리얼'], "data": _upd})
                     st.session_state[_hck_key] = {}
                     st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
-                    st.session_state.production_db = load_realtime_ledger()
+                    _prod_bulk_update(_bulk)
                     st.rerun()
                 if hba3.button("🚫 일괄 불량", key=f"hist_bulk_ng_{curr_g}_{curr_l}",
                                use_container_width=True):
-                    _clear_production_cache()
+                    _bulk = []
                     for ci in _h_checked:
                         ci_int = int(ci)
                         if ci_int in f_df.index:
                             _r = f_df.loc[ci_int]
                             if _r['상태'] in ["검사중","포장중","수리 완료(재투입)"]:
-                                update_row(_r['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                    '증상': f'불량입고출처: {curr_l}'})
+                                _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
+                                    '증상': f'불량입고출처: {curr_l}'}
+                                update_row(_r['시리얼'], _upd)
                                 insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                     이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
+                                _bulk.append({"sn": _r['시리얼'], "data": _upd})
                     st.session_state[_hck_key] = {}
                     st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
-                    st.session_state.production_db = load_realtime_ledger()
+                    _prod_bulk_update(_bulk)
                     st.rerun()
                 if hba4.button("☐", key=f"hist_unck_{curr_g}_{curr_l}",
                                use_container_width=True, help="선택 해제"):
@@ -2766,25 +2770,25 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         btn_lbl = "검사 합격" if curr_l == "검사 라인" else "포장 완료"
                         c1, c2 = st.columns(2)
                         if c1.button("✅", key=f"ok_{idx}", use_container_width=True, help=btn_lbl):
-                            _clear_production_cache()
                             _ok_s  = 'OQC대기' if curr_l == '검사 라인' else '완료'
                             _prv_s = '검사중'  if curr_l == '검사 라인' else '포장중'
-                            update_row(row['시리얼'], {'상태':_ok_s,'시간':get_now_kst_str()})
+                            _upd = {'상태':_ok_s,'시간':get_now_kst_str()}
+                            update_row(row['시리얼'], _upd)
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태=_ok_s, 작업자=st.session_state.user_id)
                             st.session_state[_hck_key].pop(str(idx), None)
                             st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
-                            st.session_state.production_db = load_realtime_ledger()
+                            _prod_update(row['시리얼'], _upd)
                             st.rerun()
                         if c2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량"):
-                            _clear_production_cache()                          # ← 캐시 초기화 (누락 버그 수정)
-                            update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                '증상': f'불량입고출처: {curr_l}'})
+                            _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
+                                '증상': f'불량입고출처: {curr_l}'}
+                            update_row(row['시리얼'], _upd)
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
                             st.session_state[_hck_key].pop(str(idx), None)
                             st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
-                            st.session_state.production_db = load_realtime_ledger()
+                            _prod_update(row['시리얼'], _upd)
                             st.rerun()
                     else:
                         s2 = row['상태']
@@ -3058,12 +3062,12 @@ elif curr_l == "검사 라인":
             rr[1].write(row.get('모델', ''))
             rr[2].markdown(f"`{row.get('시리얼', '')}`")
             if rr[3].button("▶ 검사 시작", key=f"qc_in_{idx}", use_container_width=True, type="primary"):
-                _clear_production_cache()
-                update_row(row['시리얼'], {'상태': '검사중', '시간': get_now_kst_str(),
-                    '라인': '검사 라인', '작업자': st.session_state.user_id})
+                _upd = {'상태': '검사중', '시간': get_now_kst_str(),
+                    '라인': '검사 라인', '작업자': st.session_state.user_id}
+                update_row(row['시리얼'], _upd)
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                     이전상태='검사대기', 이후상태='검사중', 작업자=st.session_state.user_id)
-                st.session_state.production_db = load_realtime_ledger()
+                _prod_update(row['시리얼'], _upd)
                 st.rerun()
     else:
         st.info("검사 대기 중인 제품이 없습니다.")
@@ -3100,22 +3104,22 @@ elif curr_l == "검사 라인":
                     btn_ng   = st.button("🚫 불량 처리",       key=f"qc_ng_{idx}",  use_container_width=True)
 
                 if btn_pass:
-                    _clear_production_cache()
-                    update_row(row['시리얼'], {'상태': 'OQC대기', '시간': get_now_kst_str()})
+                    _upd = {'상태': 'OQC대기', '시간': get_now_kst_str()}
+                    update_row(row['시리얼'], _upd)
                     insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                         이전상태='검사중', 이후상태='OQC대기', 작업자=st.session_state.user_id)
-                    st.session_state.production_db = load_realtime_ledger()
+                    _prod_update(row['시리얼'], _upd)
                     st.rerun()
                 if btn_ng:
                     if not cause_txt:
                         st.warning("⚠️ 불량 원인을 먼저 선택해주세요.")
                     else:
-                        _clear_production_cache()
-                        update_row(row['시리얼'], {'상태': '불량 처리 중', '시간': get_now_kst_str(), '증상': cause_txt})
+                        _upd = {'상태': '불량 처리 중', '시간': get_now_kst_str(), '증상': cause_txt}
+                        update_row(row['시리얼'], _upd)
                         insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                             이전상태='검사중', 이후상태='불량 처리 중',
                             작업자=st.session_state.user_id, 비고=f"원인:{cause_txt}")
-                        st.session_state.production_db = load_realtime_ledger()
+                        _prod_update(row['시리얼'], _upd)
                         st.rerun()
     else:
         st.info("검사 진행 중인 제품이 없습니다.")
@@ -3165,12 +3169,12 @@ elif curr_l == "포장 라인":
             rr[1].write(row.get('모델', ''))
             rr[2].markdown(f"`{row.get('시리얼', '')}`")
             if rr[3].button("▶ 포장 시작", key=f"pk_in_{idx}", use_container_width=True, type="primary"):
-                _clear_production_cache()
-                update_row(row['시리얼'], {'상태': '포장중', '시간': get_now_kst_str(),
-                    '라인': '포장 라인', '작업자': st.session_state.user_id})
+                _upd = {'상태': '포장중', '시간': get_now_kst_str(),
+                    '라인': '포장 라인', '작업자': st.session_state.user_id}
+                update_row(row['시리얼'], _upd)
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                     이전상태='출하승인', 이후상태='포장중', 작업자=st.session_state.user_id)
-                st.session_state.production_db = load_realtime_ledger()
+                _prod_update(row['시리얼'], _upd)
                 st.rerun()
     else:
         st.info("포장 대기 중인 제품이 없습니다.")
@@ -3192,11 +3196,11 @@ elif curr_l == "포장 라인":
             rr[1].write(row.get('모델', ''))
             rr[2].markdown(f"`{row.get('시리얼', '')}`")
             if rr[3].button("✔ 포장 완료", key=f"pk_done_{idx}", use_container_width=True, type="primary"):
-                _clear_production_cache()
-                update_row(row['시리얼'], {'상태': '완료', '시간': get_now_kst_str()})
+                _upd = {'상태': '완료', '시간': get_now_kst_str()}
+                update_row(row['시리얼'], _upd)
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                     이전상태='포장중', 이후상태='완료', 작업자=st.session_state.user_id)
-                st.session_state.production_db = load_realtime_ledger()
+                _prod_update(row['시리얼'], _upd)
                 st.rerun()
     else:
         st.info("포장 진행 중인 제품이 없습니다.")
@@ -4378,17 +4382,19 @@ elif curr_l == "OQC 라인":
             oib1.markdown(f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(_oqc_in_checked)}개 선택됨</span>",
                           unsafe_allow_html=True)
             if oib2.button("▶ 일괄 OQC 시작", key="oqc_bulk_in", type="primary", use_container_width=True):
-                _clear_production_cache()
+                _bulk = []
                 for _oi in _oqc_in_checked:
                     _oi_int = int(_oi)
                     if _oi_int in packing_done.index:
                         _orow = packing_done.loc[_oi_int]
-                        update_row(_orow['시리얼'], {'상태': 'OQC중', '시간': get_now_kst_str(), '라인': 'OQC 라인'})
+                        _upd = {'상태': 'OQC중', '시간': get_now_kst_str(), '라인': 'OQC 라인'}
+                        update_row(_orow['시리얼'], _upd)
                         insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
                             이전상태='OQC대기', 이후상태='OQC중', 작업자=st.session_state.user_id)
+                        _bulk.append({"sn": _orow['시리얼'], "data": _upd})
                 st.session_state[_oqc_in_ck_key] = {}
                 st.session_state[_oqc_in_sc_cnt] += 1  # 체크박스 키 리셋
-                st.session_state.production_db = load_realtime_ledger()
+                _prod_bulk_update(_bulk)
                 st.rerun()
             if oib3.button("☐ 해제", key="oqc_in_unck", use_container_width=True):
                 st.session_state[_oqc_in_ck_key] = {}
@@ -4410,12 +4416,12 @@ elif curr_l == "OQC 라인":
             rr[3].write(row.get('반',''))
             rr[4].markdown(f"`{row.get('시리얼','')}`")
             if rr[5].button("▶ OQC 시작", key=f"oqc_in_{idx}", use_container_width=True, type="primary"):
-                _clear_production_cache()
-                update_row(row['시리얼'], {'상태': 'OQC중', '시간': get_now_kst_str(), '라인': 'OQC 라인'})
+                _upd = {'상태': 'OQC중', '시간': get_now_kst_str(), '라인': 'OQC 라인'}
+                update_row(row['시리얼'], _upd)
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                     이전상태='OQC대기', 이후상태='OQC중', 작업자=st.session_state.user_id)
                 st.session_state[_oqc_in_ck_key].pop(str(idx), None)
-                st.session_state.production_db = load_realtime_ledger()
+                _prod_update(row['시리얼'], _upd)
                 st.rerun()
     else:
         st.info("OQC 대기 중인 제품이 없습니다.")
@@ -4459,18 +4465,20 @@ elif curr_l == "OQC 라인":
                          unsafe_allow_html=True)
             if ob2.button("✅ 일괄 합격", key="oqc_bulk_ok", type="primary", use_container_width=True,
                           disabled=not check_perm("OQC 라인", "write")):
-                _clear_production_cache()
+                _bulk = []
                 for _oi in _oqc_checked:
                     _oi_int = int(_oi)
                     if _oi_int in oqc_wait_list.index:
                         _orow = oqc_wait_list.loc[_oi_int]
-                        update_row(_orow['시리얼'], {'상태': '출하승인', '시간': get_now_kst_str(),
-                                                     '증상': 'OQC합격', '수리': 'OQC합격'})
+                        _upd = {'상태': '출하승인', '시간': get_now_kst_str(),
+                                '증상': 'OQC합격', '수리': 'OQC합격'}
+                        update_row(_orow['시리얼'], _upd)
                         insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
                             이전상태='OQC중', 이후상태='출하승인', 작업자=st.session_state.user_id)
+                        _bulk.append({"sn": _orow['시리얼'], "data": _upd})
                 st.session_state[_oqc_ck_key] = {}
                 st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
-                st.session_state.production_db = load_realtime_ledger()
+                _prod_bulk_update(_bulk)
                 st.rerun()
             _bulk_defect = ob3.selectbox("부적합 사유", OQC_DEFECT_REASONS,
                                          key="oqc_bulk_defect", label_visibility="collapsed")
@@ -4480,23 +4488,25 @@ elif curr_l == "OQC 라인":
                 if not _dflt:
                     st.warning("⚠️ 부적합 사유를 먼저 선택해주세요.")
                 else:
-                    _clear_production_cache()
+                    _bulk = []
                     for _oi in _oqc_checked:
                         _oi_int = int(_oi)
                         if _oi_int in oqc_wait_list.index:
                             _orow = oqc_wait_list.loc[_oi_int]
-                            update_row(_orow['시리얼'], {
+                            _upd = {
                                 '상태': '불량 처리 중',
                                 '시간': get_now_kst_str(),
                                 '증상': f"불량입고출처: OQC 라인 (부적합사유: {_dflt})",
                                 '수리': f"OQC 부적합 판정 - 사유: {_dflt}"
-                            })
+                            }
+                            update_row(_orow['시리얼'], _upd)
                             insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
                                 이전상태='OQC중', 이후상태='불량 처리 중',
                                 작업자=st.session_state.user_id, 비고=f"OQC 부적합 - 사유: {_dflt}")
+                            _bulk.append({"sn": _orow['시리얼'], "data": _upd})
                     st.session_state[_oqc_ck_key] = {}
                     st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
-                    st.session_state.production_db = load_realtime_ledger()
+                    _prod_bulk_update(_bulk)
                     st.rerun()
 
         st.markdown("<hr style='margin:8px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
@@ -4537,32 +4547,32 @@ elif curr_l == "OQC 라인":
                     btn2 = st.button("🚫 부적합", key=f"oqc_ng_{idx}",
                                      use_container_width=True)
                 if btn1:
-                    _clear_production_cache()
-                    update_row(row['시리얼'], {'상태': '출하승인', '시간': get_now_kst_str(),
-                                               '증상': 'OQC합격', '수리': 'OQC합격'})
+                    _upd = {'상태': '출하승인', '시간': get_now_kst_str(),
+                            '증상': 'OQC합격', '수리': 'OQC합격'}
+                    update_row(row['시리얼'], _upd)
                     insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                         이전상태='OQC중', 이후상태='출하승인', 작업자=st.session_state.user_id)
                     st.session_state[_oqc_ck_key].pop(str(idx), None)
                     st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
-                    st.session_state.production_db = load_realtime_ledger()
+                    _prod_update(row['시리얼'], _upd)
                     st.rerun()
                 if btn2:
                     if not defect_txt:
                         st.warning("⚠️ 부적합 사유를 먼저 선택해주세요.")
                     else:
-                        _clear_production_cache()
-                        update_row(row['시리얼'], {
+                        _upd = {
                             '상태': '불량 처리 중',
                             '시간': get_now_kst_str(),
                             '증상': f"불량입고출처: OQC 라인 (부적합사유: {defect_txt})",
                             '수리': f"OQC 부적합 판정 - 사유: {defect_txt}"
-                        })
+                        }
+                        update_row(row['시리얼'], _upd)
                         insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                             이전상태='OQC중', 이후상태='불량 처리 중',
                             작업자=st.session_state.user_id, 비고=f"OQC 부적합 - 사유: {defect_txt}")
                         st.session_state[_oqc_ck_key].pop(str(idx), None)
                         st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
-                        st.session_state.production_db = load_realtime_ledger()
+                        _prod_update(row['시리얼'], _upd)
                         st.rerun()
 
                 # ── 자재 시리얼 인라인 표시 ──
@@ -4622,17 +4632,17 @@ elif curr_l == "OQC 라인":
                     if rr2[4].button("🔧 불량 공정 이관", key=f"oqc_send_defect_{_i}",
                                      use_container_width=True, help="불량 공정으로 이관하여 수리/교체 처리"):
                         _reason = row.get('증상', '') or row.get('수리', '').replace('사유:', '')
-                        _clear_production_cache()
-                        update_row(row['시리얼'], {
+                        _upd = {
                             '상태': '불량 처리 중',
                             '시간': get_now_kst_str(),
                             '증상': f"불량입고출처: OQC 라인 (부적합사유: {_reason})",
                             '수리': f"OQC 부적합 판정 - 사유: {_reason}"
-                        })
+                        }
+                        update_row(row['시리얼'], _upd)
                         insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                             이전상태='부적합(OQC)', 이후상태='불량 처리 중',
                             작업자=st.session_state.user_id, 비고=f"OQC 부적합 이관 - 사유: {_reason}")
-                        st.session_state.production_db = load_realtime_ledger()
+                        _prod_update(row['시리얼'], _upd)
                         st.rerun()
 
             # 이력 버튼 → 해당 행 아래 인라인 expander로 표시
@@ -5122,18 +5132,18 @@ elif curr_l == "불량 공정":
                                     _mat_name = _mat_info.get('자재명', '')
                                     if update_material_serial_sn(row['시리얼'], _target_sn, _rep_sn):
                                         load_material_serials.clear()
-                                        update_row(row['시리얼'], {
+                                        _upd = {
                                             '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
                                             '증상': v_c, '수리': f"자재교체({_mat_name}:{_target_sn}→{_rep_sn})"
-                                        })
+                                        }
+                                        update_row(row['시리얼'], _upd)
                                         insert_audit_log(
                                             시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                                             이전상태="불량 처리 중", 이후상태="수리 완료(재투입)",
                                             작업자=st.session_state.user_id,
                                             비고=f"원인:{v_c} / 자재교체:{_mat_name} {_target_sn}→{_rep_sn}"
                                         )
-                                        _clear_production_cache()
-                                        st.session_state.production_db = load_realtime_ledger()
+                                        _prod_update(row['시리얼'], _upd)
                                         st.toast(f"✅ 자재 시리얼 교체 완료: {_target_sn} → {_rep_sn}", icon="✅")
                                         st.rerun()
                                 else:
@@ -5143,16 +5153,18 @@ elif curr_l == "불량 공정":
                                     if not _rep_exist.empty:
                                         st.warning(f"⚠️ 교체 시리얼이 이미 등록되어 있습니다: **{_rep_sn}**")
                                     else:
-                                        update_row(_target_sn, {
+                                        _upd = {
                                             '상태': "교체됨", '시간': get_now_kst_str(),
                                             '증상': v_c, '수리': f"교체처리({_rep_sn})"
-                                        })
+                                        }
+                                        update_row(_target_sn, _upd)
                                         insert_audit_log(
                                             시리얼=_target_sn, 모델=row['모델'], 반=row['반'],
                                             이전상태="불량 처리 중", 이후상태="교체됨",
                                             작업자=st.session_state.user_id,
                                             비고=f"원인:{v_c} / 교체S/N:{_rep_sn}"
                                         )
+                                        _prod_update(_target_sn, _upd)
                                         insert_row({
                                             '시간': get_now_kst_str(), '반': row['반'],
                                             '라인': row.get('라인', '조립 라인'),
@@ -5167,23 +5179,22 @@ elif curr_l == "불량 공정":
                                             작업자=st.session_state.user_id,
                                             비고=f"교체투입 (구S/N:{_target_sn})"
                                         )
-                                        _clear_production_cache()
                                         st.session_state.production_db = load_realtime_ledger()
                                         st.toast(f"✅ 교체 완료: {_target_sn} → {_rep_sn}", icon="✅")
                                         st.rerun()
                             else:
-                                update_row(row['시리얼'], {
+                                _upd = {
                                     '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
                                     '증상': v_c, '수리': v_a
-                                })
+                                }
+                                update_row(row['시리얼'], _upd)
                                 insert_audit_log(
                                     시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                                     이전상태="불량 처리 중", 이후상태="수리 완료(재투입)",
                                     작업자=st.session_state.user_id,
                                     비고=f"원인:{v_c} / 조치:{v_a}"
                                 )
-                                _clear_production_cache()
-                                st.session_state.production_db = load_realtime_ledger()
+                                _prod_update(row['시리얼'], _upd)
                                 st.rerun()
                         else:
                             st.warning("불량 원인과 수리 조치를 모두 선택해주세요.")
@@ -6411,14 +6422,14 @@ elif curr_l == "마스터 관리":
                     st.info(f"현재 상태: **{_rb_row['상태']}** | 모델: {_rb_row.get('모델','')} | 반: {_rb_row.get('반','')}")
                     if st.button("✅ 상태 변경 실행", key="rollback_exec", type="primary"):
                         _prev_s = _rb_row['상태']
-                        if update_row(_rb_sn.strip(), {'상태': _rb_target, '시간': get_now_kst_str()}):
+                        _upd = {'상태': _rb_target, '시간': get_now_kst_str()}
+                        if update_row(_rb_sn.strip(), _upd):
                             insert_audit_log(
                                 시리얼=_rb_sn.strip(), 모델=_rb_row.get('모델',''), 반=_rb_row.get('반',''),
                                 이전상태=_prev_s, 이후상태=_rb_target,
                                 작업자=st.session_state.user_id, 비고="관리자 수동 상태 변경"
                             )
-                            _clear_production_cache()
-                            st.session_state.production_db = load_realtime_ledger()
+                            _prod_update(_rb_sn.strip(), _upd)
                             st.success(f"✅ [{_rb_sn}] {_prev_s} → {_rb_target} 변경 완료")
                             st.rerun()
                         else:
