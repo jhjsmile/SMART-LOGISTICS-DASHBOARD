@@ -632,11 +632,16 @@ st.markdown("""
     var _busy = false;
     var _SEARCH_RE = /검색|S\/N|스캔|시리얼/;
 
-    function isSearchInput(el) {
+    function getLabelText(el) {
         var box = el.closest('[data-testid="stTextInput"]');
-        if (!box) return false;
+        if (!box) return null;
         var lbl = box.querySelector('label');
-        return lbl && _SEARCH_RE.test(lbl.textContent);
+        return lbl ? lbl.textContent.trim() : null;
+    }
+
+    function isSearchInput(el) {
+        var t = getLabelText(el);
+        return !!t && _SEARCH_RE.test(t);
     }
 
     function cleanValue(el) {
@@ -651,18 +656,54 @@ st.markdown("""
         _busy = false;
     }
 
-    /* 일반 입력 (영문/숫자/특수문자) */
+    /* 영문/숫자 필터 - 일반 입력 */
     document.addEventListener('input', function(e) {
         if (_busy || !e.target || e.target.tagName !== 'INPUT') return;
         if (!isSearchInput(e.target)) return;
         cleanValue(e.target);
     }, true);
 
-    /* 한글 IME 조합 완료 시 */
+    /* 영문/숫자 필터 - 한글 IME */
     document.addEventListener('compositionend', function(e) {
         if (!e.target || e.target.tagName !== 'INPUT') return;
         if (!isSearchInput(e.target)) return;
         cleanValue(e.target);
+    }, true);
+
+    /* ── 스캐너 자동 포커스 복원 ──────────────────────────────────
+       Streamlit은 rerun 후 포커스를 body로 이동시킴.
+       blur 발생 후 50ms 내 activeElement가 body이면 rerun에 의한
+       포커스 소실로 판단 → 해당 입력란을 재포커스 (최대 8회 재시도). */
+    function tryRefocus(label, attempt) {
+        attempt = attempt || 0;
+        var ae = document.activeElement;
+        /* 사용자가 다른 입력 요소를 직접 선택한 경우 중단 */
+        if (ae && ae !== document.body && ae !== document.documentElement &&
+            (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+        var inputs = document.querySelectorAll(
+            '[data-testid="stTextInput"] input[type="text"]');
+        for (var i = 0; i < inputs.length; i++) {
+            if (getLabelText(inputs[i]) === label) {
+                inputs[i].focus();
+                return;
+            }
+        }
+        /* 아직 rerun 완료 전 - 최대 8회(약 2초) 재시도 */
+        if (attempt < 8) {
+            setTimeout(function() { tryRefocus(label, attempt + 1); }, 250);
+        }
+    }
+
+    document.addEventListener('blur', function(e) {
+        if (!e.target || e.target.tagName !== 'INPUT') return;
+        if (!isSearchInput(e.target)) return;
+        var label = getLabelText(e.target);
+        setTimeout(function() {
+            var ae = document.activeElement;
+            if (ae === document.body || ae === document.documentElement) {
+                tryRefocus(label, 0);
+            }
+        }, 50);
     }, true);
 })();
 </script>
