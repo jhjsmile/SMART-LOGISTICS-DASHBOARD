@@ -1927,13 +1927,16 @@ if curr_l == "현황판":
             fig = px.bar(
                 db_all.groupby(['반','라인']).size().reset_index(name='수량'),
                 x='라인', y='수량', color='반', barmode='group',
-                title="반별 공정 진행 현황", template="plotly_white"
+                title="반별 공정 진행 현황", template="plotly_white",
+                text='수량'
             )
-            fig.update_yaxes(dtick=1)
+            fig.update_traces(textposition='outside', textfont_size=11)
+            fig.update_yaxes(dtick=5)
             fig.update_layout(
-                margin=dict(t=50, b=50, l=20, r=20),
+                margin=dict(t=50, b=50, l=20, r=30),
                 legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
-                title=dict(font=dict(size=13), x=0, xanchor='left', pad=dict(t=4))
+                title=dict(font=dict(size=13), x=0, xanchor='left', pad=dict(t=4)),
+                uniformtext_minsize=9, uniformtext_mode='hide'
             )
             st.plotly_chart(fig, use_container_width=True, key="dashboard_bar")
         with ch2:
@@ -1947,10 +1950,12 @@ if curr_l == "현황판":
             fig3 = px.bar(
                 db_all.groupby('반').size().reset_index(name='수량'),
                 x='반', y='수량', color='반',
-                title="<b>반별 총 투입</b>", template="plotly_white"
+                title="<b>반별 총 투입</b>", template="plotly_white",
+                text='수량'
             )
-            fig3.update_yaxes(dtick=1)
-            fig3.update_layout(margin=dict(t=40,b=20), showlegend=False)
+            fig3.update_traces(textposition='outside', textfont_size=12)
+            fig3.update_yaxes(dtick=5)
+            fig3.update_layout(margin=dict(t=50, b=20), showlegend=False)
             st.plotly_chart(fig3, use_container_width=True, key="dashboard_bar2")
 
     st.divider()
