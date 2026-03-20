@@ -2100,6 +2100,7 @@ elif curr_l == "조립 라인":
     db_v = st.session_state.production_db
     db_g = db_v[db_v['반'] == curr_g]                                       # 현재 반 전체
     f_df = db_v[(db_v['반'] == curr_g) & (db_v['라인'] == "조립 라인")]
+    _ASM_DEFECT_CAUSES = st.session_state.get('dropdown_defect_cause', ['(선택)', '기타 (직접 입력)'])
 
     # ── 🎯 오늘의 목표 달성 현황 ─────────────────────────────────
     _plan_qty = int(today_sch['조립수'].apply(lambda x: int(float(x)) if str(x) not in ('','nan','None') else 0).sum()) if not today_sch.empty else 0
@@ -2223,9 +2224,10 @@ elif curr_l == "조립 라인":
 
             checked_idxs = [k for k,v in st.session_state[_asm_chk_key].items() if v]
             if checked_idxs:
-                ba1, ba2, ba3 = st.columns([2, 1, 1])
+                ba1, ba2, ba3, ba4 = st.columns([2, 1.5, 1, 1])
                 ba1.markdown(f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(checked_idxs)}개 선택됨</span>", unsafe_allow_html=True)
-                if ba2.button("✅ 일괄 완료", key=f"bulk_ok_{curr_g}", type="primary", use_container_width=True,
+                _bulk_ng_cause = ba2.selectbox("불량 원인", _ASM_DEFECT_CAUSES, key=f"bulk_ng_cause_{curr_g}", label_visibility="collapsed")
+                if ba3.button("✅ 일괄 완료", key=f"bulk_ok_{curr_g}", type="primary", use_container_width=True,
                              disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
                     _bulk = []
                     for ci in checked_idxs:
@@ -2241,23 +2243,26 @@ elif curr_l == "조립 라인":
                     st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
                     _prod_bulk_update(_bulk)
                     st.rerun()
-                if ba3.button("🚫 일괄 불량", key=f"bulk_ng_{curr_g}", use_container_width=True,
+                if ba4.button("🚫 일괄 불량", key=f"bulk_ng_{curr_g}", use_container_width=True,
                              disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
-                    _bulk = []
-                    for ci in checked_idxs:
-                        ci_int = int(ci)
-                        if ci_int in f_df.index:
-                            _r = f_df.loc[ci_int]
-                            _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                '증상': f'불량입고출처: 조립 라인'}
-                            update_row(_r['시리얼'], _upd)
-                            insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
-                                이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
-                            _bulk.append({"sn": _r['시리얼'], "data": _upd})
-                    st.session_state[_asm_chk_key] = {}
-                    st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
-                    _prod_bulk_update(_bulk)
-                    st.rerun()
+                    if _bulk_ng_cause in ["(선택)", ""]:
+                        st.warning("⚠️ 불량 원인을 먼저 선택해주세요.")
+                    else:
+                        _bulk = []
+                        for ci in checked_idxs:
+                            ci_int = int(ci)
+                            if ci_int in f_df.index:
+                                _r = f_df.loc[ci_int]
+                                _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
+                                    '증상': f'불량입고출처: 조립 라인 | 불량원인: {_bulk_ng_cause}'}
+                                update_row(_r['시리얼'], _upd)
+                                insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
+                                    이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
+                                _bulk.append({"sn": _r['시리얼'], "data": _upd})
+                        st.session_state[_asm_chk_key] = {}
+                        st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
+                        _prod_bulk_update(_bulk)
+                        st.rerun()
 
             # STATUS_STYLE: 모듈 상수 사용 (상단 정의 참조)
             h = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 2.0])
@@ -2296,16 +2301,13 @@ elif curr_l == "조립 라인":
                             st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
                             _prod_update(row['시리얼'], _upd)
                             st.rerun()
-                        if b2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량"):
-                            _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                '증상': f'불량입고출처: 조립 라인'}
-                            update_row(row['시리얼'], _upd)
-                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
-                                이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
-                            st.session_state[_asm_chk_key].pop(str(idx), None)
-                            st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
-                            _prod_update(row['시리얼'], _upd)
-                            st.rerun()
+                        _ng_open_key = f"_ng_open_asm_{idx}"
+                        if not st.session_state.get(_ng_open_key):
+                            if b2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량 원인 입력"):
+                                st.session_state[_ng_open_key] = True
+                                st.rerun()
+                        else:
+                            b2.button("🚫", key=f"ng_{idx}", use_container_width=True, disabled=True)
                     else:
                         s = row['상태']
                         if "불량" in str(s):
@@ -2313,6 +2315,30 @@ elif curr_l == "조립 라인":
                         else:
                             bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
                             st.markdown(f"<div style='background:{bg};color:{tc};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.75rem;'>{ic} {s}</div>", unsafe_allow_html=True)
+                # ── 불량 원인 선택 패널 (개별 🚫 클릭 후) ──
+                _ng_open_key = f"_ng_open_asm_{idx}"
+                if st.session_state.get(_ng_open_key):
+                    with st.container(border=True):
+                        st.caption(f"🚫 불량 원인 입력 — `{row['시리얼']}`")
+                        _nc1, _nc2, _nc3 = st.columns([2.5, 1, 1])
+                        _cause_ng = _nc1.selectbox("불량 원인", _ASM_DEFECT_CAUSES, key=f"_ng_cause_asm_{idx}", label_visibility="collapsed")
+                        if _nc2.button("확정", key=f"_ng_confirm_asm_{idx}", type="primary", use_container_width=True):
+                            if _cause_ng in ["(선택)", ""]:
+                                st.warning("⚠️ 불량 원인을 선택해주세요.")
+                            else:
+                                _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
+                                    '증상': f'불량입고출처: 조립 라인 | 불량원인: {_cause_ng}'}
+                                update_row(row['시리얼'], _upd)
+                                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                                    이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
+                                st.session_state[_asm_chk_key].pop(str(idx), None)
+                                st.session_state[_asm_search_cnt] += 1
+                                st.session_state.pop(_ng_open_key, None)
+                                _prod_update(row['시리얼'], _upd)
+                                st.rerun()
+                        if _nc3.button("취소", key=f"_ng_cancel_asm_{idx}", use_container_width=True):
+                            st.session_state.pop(_ng_open_key, None)
+                            st.rerun()
                 # ── 자재 시리얼 토글 표시 ──
                 if st.session_state.get(_asm_tog_key, False):
                     _asm_row_mats = _asm_bulk_mats[_asm_bulk_mats['메인시리얼'] == row['시리얼']] if not _asm_bulk_mats.empty else pd.DataFrame()
@@ -2577,6 +2603,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     wait_status = "검사대기" if curr_l == "검사 라인" else "출하승인"
     wait_list = db_s[(db_s['반']==curr_g)&(db_s['상태']==wait_status)]
     _wait_cnt = len(wait_list)
+    DEFECT_CAUSES = st.session_state.get('dropdown_defect_cause', ['(선택)', '기타 (직접 입력)'])
 
     notify_new_arrivals(_wait_cnt, f"notif_{curr_g}_{curr_l}", f"{curr_g} {curr_l}")
 
@@ -2707,10 +2734,11 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             _h_checked = [k for k,v in st.session_state[_hck_key].items() if v]
             if _h_checked:
                 btn_lbl = "검사 합격" if curr_l == "검사 라인" else "포장 완료"
-                hba1, hba2, hba3, hba4 = st.columns([2, 1.2, 1.2, 0.8])
+                hba1, hba2, hba3, hba4, hba5 = st.columns([2, 1.5, 1.2, 1.0, 0.8])
                 hba1.markdown(f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(_h_checked)}개 선택됨</span>",
                               unsafe_allow_html=True)
-                if hba2.button(f"✅ 일괄 {btn_lbl}", key=f"hist_bulk_ok_{curr_g}_{curr_l}",
+                _hist_bulk_ng_cause = hba2.selectbox("불량 원인", DEFECT_CAUSES, key=f"hist_bulk_ng_cause_{curr_g}_{curr_l}", label_visibility="collapsed")
+                if hba3.button(f"✅ 일괄 {btn_lbl}", key=f"hist_bulk_ok_{curr_g}_{curr_l}",
                                type="primary", use_container_width=True,
                                disabled=not check_perm(f"{curr_l}::{curr_g}", "write")):
                     _ok_s  = 'OQC대기' if curr_l == '검사 라인' else '완료'
@@ -2730,25 +2758,28 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                     _prod_bulk_update(_bulk)
                     st.rerun()
-                if hba3.button("🚫 일괄 불량", key=f"hist_bulk_ng_{curr_g}_{curr_l}",
+                if hba4.button("🚫 일괄 불량", key=f"hist_bulk_ng_{curr_g}_{curr_l}",
                                use_container_width=True):
-                    _bulk = []
-                    for ci in _h_checked:
-                        ci_int = int(ci)
-                        if ci_int in f_df.index:
-                            _r = f_df.loc[ci_int]
-                            if _r['상태'] in ["검사중","포장중","수리 완료(재투입)"]:
-                                _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                    '증상': f'불량입고출처: {curr_l}'}
-                                update_row(_r['시리얼'], _upd)
-                                insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
-                                    이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
-                                _bulk.append({"sn": _r['시리얼'], "data": _upd})
-                    st.session_state[_hck_key] = {}
-                    st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
-                    _prod_bulk_update(_bulk)
-                    st.rerun()
-                if hba4.button("☐", key=f"hist_unck_{curr_g}_{curr_l}",
+                    if _hist_bulk_ng_cause in ["(선택)", ""]:
+                        st.warning("⚠️ 불량 원인을 먼저 선택해주세요.")
+                    else:
+                        _bulk = []
+                        for ci in _h_checked:
+                            ci_int = int(ci)
+                            if ci_int in f_df.index:
+                                _r = f_df.loc[ci_int]
+                                if _r['상태'] in ["검사중","포장중","수리 완료(재투입)"]:
+                                    _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
+                                        '증상': f'불량입고출처: {curr_l} | 불량원인: {_hist_bulk_ng_cause}'}
+                                    update_row(_r['시리얼'], _upd)
+                                    insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
+                                        이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
+                                    _bulk.append({"sn": _r['시리얼'], "data": _upd})
+                        st.session_state[_hck_key] = {}
+                        st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
+                        _prod_bulk_update(_bulk)
+                        st.rerun()
+                if hba5.button("☐", key=f"hist_unck_{curr_g}_{curr_l}",
                                use_container_width=True, help="선택 해제"):
                     st.session_state[_hck_key] = {}
                     st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
@@ -2798,16 +2829,13 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                             _prod_update(row['시리얼'], _upd)
                             st.rerun()
-                        if c2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량"):
-                            _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                '증상': f'불량입고출처: {curr_l}'}
-                            update_row(row['시리얼'], _upd)
-                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
-                                이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
-                            st.session_state[_hck_key].pop(str(idx), None)
-                            st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
-                            _prod_update(row['시리얼'], _upd)
-                            st.rerun()
+                        _hist_ng_open_key = f"_ng_open_hist_{idx}"
+                        if not st.session_state.get(_hist_ng_open_key):
+                            if c2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량 원인 입력"):
+                                st.session_state[_hist_ng_open_key] = True
+                                st.rerun()
+                        else:
+                            c2.button("🚫", key=f"ng_{idx}", use_container_width=True, disabled=True)
                     else:
                         s2 = row['상태']
                         if "불량" in str(s2):
@@ -2815,6 +2843,30 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         else:
                             bg2,tc2,bc2,ic2 = STATUS_STYLE2.get(s2, ('#f5f2ec','#5a5048','#c8b89a','•'))
                             st.markdown(f"<div style='background:{bg2};color:{tc2};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc2};font-size:0.75rem;'>{ic2} {s2}</div>", unsafe_allow_html=True)
+                # ── 불량 원인 선택 패널 (개별 🚫 클릭 후) ──
+                _hist_ng_open_key = f"_ng_open_hist_{idx}"
+                if st.session_state.get(_hist_ng_open_key):
+                    with st.container(border=True):
+                        st.caption(f"🚫 불량 원인 입력 — `{row['시리얼']}`")
+                        _hnc1, _hnc2, _hnc3 = st.columns([2.5, 1, 1])
+                        _hist_cause_ng = _hnc1.selectbox("불량 원인", DEFECT_CAUSES, key=f"_ng_cause_hist_{idx}", label_visibility="collapsed")
+                        if _hnc2.button("확정", key=f"_ng_confirm_hist_{idx}", type="primary", use_container_width=True):
+                            if _hist_cause_ng in ["(선택)", ""]:
+                                st.warning("⚠️ 불량 원인을 선택해주세요.")
+                            else:
+                                _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
+                                    '증상': f'불량입고출처: {curr_l} | 불량원인: {_hist_cause_ng}'}
+                                update_row(row['시리얼'], _upd)
+                                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                                    이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
+                                st.session_state[_hck_key].pop(str(idx), None)
+                                st.session_state[_hsrch_cnt] += 1
+                                st.session_state.pop(_hist_ng_open_key, None)
+                                _prod_update(row['시리얼'], _upd)
+                                st.rerun()
+                        if _hnc3.button("취소", key=f"_ng_cancel_hist_{idx}", use_container_width=True):
+                            st.session_state.pop(_hist_ng_open_key, None)
+                            st.rerun()
                 # ── 자재 시리얼 토글 표시 ──
                 if st.session_state.get(_hist_tog_key, False):
                     _hist_row_mats = _hist_bulk_mats[_hist_bulk_mats['메인시리얼'] == row['시리얼']] if not _hist_bulk_mats.empty else pd.DataFrame()
@@ -5088,9 +5140,23 @@ elif curr_l == "불량 공정":
                             f"border-radius:5px;font-size:0.78rem;margin:4px 0 2px 0;"
                             f"border-left:3px solid #e87878;'>🚫 OQC 부적합 사유: <b>{_oqc_reason}</b></div>",
                             unsafe_allow_html=True)
+                    # 불량 원인 표시 (조립/검사/포장 라인에서 입력한 경우)
+                    if '불량원인:' in _증상_raw:
+                        _ng_cause_disp = _증상_raw.split('불량원인:')[-1].strip().split('|')[0].strip()
+                        st.markdown(
+                            f"<div style='background:#fff3d4;color:#7a5c00;padding:4px 10px;"
+                            f"border-radius:5px;font-size:0.78rem;margin:4px 0 2px 0;"
+                            f"border-left:3px solid #f0c878;'>⚠️ 불량 원인: <b>{_ng_cause_disp}</b></div>",
+                            unsafe_allow_html=True)
 
                     r1, r2 = st.columns(2)
-                    cause_sel = r1.selectbox("불량 원인", DEFECT_CAUSES, key=f"cs_{sn_key}")
+                    # 불량원인 자동 세팅 (조립/검사/포장 라인에서 원인 선택 후 넘어온 경우)
+                    _cs_key = f"cs_{sn_key}"
+                    if _cs_key not in st.session_state and '불량원인:' in _증상_raw:
+                        _parsed_cause = _증상_raw.split('불량원인:')[-1].strip().split('|')[0].strip()
+                        if _parsed_cause in DEFECT_CAUSES:
+                            st.session_state[_cs_key] = _parsed_cause
+                    cause_sel = r1.selectbox("불량 원인", DEFECT_CAUSES, key=_cs_key)
                     if cause_sel == "기타 (직접 입력)":
                         v_c = r1.text_input("직접 입력", key=f"c_{sn_key}", placeholder="원인 직접 입력")
                     elif cause_sel == "(선택)":
