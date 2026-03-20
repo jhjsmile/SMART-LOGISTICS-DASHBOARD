@@ -2089,11 +2089,13 @@ elif curr_l == "조립 라인":
                 rc[5].caption(f"⚠️ {note}" if note and note != 'nan' else "-")
 
     # 이번 달 전체 일정
-    with st.expander(f"📅 {curr_g} 이번 달 전체 일정 보기", expanded=False):
-        month_sch = sch_all[
-            (sch_all['날짜'].str.startswith(today_str[:7])) &
-            (sch_all['반'] == curr_g)
-        ] if not sch_all.empty else pd.DataFrame()
+    _month_sch_pre = sch_all[
+        (sch_all['날짜'].str.startswith(today_str[:7])) &
+        (sch_all['반'] == curr_g)
+    ] if not sch_all.empty else pd.DataFrame()
+    _month_sch_cnt = len(_month_sch_pre)
+    with st.expander(f"📅 {curr_g} 이번 달 전체 일정 보기  ·  {_month_sch_cnt}건" if _month_sch_cnt else f"📅 {curr_g} 이번 달 전체 일정 보기  ·  없음", expanded=False):
+        month_sch = _month_sch_pre
         if not month_sch.empty:
             show_cols = ['날짜','카테고리','모델명','pn','조립수','출하계획','특이사항']
             show_cols = [c for c in show_cols if c in month_sch.columns]
@@ -2177,7 +2179,7 @@ elif curr_l == "조립 라인":
 
     # ── 모델/품목별 수량 카운트 + 생산 이력 ─────────────────────────
     if not f_df.empty:
-        with st.expander(f"📊 {curr_g} 조립 라인 수량 현황", expanded=False):
+        with st.expander(f"📊 {curr_g} 조립 라인 수량 현황  ·  {len(f_df)}건", expanded=False):
             grp = f_df.groupby(['모델','품목코드'])
             count_rows = []
             for (model, pn), gdf in grp:
@@ -2200,7 +2202,7 @@ elif curr_l == "조립 라인":
                     sc3.metric("🏗️ 작업중", wip)
                     sc4.metric("🚨 불량", defect, delta=None if defect == 0 else f"{defect}건", delta_color="inverse")
 
-        with st.expander(f"📋 {curr_g} 생산 이력", expanded=False):
+        with st.expander(f"📋 {curr_g} 생산 이력  ·  {len(f_df)}건", expanded=False):
             _asm_chk_key = f"asm_checked_{curr_g}"
             if _asm_chk_key not in st.session_state:
                 st.session_state[_asm_chk_key] = {}
@@ -3125,7 +3127,7 @@ elif curr_l == "생산 현황 리포트":
         st.divider()
 
         # ── 이력 테이블 ───────────────────────────────────────────────
-        with st.expander("📋 전체 이력 테이블", expanded=False):
+        with st.expander(f"📋 전체 이력 테이블  ·  {len(df_rpt)}건", expanded=False):
             _RPT_PAGE_SIZE = 50
             _rpt_sorted = df_rpt.sort_values('시간', ascending=False).reset_index(drop=True)
             _rpt_total = len(_rpt_sorted)
@@ -3251,7 +3253,8 @@ elif curr_l == "검사 라인":
 
     st.divider()
 
-    with st.expander("📋 최근 검사 이력 (최근 20건)", expanded=False):
+    _qc_hist_total = len(db_qc[db_qc['라인'] == '검사 라인'])
+    with st.expander(f"📋 최근 검사 이력  ·  전체 {_qc_hist_total}건 (최근 20건 표시)", expanded=False):
         hist = db_qc[db_qc['라인'] == '검사 라인'].sort_values('시간', ascending=False).head(20)
         if not hist.empty:
             st.dataframe(hist[['시간', '모델', '시리얼', '상태', '증상', '작업자']].reset_index(drop=True),
@@ -3332,7 +3335,8 @@ elif curr_l == "포장 라인":
 
     st.divider()
 
-    with st.expander("📋 최근 완료 이력 (최근 20건)", expanded=False):
+    _pk_done_total = len(db_pk[db_pk['상태'] == '완료'])
+    with st.expander(f"📋 최근 완료 이력  ·  전체 {_pk_done_total}건 (최근 20건 표시)", expanded=False):
         hist = db_pk[db_pk['상태'] == '완료'].sort_values('시간', ascending=False).head(20)
         if not hist.empty:
             st.dataframe(hist[['시간', '모델', '시리얼', '작업자']].reset_index(drop=True),
@@ -4718,8 +4722,8 @@ elif curr_l == "OQC 라인":
     st.divider()
 
     # ── OQC 결과 이력 ─────────────────────────────────────────────
-    with st.expander("📋 OQC 결과 이력", expanded=False):
-        oqc_done = db_oqc[db_oqc['상태'].isin(['출하승인','부적합(OQC)'])].sort_values('시간', ascending=False)
+    oqc_done = db_oqc[db_oqc['상태'].isin(['출하승인','부적합(OQC)'])].sort_values('시간', ascending=False)
+    with st.expander(f"📋 OQC 결과 이력  ·  {len(oqc_done)}건", expanded=False):
     
         if not oqc_done.empty:
             oqc_sn_filter = st.text_input("🔍 S/N 검색", key="oqc_sn_filter", placeholder="시리얼 일부 입력")
