@@ -1665,7 +1665,7 @@ def render_calendar_weekly():
     week_idx = min(st.session_state.cal_week_idx, len(cal_weeks)-1)
     exp_label = f"📅 주별 캘린더  —  {cal_year}년 {cal_month}월 {week_idx+1}주차"
 
-    with st.expander(exp_label, expanded=True):
+    with st.expander(exp_label, expanded=False):
         # 월 네비게이션
         h1, h2, h3, h4 = st.columns([1, 1, 4, 1])
         if h1.button("◀ 이전달", key="w_prev_month", use_container_width=True):
@@ -2060,7 +2060,7 @@ elif curr_l == "조립 라인":
 
     # 오늘 일정 카드
     _today_label = f"📋 오늘({today_str}) {curr_g} 작업 일정" + (f"  ·  {len(today_sch)}건" if not today_sch.empty else "  ·  없음")
-    with st.expander(_today_label, expanded=True):
+    with st.expander(_today_label, expanded=False):
         if today_sch.empty:
             st.info("오늘 등록된 작업 일정이 없습니다.")
         else:
@@ -2177,7 +2177,7 @@ elif curr_l == "조립 라인":
 
     # ── 모델/품목별 수량 카운트 + 생산 이력 ─────────────────────────
     if not f_df.empty:
-        with st.expander(f"📊 {curr_g} 조립 라인 수량 현황", expanded=True):
+        with st.expander(f"📊 {curr_g} 조립 라인 수량 현황", expanded=False):
             grp = f_df.groupby(['모델','품목코드'])
             count_rows = []
             for (model, pn), gdf in grp:
@@ -2200,7 +2200,7 @@ elif curr_l == "조립 라인":
                     sc3.metric("🏗️ 작업중", wip)
                     sc4.metric("🚨 불량", defect, delta=None if defect == 0 else f"{defect}건", delta_color="inverse")
 
-        with st.expander(f"📋 {curr_g} 생산 이력", expanded=True):
+        with st.expander(f"📋 {curr_g} 생산 이력", expanded=False):
             _asm_chk_key = f"asm_checked_{curr_g}"
             if _asm_chk_key not in st.session_state:
                 st.session_state[_asm_chk_key] = {}
@@ -2619,7 +2619,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     if _wck_key   not in st.session_state: st.session_state[_wck_key]   = {}
     if _wscan_cnt not in st.session_state: st.session_state[_wscan_cnt] = 0
 
-    with st.expander(f"📥 이전 공정({prev}) 완료 — 입고 대기" + (f"  ·  {_wait_cnt}건" if _wait_cnt else "  ·  없음"), expanded=True):
+    with st.expander(f"📥 이전 공정({prev}) 완료 — 입고 대기" + (f"  ·  {_wait_cnt}건" if _wait_cnt else "  ·  없음"), expanded=False):
         if not wait_list.empty:
             _wscan_key = f"wscan_{curr_g}_{curr_l}_{st.session_state[_wscan_cnt]}"
             ws1, ws2 = st.columns([3, 3])
@@ -2714,7 +2714,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     if _hck_key   not in st.session_state: st.session_state[_hck_key]   = {}
     if _hsrch_cnt not in st.session_state: st.session_state[_hsrch_cnt] = 0
 
-    with st.expander(f"📋 {curr_g} {curr_l} 이력" + (f"  ·  {_hist_cnt}건" if _hist_cnt else "  ·  없음"), expanded=True):
+    with st.expander(f"📋 {curr_g} {curr_l} 이력" + (f"  ·  {_hist_cnt}건" if _hist_cnt else "  ·  없음"), expanded=False):
         if not f_df.empty:
             _hsrch_key = f"hsrch_{curr_g}_{curr_l}_{st.session_state[_hsrch_cnt]}"
             hs1, hs2 = st.columns([3, 3])
@@ -4472,7 +4472,7 @@ elif curr_l == "OQC 라인":
     st.divider()
 
     # ── 입고 대기 목록 (포장 완료 → OQC 대기 전환) ───────────────
-    with st.expander(f"📥 입고 대기 (검사 합격 제품)  {oqc_wait}건", expanded=True):
+    with st.expander(f"📥 입고 대기 (검사 합격 제품)  {oqc_wait}건", expanded=False):
         packing_done = db_oqc[
             db_oqc['상태'] == 'OQC대기'
         ].sort_values('시간', ascending=False).reset_index(drop=True)
@@ -4554,7 +4554,7 @@ elif curr_l == "OQC 라인":
     st.divider()
 
     # ── OQC 검사 진행 ─────────────────────────────────────────────
-    with st.expander(f"🔍 OQC 검사 진행  {oqc_ing}건", expanded=True):
+    with st.expander(f"🔍 OQC 검사 진행  {oqc_ing}건", expanded=False):
         oqc_wait_list = db_oqc[db_oqc['상태'] == 'OQC중'].sort_values('시간', ascending=False).reset_index(drop=True)
     
         _oqc_ck_key = f"oqc_ck_{oqc_ban}"
@@ -4718,7 +4718,7 @@ elif curr_l == "OQC 라인":
     st.divider()
 
     # ── OQC 결과 이력 ─────────────────────────────────────────────
-    with st.expander("📋 OQC 결과 이력", expanded=True):
+    with st.expander("📋 OQC 결과 이력", expanded=False):
         oqc_done = db_oqc[db_oqc['상태'].isin(['출하승인','부적합(OQC)'])].sort_values('시간', ascending=False)
     
         if not oqc_done.empty:
@@ -5163,7 +5163,7 @@ elif curr_l == "불량 공정":
             ]
         if wait.empty: continue
         has_any = True
-        with st.expander(f"📍 {g} 불량 처리 대기 ({len(wait)}건)", expanded=True):
+        with st.expander(f"📍 {g} 불량 처리 대기 ({len(wait)}건)", expanded=False):
             for row in wait.to_dict('records'):
                 sn_key = row['시리얼']  # idx 대신 실제 시리얼을 키로 사용 (목록 변경 시 키 밀림 방지)
                 with st.container(border=True):
@@ -6630,7 +6630,7 @@ elif curr_l == "작업자 매뉴얼":
         </div>""", unsafe_allow_html=True)
 
     # ── 1. 시스템 소개 & 로그인 ──────────────────────────────
-    with st.expander("🔑 1. 로그인 방법", expanded=True):
+    with st.expander("🔑 1. 로그인 방법", expanded=False):
         _man_section("🔑", "로그인 절차")
         _man_box("""
         <ol style='margin:0;padding-left:1.4em;'>
@@ -6804,7 +6804,7 @@ elif curr_l == "관리자 매뉴얼":
         </div>""", unsafe_allow_html=True)
 
     # ── 1. 사용자 권한 안내 ──────────────────────────────────
-    with st.expander("👥 1. 사용자 권한(Role) 안내", expanded=True):
+    with st.expander("👥 1. 사용자 권한(Role) 안내", expanded=False):
         _adm_section("👥", "역할별 접근 메뉴")
         _adm_box("""
         <table style='width:100%;border-collapse:collapse;font-size:0.89rem;'>
