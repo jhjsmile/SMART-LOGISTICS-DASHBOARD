@@ -754,7 +754,48 @@ with st.sidebar:
 
 
 # =================================================================
-# 4. 캘린더 다이얼로그
+# 4. 옵티미스틱 업데이트 헬퍼
+# =================================================================
+# DB 재조회(load_realtime_ledger) 없이 메모리 즉시 반영
+# → update_row + insert_audit_log 2회 DB 쓰기만으로 완결
+# → Realtime이 백그라운드에서 전체 캐시 갱신
+
+def _prod_update(sn: str, data: dict) -> None:
+    """단일 행 옵티미스틱 업데이트 + 캐시 초기화."""
+    _clear_production_cache()
+    _db = st.session_state.get("production_db", pd.DataFrame())
+    if _db.empty or "시리얼" not in _db.columns:
+        st.session_state.production_db = load_realtime_ledger()
+        return
+    _mask = _db["시리얼"] == sn
+    if not _mask.any():
+        st.session_state.production_db = load_realtime_ledger()
+        return
+    for col, val in data.items():
+        if col in _db.columns:
+            st.session_state.production_db.loc[_mask, col] = val
+
+
+def _prod_bulk_update(updates: list) -> None:
+    """다중 행 옵티미스틱 업데이트 + 캐시 초기화.
+    updates: [{"sn": ..., "data": {...}}, ...]
+    """
+    _clear_production_cache()
+    _db = st.session_state.get("production_db", pd.DataFrame())
+    if _db.empty or "시리얼" not in _db.columns:
+        st.session_state.production_db = load_realtime_ledger()
+        return
+    for item in updates:
+        _mask = _db["시리얼"] == item["sn"]
+        if not _mask.any():
+            continue
+        for col, val in item["data"].items():
+            if col in _db.columns:
+                st.session_state.production_db.loc[_mask, col] = val
+
+
+# =================================================================
+# 5. 캘린더 다이얼로그
 # =================================================================
 
 
@@ -2168,32 +2209,36 @@ elif curr_l == "조립 라인":
                 ba1.markdown(f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(checked_idxs)}개 선택됨</span>", unsafe_allow_html=True)
                 if ba2.button("✅ 일괄 완료", key=f"bulk_ok_{curr_g}", type="primary", use_container_width=True,
                              disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
+                    _bulk = []
                     for ci in checked_idxs:
                         ci_int = int(ci)
                         if ci_int in f_df.index:
                             _r = f_df.loc[ci_int]
-                            update_row(_r['시리얼'], {'상태':'검사대기','시간':get_now_kst_str()})
+                            _upd = {'상태':'검사대기','시간':get_now_kst_str()}
+                            update_row(_r['시리얼'], _upd)
                             insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                 이전상태=_r['상태'], 이후상태='검사대기', 작업자=st.session_state.user_id)
+                            _bulk.append({"sn": _r['시리얼'], "data": _upd})
                     st.session_state[_asm_chk_key] = {}
                     st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
-                    _clear_production_cache()              # ← 캐시 초기화 (누락 버그 수정)
-                    st.session_state.production_db = load_realtime_ledger()
+                    _prod_bulk_update(_bulk)
                     st.rerun()
                 if ba3.button("🚫 일괄 불량", key=f"bulk_ng_{curr_g}", use_container_width=True,
                              disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
+                    _bulk = []
                     for ci in checked_idxs:
                         ci_int = int(ci)
                         if ci_int in f_df.index:
                             _r = f_df.loc[ci_int]
-                            update_row(_r['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                '증상': f'불량입고출처: 조립 라인'})
+                            _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
+                                '증상': f'불량입고출처: 조립 라인'}
+                            update_row(_r['시리얼'], _upd)
                             insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                 이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
+                            _bulk.append({"sn": _r['시리얼'], "data": _upd})
                     st.session_state[_asm_chk_key] = {}
                     st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
-                    _clear_production_cache()              # ← 캐시 초기화 (누락 버그 수정)
-                    st.session_state.production_db = load_realtime_ledger()
+                    _prod_bulk_update(_bulk)
                     st.rerun()
 
             # STATUS_STYLE: 모듈 상수 사용 (상단 정의 참조)
@@ -2225,23 +2270,23 @@ elif curr_l == "조립 라인":
                     if is_actionable:
                         b1, b2 = st.columns(2)
                         if b1.button("✅", key=f"ok_{idx}", use_container_width=True, help="완료"):
-                            _clear_production_cache()                          # ← 캐시 초기화 (누락 버그 수정)
-                            update_row(row['시리얼'], {'상태':'검사대기','시간':get_now_kst_str()})
+                            _upd = {'상태':'검사대기','시간':get_now_kst_str()}
+                            update_row(row['시리얼'], _upd)
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태='검사대기', 작업자=st.session_state.user_id)
                             st.session_state[_asm_chk_key].pop(str(idx), None)
                             st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
-                            st.session_state.production_db = load_realtime_ledger()
+                            _prod_update(row['시리얼'], _upd)
                             st.rerun()
                         if b2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량"):
-                            _clear_production_cache()                          # ← 캐시 초기화 (누락 버그 수정)
-                            update_row(row['시리얼'], {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                '증상': f'불량입고출처: 조립 라인'})
+                            _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
+                                '증상': f'불량입고출처: 조립 라인'}
+                            update_row(row['시리얼'], _upd)
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                 이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
                             st.session_state[_asm_chk_key].pop(str(idx), None)
                             st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
-                            st.session_state.production_db = load_realtime_ledger()
+                            _prod_update(row['시리얼'], _upd)
                             st.rerun()
                     else:
                         s = row['상태']
@@ -2549,22 +2594,24 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                               unsafe_allow_html=True)
                 if wba2.button("✅ 일괄 입고", key=f"wait_bulk_{curr_g}_{curr_l}",
                                type="primary", use_container_width=True):
-                    _clear_production_cache()
                     _next_s = '검사중' if curr_l == '검사 라인' else '포장중'
                     _prev_s = '검사대기' if curr_l == '검사 라인' else '출하승인'
+                    _bulk = []
                     for wi in w_checked:
                         wi_int = int(wi)
                         if wi_int in wait_list.index:
                             _wr = wait_list.loc[wi_int]
-                            update_row(_wr['시리얼'], {'시간': get_now_kst_str(),
+                            _upd = {'시간': get_now_kst_str(),
                                 '라인': curr_l, '상태': _next_s,
-                                '작업자': st.session_state.user_id})
+                                '작업자': st.session_state.user_id}
+                            update_row(_wr['시리얼'], _upd)
                             insert_audit_log(시리얼=_wr['시리얼'], 모델=_wr['모델'],
                                 반=curr_g, 이전상태=_prev_s, 이후상태=_next_s,
                                 작업자=st.session_state.user_id)
+                            _bulk.append({"sn": _wr['시리얼'], "data": _upd})
                     st.session_state[_wck_key] = {}
                     st.session_state[_wscan_cnt] += 1  # 체크박스 키 리셋
-                    st.session_state.production_db = load_realtime_ledger()
+                    _prod_bulk_update(_bulk)
                     st.rerun()
                 if wba3.button("☐ 선택 해제", key=f"wait_unck_{curr_g}_{curr_l}",
                                use_container_width=True):
@@ -2591,17 +2638,17 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         wr2.markdown(f"`{wrow['시리얼']}`  <span style='color:#999;font-size:0.75rem;'>{str(wrow.get('시간',''))[:16]}</span>",
                                     unsafe_allow_html=True)
                         if wr3.button("📥 입고", key=f"in_{widx}", use_container_width=True):
-                            _clear_production_cache()
                             _next_s = '검사중' if curr_l == '검사 라인' else '포장중'
                             _prev_s = '검사대기' if curr_l == '검사 라인' else '출하승인'
-                            update_row(wrow['시리얼'], {'시간': get_now_kst_str(),
+                            _upd = {'시간': get_now_kst_str(),
                                 '라인': curr_l, '상태': _next_s,
-                                '작업자': st.session_state.user_id})
+                                '작업자': st.session_state.user_id}
+                            update_row(wrow['시리얼'], _upd)
                             insert_audit_log(시리얼=wrow['시리얼'], 모델=wrow['모델'],
                                 반=curr_g, 이전상태=_prev_s, 이후상태=_next_s,
                                 작업자=st.session_state.user_id)
                             st.session_state[_wck_key].pop(str(widx), None)
-                            st.session_state.production_db = load_realtime_ledger()
+                            _prod_update(wrow['시리얼'], _upd)
                             st.rerun()
         else:
             st.info("입고 대기 물량 없음")
