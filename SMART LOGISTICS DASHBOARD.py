@@ -4843,6 +4843,13 @@ elif curr_l == "불량 공정":
 
     st.divider()
 
+    # ── 시리얼 / 모델 검색 ────────────────────────────────────────
+    _def_search = st.text_input(
+        "🔍 시리얼 / 모델 검색",
+        placeholder="시리얼 또는 모델명 일부 입력",
+        key="defect_sn_search"
+    )
+
     # 불량 원인 / 수리 조치 선택지
     DEFECT_CAUSES = st.session_state.get('dropdown_defect_cause', ['(선택)', '기타 (직접 입력)'])
     REPAIR_ACTIONS = st.session_state.get('dropdown_repair_action', ['(선택)', '기타 (직접 입력)'])
@@ -4851,10 +4858,18 @@ elif curr_l == "불량 공정":
     has_any = False
     for g in target_groups:
         wait = db[(db['반']==g)&(db['상태']=="불량 처리 중")]
+        # 검색 필터 적용
+        if _def_search.strip():
+            _ds = _def_search.strip().lower()
+            wait = wait[
+                wait['시리얼'].str.lower().str.contains(_ds, na=False) |
+                wait['모델'].str.lower().str.contains(_ds, na=False)
+            ]
         if wait.empty: continue
         has_any = True
         with st.expander(f"📍 {g} 불량 처리 대기 ({len(wait)}건)", expanded=True):
-            for idx, row in enumerate(wait.to_dict('records')):
+            for row in wait.to_dict('records'):
+                sn_key = row['시리얼']  # idx 대신 실제 시리얼을 키로 사용 (목록 변경 시 키 밀림 방지)
                 with st.container(border=True):
                     # 불량 입고 출처 파싱
                     _증상_raw = str(row.get('증상', ''))
@@ -4886,17 +4901,17 @@ elif curr_l == "불량 공정":
                             unsafe_allow_html=True)
 
                     r1, r2 = st.columns(2)
-                    cause_sel = r1.selectbox("불량 원인", DEFECT_CAUSES, key=f"cs_{idx}")
+                    cause_sel = r1.selectbox("불량 원인", DEFECT_CAUSES, key=f"cs_{sn_key}")
                     if cause_sel == "기타 (직접 입력)":
-                        v_c = r1.text_input("직접 입력", key=f"c_{idx}", placeholder="원인 직접 입력")
+                        v_c = r1.text_input("직접 입력", key=f"c_{sn_key}", placeholder="원인 직접 입력")
                     elif cause_sel == "(선택)":
                         v_c = ""
                     else:
                         v_c = cause_sel
 
-                    action_sel = r2.selectbox("수리 조치", REPAIR_ACTIONS, key=f"as_{idx}")
+                    action_sel = r2.selectbox("수리 조치", REPAIR_ACTIONS, key=f"as_{sn_key}")
                     if action_sel == "기타 (직접 입력)":
-                        v_a = r2.text_input("직접 입력", key=f"a_{idx}", placeholder="조치 직접 입력")
+                        v_a = r2.text_input("직접 입력", key=f"a_{sn_key}", placeholder="조치 직접 입력")
                     elif action_sel == "(선택)":
                         v_a = ""
                     else:
@@ -4907,12 +4922,12 @@ elif curr_l == "불량 공정":
                         "🎯 기존 시리얼",
                         value=row['시리얼'],
                         placeholder="교체 대상 S/N 스캔/입력",
-                        key=f"target_{idx}"
+                        key=f"target_{sn_key}"
                     )
                     replace_sn = rep_c2.text_input(
                         "🔄 교체 시리얼",
                         placeholder="새 S/N 스캔/입력 (없으면 비워두세요)",
-                        key=f"rep_{idx}"
+                        key=f"rep_{sn_key}"
                     )
 
                     # 등록된 자재 시리얼 표시 (기존 시리얼란에 자재 S/N 입력 가능 안내)
@@ -4925,8 +4940,11 @@ elif curr_l == "불량 공정":
                                 _dmc2.caption(f"`{_dm.get('자재시리얼', '')}`")
 
                     _btn_col, _ = st.columns([1, 2])
-                    if _btn_col.button("✅ 확정", key=f"b_{idx}", type="primary", use_container_width=True):
+                    _is_submitting = st.session_state.get(f"_def_submit_{sn_key}", False)
+                    if _btn_col.button("✅ 확정", key=f"b_{sn_key}", type="primary",
+                                       use_container_width=True, disabled=_is_submitting):
                         if v_c and v_a:
+                            st.session_state[f"_def_submit_{sn_key}"] = True
                             _target_sn = target_sn.strip() or row['시리얼']
                             _rep_sn = replace_sn.strip()
                             if _rep_sn:
@@ -5009,7 +5027,10 @@ elif curr_l == "불량 공정":
                         else:
                             st.warning("불량 원인과 수리 조치를 모두 선택해주세요.")
     if not has_any:
-        st.success("현재 처리 대기 중인 불량 이슈가 없습니다.")
+        if _def_search.strip():
+            st.info(f"🔍 '{_def_search.strip()}' 에 해당하는 처리 대기 항목이 없습니다.")
+        else:
+            st.success("현재 처리 대기 중인 불량 이슈가 없습니다.")
 
 # ── 수리 현황 리포트 ─────────────────────────────────────────────
 elif curr_l == "수리 현황 리포트":
