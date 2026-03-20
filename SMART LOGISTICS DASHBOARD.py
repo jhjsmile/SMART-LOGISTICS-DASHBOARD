@@ -3058,19 +3058,36 @@ elif curr_l == "생산 현황 리포트":
         with cc4:
             try:
                 _df_trend = df_rpt.copy()
-                # 투입일(created_at) 기준 - 없으면 시간 컬럼 fallback, KST 변환 후 날짜 문자열 사용
                 _date_col = '투입일' if '투입일' in _df_trend.columns else '시간'
                 _parsed = pd.to_datetime(_df_trend[_date_col], errors='coerce', utc=True)
-                _df_trend['날짜'] = _parsed.dt.tz_convert('Asia/Seoul').dt.strftime('%Y-%m-%d')
-                _daily = _df_trend[_df_trend['날짜'].notna() & (_df_trend['날짜'] != '')].groupby('날짜').size().reset_index(name='수량').sort_values('날짜')
-                if not _daily.empty:
-                    _fig_tr = px.line(_daily, x='날짜', y='수량', markers=True,
-                                      title="<b>일자별 생산 투입 추이</b>", template="plotly_white")
-                    _fig_tr.update_traces(line_color='#2471a3', marker_color='#2471a3')
-                    _fig_tr.update_layout(margin=dict(t=40, b=20))
+                _df_trend['_kst'] = _parsed.dt.tz_convert('Asia/Seoul')
+                _df_trend['_hour'] = _df_trend['_kst'].dt.hour
+                _df_trend['_min']  = _df_trend['_kst'].dt.minute
+                _df_trend['_hhmm'] = _df_trend['_hour'] * 60 + _df_trend['_min']
+                # 근무시간 필터: 08:30(510분) ~ 17:30(1050분)
+                _work = _df_trend[
+                    _df_trend['_hhmm'].notna() &
+                    (_df_trend['_hhmm'] >= 510) &
+                    (_df_trend['_hhmm'] <= 1050)
+                ].copy()
+                # 30분 단위 버킷
+                _work['시간대'] = _work['_kst'].dt.floor('30min').dt.strftime('%H:%M')
+                # 전체 근무 슬롯 (08:30~17:30, 30분 간격)
+                _slots = pd.date_range('2000-01-01 08:30', '2000-01-01 17:30', freq='30min').strftime('%H:%M').tolist()
+                _hourly = _work.groupby('시간대').size().reset_index(name='수량')
+                _hourly = pd.DataFrame({'시간대': _slots}).merge(_hourly, on='시간대', how='left').fillna(0)
+                _hourly['수량'] = _hourly['수량'].astype(int)
+                if not _work.empty:
+                    _fig_tr = px.bar(_hourly, x='시간대', y='수량',
+                                     title="<b>근무시간대별 생산 투입 현황</b>", template="plotly_white",
+                                     text='수량')
+                    _fig_tr.update_traces(marker_color='#2471a3', textposition='outside', textfont_size=9)
+                    _fig_tr.update_xaxes(tickangle=-45)
+                    _fig_tr.update_yaxes(dtick=5)
+                    _fig_tr.update_layout(margin=dict(t=50, b=60))
                     st.plotly_chart(_fig_tr, use_container_width=True)
                 else:
-                    st.info("추이 데이터 없음")
+                    st.info("근무시간대 데이터 없음")
             except Exception:
                 st.info("추이 차트 데이터 처리 중 오류")
 
