@@ -38,8 +38,6 @@ WATCHED_TABLES = [
     "material_serial",
     "production_plan",
     "plan_change_log",
-    "help_requests",
-    "access_requests",
 ]
 
 
