@@ -3059,8 +3059,12 @@ elif curr_l == "생산 현황 리포트":
             try:
                 _df_trend = df_rpt.copy()
                 _date_col = '투입일' if '투입일' in _df_trend.columns else '시간'
-                _parsed = pd.to_datetime(_df_trend[_date_col], errors='coerce', utc=True)
-                _df_trend['_kst'] = _parsed.dt.tz_convert('Asia/Seoul')
+                _parsed = pd.to_datetime(_df_trend[_date_col], errors='coerce')
+                # timezone-aware면 KST로 변환, naive면 KST로 간주
+                if _parsed.dt.tz is not None:
+                    _df_trend['_kst'] = _parsed.dt.tz_convert('Asia/Seoul')
+                else:
+                    _df_trend['_kst'] = _parsed
                 _df_trend['_hour'] = _df_trend['_kst'].dt.hour
                 _df_trend['_min']  = _df_trend['_kst'].dt.minute
                 _df_trend['_hhmm'] = _df_trend['_hour'] * 60 + _df_trend['_min']
