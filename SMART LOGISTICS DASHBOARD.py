@@ -624,6 +624,33 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# ── 검색란 영문/숫자 전용 JS 인젝션 ───────────────────────────────
+# 라벨에 "검색", "S/N", "스캔", "시리얼" 포함된 text_input만 필터링
+st.markdown("""
+<script>
+(function() {
+    var _busy = false;
+    var _SEARCH_RE = /검색|S\/N|스캔|시리얼/;
+    document.addEventListener('input', function(e) {
+        if (_busy || !e.target || e.target.tagName !== 'INPUT') return;
+        var box = e.target.closest('[data-testid="stTextInput"]');
+        if (!box) return;
+        var lbl = box.querySelector('label');
+        if (!lbl || !_SEARCH_RE.test(lbl.textContent)) return;
+        var val = e.target.value;
+        var cleaned = val.replace(/[^a-zA-Z0-9]/g, '');
+        if (cleaned === val) return;
+        _busy = true;
+        var setter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value').set;
+        setter.call(e.target, cleaned);
+        e.target.dispatchEvent(new Event('input', {bubbles: true}));
+        _busy = false;
+    }, true);
+})();
+</script>
+""", unsafe_allow_html=True)
+
 # =================================================================
 # 2. 보안 유틸리티
 # =================================================================
