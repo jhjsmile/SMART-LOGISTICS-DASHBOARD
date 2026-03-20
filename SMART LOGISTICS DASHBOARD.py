@@ -81,7 +81,7 @@ from modules.database import (
 # 상수 정의
 # =================================================================
 # 성능 설정
-AUTO_REFRESH_INTERVAL_MS = 3000   # Realtime 폴백용 3초 폴링 (변경 없으면 캐시 재사용)
+AUTO_REFRESH_INTERVAL_MS = 15000  # Realtime 폴백용 15초 폴링 (변경 감지는 Realtime이 담당)
 MAX_FUNCTION_LINES = 200  # 함수 최대 라인 수 가이드
 
 # UI 설정
