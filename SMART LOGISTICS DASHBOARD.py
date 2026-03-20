@@ -2115,36 +2115,61 @@ elif curr_l == "조립 라인":
         _over     = max(_done_today - _plan_qty, 0)
         _remain   = max(_plan_qty - _done_today, 0)
         if _real_pct >= 100:
-            _bar_color = "#28a745"
-            _msg = f"🎉 목표 달성! 수고하셨습니다!" + (f" (초과 +{_over}개)" if _over > 0 else "")
-            _emoji = "🏆"
-            _pct_label = f"{_real_pct}%" + (f" <span style='font-size:1rem;color:#28a745;'>+{_over}개 초과</span>" if _over > 0 else "")
+            _bar_color = "#28a745"; _emoji = "🏆"
+            _msg = "🎉 목표 달성! 수고하셨습니다!"
         elif _real_pct >= 80:
-            _bar_color = "#28a745"; _msg = f"💪 거의 다 왔어요! {_remain}개만 더!"; _emoji = "🔥"; _pct_label = f"{_real_pct}%"
+            _bar_color = "#28a745"; _emoji = "🔥"
+            _msg = f"💪 거의 다 왔어요! {_remain}개만 더!"
         elif _real_pct >= 50:
-            _bar_color = "#ffc107"; _msg = f"👍 절반 넘었어요! {_remain}개 남았어요!"; _emoji = "⚡"; _pct_label = f"{_real_pct}%"
+            _bar_color = "#ffc107"; _emoji = "⚡"
+            _msg = f"👍 절반 넘었어요! {_remain}개 남았어요!"
         else:
-            _bar_color = "#e67e22"; _msg = f"🚀 파이팅! 목표까지 {_remain}개 남았어요!"; _emoji = "💡"; _pct_label = f"{_real_pct}%"
+            _bar_color = "#e67e22"; _emoji = "💡"
+            _msg = f"🚀 파이팅! 목표까지 {_remain}개 남았어요!"
+
+        # 초과 블록 HTML
+        _over_block = f"""
+            <div style='text-align:center;padding:12px 20px;background:#e8f8ee;
+                        border-radius:12px;border:2px solid #28a745;min-width:100px;'>
+                <div style='color:#28a745;font-size:2.2rem;font-weight:900;line-height:1;'>+{_over}</div>
+                <div style='color:#28a745;font-size:0.78rem;font-weight:600;margin-top:2px;'>초과 달성</div>
+            </div>""" if _over > 0 else f"""
+            <div style='text-align:center;padding:12px 20px;background:#f5f5f5;
+                        border-radius:12px;border:2px solid #ddd;min-width:100px;'>
+                <div style='color:#aaa;font-size:2.2rem;font-weight:900;line-height:1;'>-</div>
+                <div style='color:#aaa;font-size:0.78rem;font-weight:600;margin-top:2px;'>초과 없음</div>
+            </div>"""
 
         st.markdown(f"""
         <div style='background:#ffffff;border-radius:16px;padding:24px 28px;margin-bottom:16px;
                     border:2px solid {_bar_color};box-shadow:0 4px 16px rgba(0,0,0,0.1);'>
-            <div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;'>
+            <div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;'>
                 <span style='color:#1a1a2e;font-size:1.1rem;font-weight:700;'>🎯 오늘의 목표 달성 현황</span>
                 <span style='color:#888;font-size:0.85rem;'>{today_str}</span>
             </div>
-            <div style='display:flex;align-items:flex-end;gap:8px;margin-bottom:10px;'>
-                <span style='color:{_bar_color};font-size:3.2rem;font-weight:900;line-height:1;'>{_done_today}</span>
-                <span style='color:#555;font-size:1.1rem;margin-bottom:8px;'>/ {_plan_qty} EA</span>
-                <span style='color:{_bar_color};font-size:2rem;font-weight:800;margin-bottom:4px;margin-left:12px;'>{_pct_label}</span>
-                <span style='font-size:1.8rem;margin-bottom:4px;'>{_emoji}</span>
+            <div style='display:flex;align-items:center;gap:16px;margin-bottom:14px;'>
+                <div style='text-align:center;padding:12px 20px;background:#f0f4ff;
+                            border-radius:12px;border:2px solid {_bar_color};min-width:100px;'>
+                    <div style='color:{_bar_color};font-size:2.2rem;font-weight:900;line-height:1;'>{_done_today}</div>
+                    <div style='color:#555;font-size:0.78rem;font-weight:600;margin-top:2px;'>오늘 누적</div>
+                </div>
+                <div style='color:#bbb;font-size:1.6rem;font-weight:300;'>/</div>
+                <div style='text-align:center;padding:12px 20px;background:#fafafa;
+                            border-radius:12px;border:2px solid #ddd;min-width:100px;'>
+                    <div style='color:#444;font-size:2.2rem;font-weight:900;line-height:1;'>{_plan_qty}</div>
+                    <div style='color:#888;font-size:0.78rem;font-weight:600;margin-top:2px;'>오늘 목표</div>
+                </div>
+                <div style='flex:1;'></div>
+                {_over_block}
+                <span style='font-size:2rem;'>{_emoji}</span>
             </div>
-            <div style='background:#e9ecef;border-radius:8px;height:18px;overflow:hidden;margin-bottom:10px;'>
-                <div style='background:{_bar_color};width:{_bar_pct}%;height:100%;border-radius:8px;'></div>
+            <div style='background:#e9ecef;border-radius:8px;height:14px;overflow:hidden;margin-bottom:10px;'>
+                <div style='background:{_bar_color};width:{_bar_pct}%;height:100%;border-radius:8px;
+                            transition:width 0.4s ease;'></div>
             </div>
             <div style='display:flex;justify-content:space-between;align-items:center;'>
-                <span style='color:#333;font-size:0.95rem;font-weight:600;'>{_msg}</span>
-                <span style='color:#666;font-size:0.82rem;'>작업 중: {_wip_today}개</span>
+                <span style='color:#333;font-size:0.92rem;font-weight:600;'>{_msg}</span>
+                <span style='color:#666;font-size:0.82rem;'>{_real_pct}% · 작업 중: {_wip_today}개</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
