@@ -2127,18 +2127,11 @@ elif curr_l == "조립 라인":
             _bar_color = "#e67e22"; _emoji = "💡"
             _msg = f"🚀 파이팅! 목표까지 {_remain}개 남았어요!"
 
-        # 초과 블록 HTML
-        _over_block = f"""
-            <div style='text-align:center;padding:12px 20px;background:#e8f8ee;
-                        border-radius:12px;border:2px solid #28a745;min-width:100px;'>
-                <div style='color:#28a745;font-size:2.2rem;font-weight:900;line-height:1;'>+{_over}</div>
-                <div style='color:#28a745;font-size:0.78rem;font-weight:600;margin-top:2px;'>초과 달성</div>
-            </div>""" if _over > 0 else f"""
-            <div style='text-align:center;padding:12px 20px;background:#f5f5f5;
-                        border-radius:12px;border:2px solid #ddd;min-width:100px;'>
-                <div style='color:#aaa;font-size:2.2rem;font-weight:900;line-height:1;'>-</div>
-                <div style='color:#aaa;font-size:0.78rem;font-weight:600;margin-top:2px;'>초과 없음</div>
-            </div>"""
+        # 초과 블록 HTML (한 줄로 유지 - 들여쓰기 4칸 이상이면 마크다운이 코드블록으로 처리)
+        if _over > 0:
+            _over_block = f"<div style='text-align:center;padding:12px 20px;background:#e8f8ee;border-radius:12px;border:2px solid #28a745;min-width:100px;'><div style='color:#28a745;font-size:2.2rem;font-weight:900;line-height:1;'>+{_over}</div><div style='color:#28a745;font-size:0.78rem;font-weight:600;margin-top:2px;'>초과 달성</div></div>"
+        else:
+            _over_block = "<div style='text-align:center;padding:12px 20px;background:#f5f5f5;border-radius:12px;border:2px solid #ddd;min-width:100px;'><div style='color:#aaa;font-size:2.2rem;font-weight:900;line-height:1;'>-</div><div style='color:#aaa;font-size:0.78rem;font-weight:600;margin-top:2px;'>초과 없음</div></div>"
 
         st.markdown(f"""
         <div style='background:#ffffff;border-radius:16px;padding:24px 28px;margin-bottom:16px;
