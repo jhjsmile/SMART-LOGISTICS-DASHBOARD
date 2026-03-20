@@ -2472,6 +2472,8 @@ elif curr_l == "조립 라인":
                 '시리얼': sn_val, '상태': '조립중',
                 '증상': '', '수리': '', '작업자': st.session_state.user_id
             }):
+                insert_audit_log(시리얼=sn_val, 모델=target_model, 반=curr_g,
+                    이전상태="-", 이후상태="조립중", 작업자=st.session_state.user_id)
                 valid_mats = [m for m in st.session_state[_mat_list_key] if m["자재시리얼"].strip()]
                 if valid_mats:
                     insert_material_serials(
@@ -3057,11 +3059,21 @@ elif curr_l == "생산 현황 리포트":
                 st.plotly_chart(_fig_ln, use_container_width=True)
         with cc4:
             try:
-                _df_trend = df_rpt.copy()
-                _date_col = '투입일' if '투입일' in _df_trend.columns else '시간'
-                _parsed = pd.to_datetime(_df_trend[_date_col], errors='coerce')
+                # 투입 현황은 audit_log의 최초 등록(이전상태='-', 이후상태='조립중') 기준으로 집계
+                # → production_db의 '시간'(마지막 상태변경 시간)을 쓰면 오늘 처리된
+                #   검사/OQC/포장 제품까지 모두 포함되어 수치가 과도하게 집계되는 문제 방지
+                _audit_all = load_audit_log()
+                if v_group != "전체" and not _audit_all.empty:
+                    _audit_all = _audit_all[_audit_all['반'] == v_group]
+                if not _audit_all.empty and '이전상태' in _audit_all.columns and '이후상태' in _audit_all.columns:
+                    _df_trend = _audit_all[
+                        (_audit_all['이전상태'] == '-') & (_audit_all['이후상태'] == '조립중')
+                    ].copy()
+                else:
+                    _df_trend = pd.DataFrame(columns=['시간'])
+                _parsed = pd.to_datetime(_df_trend['시간'], errors='coerce')
                 # timezone-aware면 KST로 변환, naive면 KST로 간주
-                if _parsed.dt.tz is not None:
+                if not _parsed.empty and _parsed.dt.tz is not None:
                     _df_trend['_kst'] = _parsed.dt.tz_convert('Asia/Seoul')
                 else:
                     _df_trend['_kst'] = _parsed
@@ -3073,9 +3085,12 @@ elif curr_l == "생산 현황 리포트":
                 _today_data = _df_trend[_df_trend['_date'] == _today_str]
                 if _today_data.empty:
                     # 오늘 데이터 없으면 가장 최근 날짜
-                    _latest_date = _df_trend['_date'].dropna().max()
-                    _today_data = _df_trend[_df_trend['_date'] == _latest_date]
-                    _chart_date = _latest_date
+                    _latest_date = _df_trend['_date'].dropna().max() if not _df_trend.empty else None
+                    if _latest_date:
+                        _today_data = _df_trend[_df_trend['_date'] == _latest_date]
+                        _chart_date = _latest_date
+                    else:
+                        _chart_date = _today_str
                 else:
                     _chart_date = _today_str
 
