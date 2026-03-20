@@ -6635,7 +6635,7 @@ elif curr_l == "작업자 매뉴얼":
             {html_content}
         </div>""", unsafe_allow_html=True)
 
-    # ── 1. 시스템 소개 & 로그인 ──────────────────────────────
+    # ── 1. 로그인 방법 ──────────────────────────────────────
     with st.expander("🔑 1. 로그인 방법", expanded=False):
         _man_section("🔑", "로그인 절차")
         _man_box("""
@@ -6645,12 +6645,31 @@ elif curr_l == "작업자 매뉴얼":
           <li>로그인 성공 → 내 권한에 맞는 화면으로 자동 이동</li>
           <li>실패 시 '로그인 정보가 올바르지 않습니다.' 메시지 → 관리자 문의</li>
         </ol>
-        <p style='margin:8px 0 0;color:#7a5c00;background:#fff3d4;padding:6px 10px;border-radius:5px;'>
+        <p style='margin:8px 0 4px;color:#7a5c00;background:#fff3d4;padding:6px 10px;border-radius:5px;'>
           ⚠ 비밀번호는 대소문자를 구분합니다. 초기 비밀번호는 관리자에게 문의하세요.
+        </p>
+        <p style='margin:4px 0 0;color:#1B5E20;background:#e8f5e9;padding:6px 10px;border-radius:5px;'>
+          💡 계정이 없으면 로그인 화면 하단 <b>계정 신청</b> 버튼으로 접근 권한을 요청할 수 있습니다. 관리자 승인 후 사용 가능합니다.
         </p>""")
 
-    # ── 2. 생산 상태 흐름도 ──────────────────────────────────
-    with st.expander("🔄 2. 생산 상태 흐름도"):
+    # ── 2. 생산 통합 현황판 ──────────────────────────────────
+    with st.expander("🏭 2. 생산 통합 현황판"):
+        _man_section("🏭", "생산 통합 현황판 (메인 대시보드)", "#1B3A5C")
+        _man_box("""
+        <p style='margin:0 0 8px;'>로그인 후 처음 보이는 화면으로, 전체 생산 상황을 한눈에 파악할 수 있습니다.</p>
+        <b>표시 정보</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li><b>실시간 차트</b>: 반별·공정별 진행 현황 막대 그래프, 전체 상태 비중 파이 차트, 반별 총 투입 차트</li>
+          <li><b>전체 생산 요약 카드</b>: 총 투입 / 최종 완료 / 작업 중 / 불량 이슈 수량</li>
+          <li><b>반별 생산 현황</b>: 각 반(제조1·2·3반)의 투입·완료·재공·불량 수량 카드</li>
+          <li><b>생산 일정 달력</b>: 주간/월간 캘린더에서 당일 포함 향후 일정 확인 가능</li>
+        </ul>
+        <p style='margin:0;color:#1B5E20;background:#e8f5e9;padding:6px 10px;border-radius:5px;'>
+          💡 데이터는 실시간으로 갱신됩니다. 화면이 오래됐다고 느껴지면 브라우저를 새로 고침하세요.
+        </p>""")
+
+    # ── 3. 생산 상태 흐름도 ──────────────────────────────────
+    with st.expander("🔄 3. 생산 상태 흐름도"):
         _man_section("🔄", "제품이 거치는 상태 변화", "#2B7CB5")
         _man_box("""
         <div style='display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 0;'>
@@ -6671,15 +6690,16 @@ elif curr_l == "작업자 매뉴얼":
           <span style='background:#1B3A5C;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>✅ 완료</span>
         </div>
         <hr style='border:none;border-top:1px solid #e0d8c8;margin:10px 0;'>
-        <p style='margin:0;'><b>🔴 불량 발생 시:</b>
+        <p style='margin:0 0 6px;'><b>🔴 불량 발생 시:</b>
           <span style='background:#DC2626;color:#fff;padding:3px 8px;border-radius:4px;font-size:0.82rem;'>불량 처리 중</span>
           → 불량 공정에서 원인 분석 →
           <span style='background:#F4892A;color:#fff;padding:3px 8px;border-radius:4px;font-size:0.82rem;'>수리 완료(재투입)</span>
           → 검사대기 복귀
-        </p>""")
+        </p>
+        <p style='margin:0;color:#64748B;font-size:0.88rem;'>※ 각 라인 담당자는 자기 공정 단계만 처리합니다. 다른 공정 제품은 수정하지 마세요.</p>""")
 
-    # ── 3. 조립 라인 ────────────────────────────────────────
-    with st.expander("🔧 3. 조립 라인 사용법"):
+    # ── 4. 조립 라인 ────────────────────────────────────────
+    with st.expander("🔧 4. 조립 라인 사용법"):
         _man_section("🔧", "조립 라인", "#16A34A")
         _man_box("""
         <b>① 오늘 일정 확인</b>
@@ -6689,25 +6709,32 @@ elif curr_l == "작업자 매뉴얼":
         </ul>
         <b>② 신규 제품 등록</b>
         <ul style='margin:4px 0 10px;padding-left:1.4em;'>
-          <li>모델명·품목코드·시리얼 번호 입력</li>
+          <li>모델명·품목코드·시리얼 번호 입력 후 <b>등록</b> 버튼 클릭</li>
           <li>바코드 스캐너 연동 가능 — 스캔 후 자동 입력됩니다.</li>
-          <li>자재 시리얼(부품 S/N)은 별도 항목에 추가 등록 가능</li>
+          <li><b>일괄 등록</b>: 여러 시리얼을 줄바꿈으로 입력하면 한 번에 등록 가능</li>
+          <li>자재 시리얼(부품 S/N)은 등록 화면 하단의 자재 항목에 추가 입력</li>
         </ul>
         <b>③ 조립 완료 처리</b>
         <ul style='margin:4px 0 10px;padding-left:1.4em;'>
           <li>이력 목록에서 완료된 항목 체크박스 선택</li>
           <li><b>조립 완료</b> 버튼 클릭 → 상태가 <b>검사대기</b>로 자동 전환</li>
-          <li>불량 발생 시 <b>불량 처리</b> 버튼 클릭</li>
+          <li>불량 발생 시 <b>불량 처리</b> 버튼 클릭 → 불량 공정으로 이동</li>
+        </ul>
+        <b>④ 자재 시리얼 등록</b>
+        <ul style='margin:4px 0 0;padding-left:1.4em;'>
+          <li>제품에 사용된 부품의 S/N을 자재명과 함께 등록합니다.</li>
+          <li>바코드 스캔으로 빠르게 등록 가능</li>
+          <li>등록된 자재 S/N은 나중에 <b>생산 현황 리포트 → 자재 S/N 추적</b>에서 역추적 가능</li>
         </ul>
         <p style='margin:6px 0 0;background:#e8f5e9;padding:6px 10px;border-radius:5px;color:#1B5E20;'>
           💡 사이드바에서 반(제조1반·2반·3반)을 선택하면 해당 반의 일정과 이력만 표시됩니다.
         </p>""")
 
-    # ── 4. 검사 라인 ────────────────────────────────────────
-    with st.expander("🔍 4. 검사 라인 사용법"):
+    # ── 5. 검사 라인 ────────────────────────────────────────
+    with st.expander("🔍 5. 검사 라인 사용법"):
         _man_section("🔍", "검사 라인", "#0D9488")
         _man_box("""
-        <b>① 입고 대기 처리 (검사대기 → 검사중)</b>
+        <b>① 입고 처리 (검사대기 → 검사중)</b>
         <ul style='margin:4px 0 10px;padding-left:1.4em;'>
           <li>조립 완료된 제품 목록이 <b>검사대기</b> 섹션에 표시됩니다.</li>
           <li>시리얼 번호 스캔/검색으로 빠른 조회</li>
@@ -6715,15 +6742,29 @@ elif curr_l == "작업자 매뉴얼":
         </ul>
         <b>② 검사 판정</b>
         <ul style='margin:4px 0 0;padding-left:1.4em;'>
-          <li><b>✅ 합격</b> 버튼 → 상태가 <b>OQC대기</b>로 자동 전환</li>
+          <li><b>✅ 검사 합격</b> 버튼 → 상태가 <b>OQC대기</b>로 자동 전환</li>
           <li><b>🚫 불합격</b> 버튼 → 증상 메모 입력 후 확인 → <b>불량 처리 중</b>으로 전환</li>
         </ul>""")
 
-    # ── 5. 포장 라인 ────────────────────────────────────────
-    with st.expander("📦 5. 포장 라인 사용법"):
+    # ── 6. OQC 라인 ─────────────────────────────────────────
+    with st.expander("🏅 6. OQC 라인 사용법"):
+        _man_section("🏅", "OQC 라인 (최종 출하 품질 검사)", "#16A34A")
+        _man_box("""
+        <b>① OQC 시작 (OQC대기 → OQC중)</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>검사 완료(OQC대기) 제품 목록에서 체크박스 선택 후 <b>OQC 시작</b> 버튼 클릭 → <b>OQC중</b> 전환</li>
+        </ul>
+        <b>② 최종 판정</b>
+        <ul style='margin:4px 0 0;padding-left:1.4em;'>
+          <li><b>✅ 합격 (포장 완료)</b> → <b>출하승인</b> 상태로 전환 (포장 라인으로 이동)</li>
+          <li><b>🚫 부적합</b> → 부적합 사유 드롭다운 선택(또는 직접 입력) 후 확인 → <b>불량 처리 중</b>으로 전환</li>
+        </ul>""")
+
+    # ── 7. 포장 라인 ────────────────────────────────────────
+    with st.expander("📦 7. 포장 라인 사용법"):
         _man_section("📦", "포장 라인", "#7C3AED")
         _man_box("""
-        <b>① 입고 대기 처리 (출하승인 → 포장중)</b>
+        <b>① 입고 처리 (출하승인 → 포장중)</b>
         <ul style='margin:4px 0 10px;padding-left:1.4em;'>
           <li>OQC 합격(출하승인) 제품이 목록에 표시됩니다.</li>
           <li>체크박스 선택 후 <b>일괄 입고</b> 버튼 → <b>포장중</b>으로 전환</li>
@@ -6731,47 +6772,53 @@ elif curr_l == "작업자 매뉴얼":
         <b>② 포장 완료 처리</b>
         <ul style='margin:4px 0 0;padding-left:1.4em;'>
           <li>포장중 목록에서 <b>포장 완료</b> 버튼 클릭 → <b>완료</b> 상태로 최종 처리</li>
-          <li>완료된 수량은 KPI 대시보드에 자동 반영됩니다.</li>
+          <li>완료된 수량은 생산 지표 관리 KPI에 자동 반영됩니다.</li>
         </ul>""")
 
-    # ── 6. OQC 라인 ─────────────────────────────────────────
-    with st.expander("🏅 6. OQC 라인 사용법"):
-        _man_section("🏅", "OQC 라인 (최종 출하 품질 검사)", "#16A34A")
-        _man_box("""
-        <b>① OQC 시작</b>
-        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
-          <li>검사 완료(OQC대기) 제품 목록에서 <b>OQC 시작</b> 버튼 클릭 → <b>OQC중</b> 전환</li>
-        </ul>
-        <b>② 최종 판정</b>
-        <ul style='margin:4px 0 0;padding-left:1.4em;'>
-          <li><b>✅ 합격</b> → <b>출하승인</b> (포장 라인으로 이동)</li>
-          <li><b>🚫 부적합</b> → 부적합 사유 입력 후 <b>불량 처리 중</b>으로 전환</li>
-        </ul>""")
-
-    # ── 7. 불량 공정 ─────────────────────────────────────────
-    with st.expander("🛠 7. 불량 공정 처리"):
+    # ── 8. 불량 공정 ─────────────────────────────────────────
+    with st.expander("🛠 8. 불량 공정 처리"):
         _man_section("🛠", "불량 공정", "#DC2626")
         _man_box("""
         <ol style='margin:0;padding-left:1.4em;'>
           <li>불량 처리 중 목록에서 해당 제품 확인</li>
-          <li><b>불량 원인</b> 드롭다운에서 원인 선택 (또는 직접 입력)</li>
-          <li><b>조치 방법</b> 선택 (재작업·폐기·반품 등)</li>
+          <li><b>불량 원인</b> 드롭다운에서 원인 선택 (없으면 '기타(직접 입력)' 선택 후 입력)</li>
+          <li><b>조치 방법</b> 드롭다운에서 선택 (재작업·폐기·반품 등)</li>
           <li><b>조치 완료</b> 버튼 클릭 → <b>수리 완료(재투입)</b> 상태로 전환</li>
           <li>재투입된 제품은 <b>검사대기</b> 상태로 복귀하여 재검사 진행</li>
-        </ol>""")
+        </ol>
+        <p style='margin:8px 0 0;color:#7F1D1D;background:#fef2f2;padding:6px 10px;border-radius:5px;'>
+          ⚠ 불량 원인과 조치 방법의 드롭다운 항목은 관리자가 설정합니다. 새 항목이 필요하면 관리자에게 요청하세요.
+        </p>""")
 
-    # ── 8. FAQ ───────────────────────────────────────────────
-    with st.expander("❓ 8. 자주 묻는 질문 (FAQ)"):
+    # ── 9. 생산 현황 리포트 ───────────────────────────────────
+    with st.expander("📊 9. 생산 현황 리포트"):
+        _man_section("📊", "생산 현황 리포트", "#2B7CB5")
+        _man_box("""
+        <b>생산 현황 리포트 탭</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>기간·반 필터로 원하는 기간의 생산 이력을 조회합니다.</li>
+          <li>시리얼 번호 검색으로 특정 제품의 공정 이력을 추적할 수 있습니다.</li>
+          <li>조회 결과를 <b>Excel / CSV</b>로 다운로드 가능합니다.</li>
+        </ul>
+        <b>자재 S/N 추적 탭</b>
+        <ul style='margin:4px 0 0;padding-left:1.4em;'>
+          <li><b>메인 S/N → 자재 조회</b>: 완제품 시리얼로 해당 제품에 쓰인 모든 자재 S/N 확인</li>
+          <li><b>자재 S/N → 메인 역추적</b>: 부품 시리얼로 해당 부품이 어느 완제품에 사용됐는지 역추적</li>
+          <li>품질 이슈 발생 시 영향받은 제품 범위를 신속하게 파악할 수 있습니다.</li>
+        </ul>""")
+
+    # ── 10. FAQ ──────────────────────────────────────────────
+    with st.expander("❓ 10. 자주 묻는 질문 (FAQ)"):
         _man_section("❓", "FAQ", "#64748B")
         _man_box("""
         <table style='width:100%;border-collapse:collapse;font-size:0.91rem;'>
           <tr style='background:#f0f4f8;'>
             <td style='padding:8px 12px;font-weight:700;width:42%;border-bottom:1px solid #ddd;'>Q. 로그인이 안 됩니다.</td>
-            <td style='padding:8px 12px;border-bottom:1px solid #ddd;'>A. 아이디/비밀번호 재확인 후 관리자에게 계정 재설정 요청하세요.</td>
+            <td style='padding:8px 12px;border-bottom:1px solid #ddd;'>A. 아이디/비밀번호 재확인 후 관리자에게 계정 재설정 요청하세요. 또는 로그인 화면의 <b>계정 신청</b>을 이용하세요.</td>
           </tr>
           <tr>
             <td style='padding:8px 12px;font-weight:700;border-bottom:1px solid #ddd;'>Q. 데이터가 표시되지 않습니다.</td>
-            <td style='padding:8px 12px;border-bottom:1px solid #ddd;'>A. 사이드바의 Supabase 경고 확인 후 페이지를 새로 고침하세요.</td>
+            <td style='padding:8px 12px;border-bottom:1px solid #ddd;'>A. 사이드바의 연결 상태 경고 확인 후 페이지를 새로 고침하세요.</td>
           </tr>
           <tr style='background:#f0f4f8;'>
             <td style='padding:8px 12px;font-weight:700;border-bottom:1px solid #ddd;'>Q. 버튼을 눌렀는데 반응이 없습니다.</td>
@@ -6782,8 +6829,16 @@ elif curr_l == "작업자 매뉴얼":
             <td style='padding:8px 12px;border-bottom:1px solid #ddd;'>A. 불량 공정 화면에서 해당 시리얼을 검색하세요.</td>
           </tr>
           <tr style='background:#f0f4f8;'>
-            <td style='padding:8px 12px;font-weight:700;'>Q. 내 반이 아닌 데이터가 보입니다.</td>
-            <td style='padding:8px 12px;'>A. 사이드바에서 본인 반(제조1반·2반·3반)을 선택하세요.</td>
+            <td style='padding:8px 12px;font-weight:700;border-bottom:1px solid #ddd;'>Q. 내 반이 아닌 데이터가 보입니다.</td>
+            <td style='padding:8px 12px;border-bottom:1px solid #ddd;'>A. 사이드바에서 본인 반(제조1반·2반·3반)을 선택하세요.</td>
+          </tr>
+          <tr>
+            <td style='padding:8px 12px;font-weight:700;border-bottom:1px solid #ddd;'>Q. 드롭다운에 필요한 항목이 없습니다.</td>
+            <td style='padding:8px 12px;border-bottom:1px solid #ddd;'>A. 관리자에게 드롭박스 옵션 추가를 요청하세요. (마스터 관리 → 드롭박스 옵션 편집)</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:8px 12px;font-weight:700;'>Q. 실수로 잘못된 상태로 처리했습니다.</td>
+            <td style='padding:8px 12px;'>A. 스스로 되돌릴 수 없습니다. 관리자에게 감사 로그 확인 및 수정을 요청하세요.</td>
           </tr>
         </table>""")
 
