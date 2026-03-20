@@ -4,7 +4,7 @@ plotly
 google-api-python-client
 google-auth
 streamlit-autorefresh
-supabase
+supabase>=2.0.0
 openpyxl
 bcrypt
 requests

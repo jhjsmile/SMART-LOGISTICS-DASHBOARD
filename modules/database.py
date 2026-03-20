@@ -72,6 +72,26 @@ def _clear_all_cache() -> None:
     _clear_audit_cache()
 
 
+def clear_cache_for_tables(tables: set) -> None:
+    """Realtime 변경 감지 시 해당 테이블 캐시만 선택적으로 초기화."""
+    if "production" in tables:
+        _clear_production_cache()
+    if "production_schedule" in tables:
+        _clear_schedule_cache()
+    if "production_plan" in tables or "plan_change_log" in tables:
+        _clear_plan_cache()
+    if "model_master" in tables:
+        _clear_master_cache()
+    if "audit_log" in tables:
+        _clear_audit_cache()
+    if "help_requests" in tables:
+        _clear_help_request_cache()
+    if "access_requests" in tables:
+        _clear_access_request_cache()
+    if "material_serial" in tables:
+        load_material_serials.clear()
+
+
 # =================================================================
 # 생산 이력
 # =================================================================

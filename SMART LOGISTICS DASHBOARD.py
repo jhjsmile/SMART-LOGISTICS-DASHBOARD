@@ -31,6 +31,7 @@ import io
 from datetime import datetime, timezone, timedelta, date
 from supabase import create_client, Client
 from streamlit_autorefresh import st_autorefresh
+from modules.realtime import start_realtime, pop_changed_tables, is_running
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
@@ -50,6 +51,7 @@ from modules.database import (
     _clear_production_cache, _clear_schedule_cache, _clear_plan_cache,
     _clear_master_cache, _clear_audit_cache, _clear_all_cache,
     _clear_help_request_cache, _clear_access_request_cache,
+    clear_cache_for_tables,
     load_realtime_ledger, insert_row, update_row,
     delete_all_rows, delete_production_row_by_sn,
     load_app_setting, save_app_setting,
@@ -79,7 +81,7 @@ from modules.database import (
 # 상수 정의
 # =================================================================
 # 성능 설정
-AUTO_REFRESH_INTERVAL_MS = 30000  # 30초 자동 새로고침
+AUTO_REFRESH_INTERVAL_MS = 3000   # Realtime 폴백용 3초 폴링 (변경 없으면 캐시 재사용)
 MAX_FUNCTION_LINES = 200  # 함수 최대 라인 수 가이드
 
 # UI 설정
@@ -150,10 +152,30 @@ st.set_page_config(
 )
 
 KST = timezone(timedelta(hours=9))
+
+# ── Supabase Realtime 리스너 시작 (최초 1회) ──────────────────────
+try:
+    _sb_url = st.secrets["supabase"]["url"]
+    _sb_key = st.secrets["supabase"]["key"]
+    start_realtime(_sb_url, _sb_key)
+except Exception as _rt_err:
+    pass  # secrets 없는 환경(로컬 테스트 등)에서는 무시
+
+# ── 폴링 트리거 (Realtime 폴백 / 탭 wake-up 대비) ────────────────
+# Realtime이 정상 동작할 때는 이 rerun에서 캐시 히트만 함 → 사실상 무비용
 _refresh_count = st_autorefresh(interval=AUTO_REFRESH_INTERVAL_MS, key="pms_auto_refresh")
-# autorefresh 카운터만 기록 - 팝업은 사용자가 직접 닫을 때까지 유지
 if _refresh_count:
     st.session_state["_last_refresh_count"] = _refresh_count
+
+# ── Realtime 변경 감지 → 해당 테이블 캐시만 초기화 ───────────────
+_rt_changed = pop_changed_tables()
+if _rt_changed:
+    clear_cache_for_tables(_rt_changed)
+    # production 변경 시 session_state도 즉시 갱신
+    if "production" in _rt_changed and st.session_state.get("login_status"):
+        st.session_state.production_db = load_realtime_ledger()
+    if "production_schedule" in _rt_changed and st.session_state.get("login_status"):
+        st.session_state.schedule_db = load_schedule()
 
 PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
 CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower", "schedule_manager"]
@@ -717,10 +739,17 @@ st.markdown("""
 # 3. Supabase 연결 및 DB 함수
 # =================================================================
 
-# 앱 최초 기동 시 1회만 실행 (30초 자동 새로고침마다 재실행 방지)
+# 앱 최초 기동 시 1회만 실행 (autorefresh마다 재실행 방지)
 if "supabase_alive_checked" not in st.session_state:
     keep_supabase_alive()
     st.session_state["supabase_alive_checked"] = True
+
+# ── 사이드바 Realtime 연결 상태 표시 ─────────────────────────────
+with st.sidebar:
+    if is_running():
+        st.caption("🟢 실시간 연결")
+    else:
+        st.caption("🟡 폴링 모드")
 
 
 
