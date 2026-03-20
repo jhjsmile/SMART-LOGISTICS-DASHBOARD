@@ -1375,10 +1375,10 @@ if not st.session_state.login_status:
                             name=rq_name.strip(), department=rq_dept,
                             requested_role=rq_role, reason=rq_reason.strip()
                         )
-                        if _ok:
+                        if _ok is True:
                             st.success("✅ 신청 완료! 관리자 승인 후 로그인 가능합니다.")
                         else:
-                            st.error("신청 중 오류가 발생했습니다. 관리자에게 문의해 주세요.")
+                            st.error(f"신청 중 오류가 발생했습니다: {_ok}")
     st.stop()
 
 # =================================================================

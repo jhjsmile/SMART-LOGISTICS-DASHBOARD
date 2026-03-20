@@ -264,7 +264,8 @@ def load_help_requests(status: str = "open") -> pd.DataFrame:
 
 
 def submit_access_request(username: str, pw_hash: str, name: str,
-                           department: str, requested_role: str, reason: str) -> bool:
+                           department: str, requested_role: str, reason: str):
+    """성공 시 True, 실패 시 오류 메시지 문자열 반환"""
     try:
         get_supabase().table("access_requests").insert({
             "username": username, "password_hash": pw_hash,
@@ -273,8 +274,8 @@ def submit_access_request(username: str, pw_hash: str, name: str,
             "status": "pending", "created_at": get_now_kst_str()
         }).execute()
         return True
-    except Exception:
-        return False
+    except Exception as e:
+        return str(e)
 
 
 @st.cache_data(ttl=30)
