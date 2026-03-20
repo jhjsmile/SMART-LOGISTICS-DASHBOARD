@@ -7077,6 +7077,147 @@ elif curr_l == "관리자 매뉴얼":
           </tr>
         </table>""")
 
+    # ── 8. 계정 신청 승인 ────────────────────────────────────
+    with st.expander("✅ 8. 계정 신청 승인"):
+        _adm_section("✅", "신규 계정 신청 처리", "#166534")
+        _adm_box("""
+        <b>신청 확인 위치</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>사이드바 하단 <b>마스터 관리</b> 이동 → 마스터 비밀번호 인증</li>
+          <li><b>계정 신청 관리</b> 섹션에서 대기 중인 신청 목록 확인</li>
+        </ul>
+        <b>승인 처리</b>
+        <ol style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>신청자 이름·요청 권한(Role) 확인</li>
+          <li><b>승인</b> 버튼 클릭 → 해당 사용자 계정 즉시 활성화</li>
+          <li>승인 후 작업자에게 로그인 가능함을 별도 안내</li>
+        </ol>
+        <b>거절 처리</b>
+        <ul style='margin:4px 0 0;padding-left:1.4em;'>
+          <li><b>거절</b> 버튼 클릭 → 신청 삭제 (재신청 가능)</li>
+          <li>⚠ 승인/거절 후에는 되돌릴 수 없으므로 신중하게 처리</li>
+        </ul>""")
+
+    # ── 9. 도움 요청 처리 ────────────────────────────────────
+    with st.expander("🆘 9. 작업자 도움 요청 처리"):
+        _adm_section("🆘", "현장 도움 요청 확인 및 처리", "#7C2D12")
+        _adm_box("""
+        <b>알림 확인</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>사이드바에 <b>🆘 도움 요청 (N건)</b> 배지가 표시되면 미처리 요청이 있는 것</li>
+          <li>클릭하여 요청 목록 확인: 작업자명·요청 내용·시각</li>
+        </ul>
+        <b>처리 방법</b>
+        <ol style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>요청 내용 확인 후 현장 지원 또는 응답</li>
+          <li><b>처리 완료</b> 버튼 클릭 → 요청 목록에서 제거</li>
+        </ol>
+        <b>Telegram 알림 연동</b>
+        <ul style='margin:4px 0 0;padding-left:1.4em;'>
+          <li>작업자가 <b>관리자 호출</b> 버튼을 누르면 Telegram 메시지로 즉시 수신</li>
+          <li>Telegram 미설정 시 사이드바 목록에서만 확인 가능</li>
+        </ul>""")
+
+    # ── 10. 제품 상태 수동 변경 ──────────────────────────────
+    with st.expander("↩️ 10. 제품 상태 수동 변경"):
+        _adm_section("↩️", "잘못 처리된 제품 상태 복구", "#92400E")
+        _adm_box("""
+        <p style='margin:0 0 8px;background:#fef2f2;padding:6px 10px;border-radius:5px;color:#7F1D1D;font-weight:700;'>
+          🔐 관리자·마스터 전용 기능 — 생산 현황 리포트 화면에서 사용
+        </p>
+        <b>접근 경로</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>사이드바 → <b>생산 현황 리포트</b> → 하단 <b>제품 상태 수동 변경</b> 섹션</li>
+        </ul>
+        <b>사용 방법</b>
+        <ol style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>시리얼 번호 입력 후 <b>조회</b></li>
+          <li>현재 상태 확인 후 변경할 상태 선택</li>
+          <li><b>상태 변경</b> 버튼 클릭 → 감사 로그에 "관리자 수동 상태 변경" 비고로 기록</li>
+        </ol>
+        <p style='margin:0;background:#fff3d4;padding:6px 10px;border-radius:5px;color:#7a5c00;'>
+          ⚠ 모든 수동 변경 이력은 감사 로그에 남습니다. 남용하지 마세요.
+        </p>""")
+
+    # ── 11. 드롭박스 옵션 편집 ───────────────────────────────
+    with st.expander("📝 11. 드롭박스 옵션 편집"):
+        _adm_section("📝", "불량 원인 · 조치 방법 항목 관리", "#1B3A5C")
+        _adm_box("""
+        <b>접근 경로</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>사이드바 → <b>마스터 관리</b> → 마스터 비밀번호 인증 → <b>드롭박스 옵션 편집</b> 섹션</li>
+        </ul>
+        <b>편집 가능 항목</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li><b>불량 원인</b>: 불량 공정 화면의 원인 드롭다운 선택지</li>
+          <li><b>조치 방법</b>: 불량 공정 화면의 조치 드롭다운 선택지</li>
+          <li><b>라인명</b>: 각 공정 화면에서 사용하는 라인 구분 값</li>
+        </ul>
+        <b>추가/삭제 방법</b>
+        <ol style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>항목 입력란에 새 옵션 입력 후 <b>추가</b> 버튼 클릭</li>
+          <li>기존 항목 옆 <b>삭제(🗑)</b> 버튼으로 제거</li>
+          <li>변경 사항은 즉시 모든 작업자 화면에 반영</li>
+        </ol>
+        <p style='margin:0;background:#e0f2fe;padding:6px 10px;border-radius:5px;color:#0C4A6E;'>
+          💡 작업자가 "드롭다운에 항목이 없다"고 요청하면 여기서 추가하세요.
+        </p>""")
+
+    # ── 12. 사용자별 권한 개별 설정 ──────────────────────────
+    with st.expander("🔑 12. 사용자별 권한 개별 설정"):
+        _adm_section("🔑", "메뉴·읽기/쓰기 권한 세부 조정", "#4A1D96")
+        _adm_box("""
+        <b>접근 경로</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>마스터 관리 → 사용자 목록 → 해당 사용자 → <b>권한 설정</b></li>
+        </ul>
+        <b>설정 가능 항목</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li><b>메뉴 접근</b>: 기본 Role에서 특정 메뉴를 추가/제외</li>
+          <li><b>읽기 전용(read)</b>: 데이터 조회만 가능, 등록·수정 불가</li>
+          <li><b>쓰기(write)</b>: 데이터 등록·수정·삭제 가능</li>
+        </ul>
+        <b>주요 활용 예시</b>
+        <ul style='margin:4px 0 0;padding-left:1.4em;'>
+          <li>조립 담당자에게 생산 현황 리포트 <b>읽기 전용</b> 추가 부여</li>
+          <li>특정 계정의 쓰기 권한을 일시적으로 제한</li>
+          <li>컨트롤 타워에게 조립 라인 <b>읽기 전용</b> 접근 허용</li>
+        </ul>""")
+
+    # ── 13. Telegram 봇 설정 ─────────────────────────────────
+    with st.expander("📡 13. Telegram 관리자 호출 봇 설정"):
+        _adm_section("📡", "Telegram 알림 봇 연동", "#0C4A6E")
+        _adm_box("""
+        <b>설정 위치</b>
+        <ul style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>Streamlit Cloud → Settings → Secrets</li>
+        </ul>
+        <b>필요한 값</b>
+        <table style='width:100%;border-collapse:collapse;font-size:0.88rem;margin-top:6px;'>
+          <tr style='background:#0C4A6E;color:#fff;'>
+            <th style='padding:6px 10px;text-align:left;'>키</th>
+            <th style='padding:6px 10px;text-align:left;'>설명</th>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>TG_TOKEN</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>BotFather에서 발급받은 봇 토큰</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;font-family:monospace;'>TG_CHAT_ID</td>
+            <td style='padding:6px 10px;'>알림 수신할 채팅방 또는 그룹 Chat ID</td>
+          </tr>
+        </table>
+        <b style='display:block;margin-top:10px;'>봇 생성 절차</b>
+        <ol style='margin:4px 0 10px;padding-left:1.4em;'>
+          <li>Telegram에서 <code>@BotFather</code> 검색 → <code>/newbot</code> 명령</li>
+          <li>봇 이름 및 사용자명 설정 후 <b>토큰</b> 수령</li>
+          <li>알림 받을 채팅방에 봇 초대 후 Chat ID 확인</li>
+          <li>Streamlit Secrets에 <code>TG_TOKEN</code>, <code>TG_CHAT_ID</code> 입력</li>
+        </ol>
+        <p style='margin:0;background:#e0f2fe;padding:6px 10px;border-radius:5px;color:#0C4A6E;'>
+          💡 Chat ID 확인: <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> 접속 후 <code>chat.id</code> 값 사용
+        </p>""")
+
     st.markdown("<br>", unsafe_allow_html=True)
     st.info("📌 Supabase 테이블 편집은 [supabase.com](https://supabase.com) → 프로젝트 → Table Editor에서 진행합니다.")
 
