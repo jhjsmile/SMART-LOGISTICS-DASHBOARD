@@ -848,6 +848,26 @@ def insert_schedule_change_log(sch_id: int, 날짜: str, 반: str, 모델명: st
 # =================================================================
 
 
+# ── Expander 상태 유지 헬퍼 ───────────────────────────────────────────
+# 문제: st.rerun() 호출 시 expanded=False 가 매번 적용되어 expander 가 닫힘.
+# 해결: session_state 로 각 expander 의 열림/닫힘을 관리.
+#   _xp(key)        → expander 의 현재 expanded 값 반환 (첫 진입 시 False)
+#   _rerun(xp_key)  → expander 내부 버튼에서 호출; 해당 expander 를 열린 상태로
+#                     유지한 채로 rerun 함.
+#   페이지 이동 감지 → 새 메뉴 진입 시 모든 _xp_* 상태를 False 로 초기화.
+def _xp(key: str) -> bool:
+    """현재 페이지의 expander 열림 상태 반환 (없으면 False=접힘)."""
+    return bool(st.session_state.get(f"_xp_{key}", False))
+
+def _rerun(xp_key: str = None) -> None:
+    """st.rerun() 래퍼.  expander 내부 버튼에서 호출하면 해당 expander 를
+    다음 렌더링에서도 열린 상태(expanded=True)로 유지한다."""
+    if xp_key:
+        st.session_state[f"_xp_{xp_key}"] = True
+    st.rerun()
+# ─────────────────────────────────────────────────────────────────────
+
+
 # ╔════════════════════════════════════════════════════════════════════╗
 # ║  ⚠️  리팩토링 권장: 이 함수는 332 라인입니다!                      ║
 # ║                                                                      ║
@@ -1785,6 +1805,16 @@ def render_calendar_monthly(
 curr_g = st.session_state.selected_group
 curr_l = st.session_state.current_line
 
+# ── 페이지 이동 감지 → expander 상태 초기화 ──────────────────────────
+# 새 메뉴/반으로 이동하면 모든 _xp_* 키를 삭제하여 접힌 상태로 시작.
+# 같은 페이지에서 버튼 클릭(rerun) 시에는 상태가 유지된다.
+_xp_page_sig_now = f"{curr_l}||{curr_g}"
+if st.session_state.get("_xp_page_sig") != _xp_page_sig_now:
+    for _xp_k in [k for k in st.session_state if k.startswith("_xp_") and k != "_xp_page_sig"]:
+        del st.session_state[_xp_k]
+    st.session_state["_xp_page_sig"] = _xp_page_sig_now
+# ─────────────────────────────────────────────────────────────────────
+
 # =================================================================
 # 관리자 호출 플로팅 버튼 (항상 표시)
 # =================================================================
@@ -2060,7 +2090,7 @@ elif curr_l == "조립 라인":
 
     # 오늘 일정 카드
     _today_label = f"📋 오늘({today_str}) {curr_g} 작업 일정" + (f"  ·  {len(today_sch)}건" if not today_sch.empty else "  ·  없음")
-    with st.expander(_today_label, expanded=False):
+    with st.expander(_today_label, expanded=_xp("asm_sch_today")):
         if today_sch.empty:
             st.info("오늘 등록된 작업 일정이 없습니다.")
         else:
@@ -2094,7 +2124,7 @@ elif curr_l == "조립 라인":
         (sch_all['반'] == curr_g)
     ] if not sch_all.empty else pd.DataFrame()
     _month_sch_cnt = len(_month_sch_pre)
-    with st.expander(f"📅 {curr_g} 이번 달 전체 일정 보기  ·  {_month_sch_cnt}건" if _month_sch_cnt else f"📅 {curr_g} 이번 달 전체 일정 보기  ·  없음", expanded=False):
+    with st.expander(f"📅 {curr_g} 이번 달 전체 일정 보기  ·  {_month_sch_cnt}건" if _month_sch_cnt else f"📅 {curr_g} 이번 달 전체 일정 보기  ·  없음", expanded=_xp("asm_sch_month")):
         month_sch = _month_sch_pre
         if not month_sch.empty:
             show_cols = ['날짜','카테고리','모델명','pn','조립수','출하계획','특이사항']
@@ -2179,7 +2209,7 @@ elif curr_l == "조립 라인":
 
     # ── 모델/품목별 수량 카운트 + 생산 이력 ─────────────────────────
     if not f_df.empty:
-        with st.expander(f"📊 {curr_g} 조립 라인 수량 현황  ·  {len(f_df)}건", expanded=False):
+        with st.expander(f"📊 {curr_g} 조립 라인 수량 현황  ·  {len(f_df)}건", expanded=_xp("asm_cnt")):
             grp = f_df.groupby(['모델','품목코드'])
             count_rows = []
             for (model, pn), gdf in grp:
@@ -2202,7 +2232,7 @@ elif curr_l == "조립 라인":
                     sc3.metric("🏗️ 작업중", wip)
                     sc4.metric("🚨 불량", defect, delta=None if defect == 0 else f"{defect}건", delta_color="inverse")
 
-        with st.expander(f"📋 {curr_g} 생산 이력  ·  {len(f_df)}건", expanded=False):
+        with st.expander(f"📋 {curr_g} 생산 이력  ·  {len(f_df)}건", expanded=_xp("asm_hist")):
             _asm_chk_key = f"asm_checked_{curr_g}"
             if _asm_chk_key not in st.session_state:
                 st.session_state[_asm_chk_key] = {}
@@ -2225,7 +2255,7 @@ elif curr_l == "조립 라인":
                     st.session_state[_asm_chk_key][str(_si)] = True
                 st.session_state["_autofocus_after_rerun"] = f"sn_search_{curr_g}_{st.session_state[_asm_search_cnt] + 1}"
                 st.session_state[_asm_search_cnt] += 1  # 키 변경 → 체크박스 새 키로 재렌더 → value= 적용
-                st.rerun()
+                _rerun("asm_hist")
             else:
                 f_df_view = f_df
 
@@ -2249,7 +2279,7 @@ elif curr_l == "조립 라인":
                     st.session_state[_asm_chk_key] = {}
                     st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
                     _prod_bulk_update(_bulk)
-                    st.rerun()
+                    _rerun("asm_hist")
                 if ba4.button("🚫 일괄 불량", key=f"bulk_ng_{curr_g}", use_container_width=True,
                              disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
                     if _bulk_ng_cause in ["(선택)", ""]:
@@ -2269,7 +2299,7 @@ elif curr_l == "조립 라인":
                         st.session_state[_asm_chk_key] = {}
                         st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
                         _prod_bulk_update(_bulk)
-                        st.rerun()
+                        _rerun("asm_hist")
 
             # STATUS_STYLE: 모듈 상수 사용 (상단 정의 참조)
             h = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 2.0])
@@ -2307,12 +2337,12 @@ elif curr_l == "조립 라인":
                             st.session_state[_asm_chk_key].pop(str(idx), None)
                             st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
                             _prod_update(row['시리얼'], _upd)
-                            st.rerun()
+                            _rerun("asm_hist")
                         _ng_open_key = f"_ng_open_asm_{idx}"
                         if not st.session_state.get(_ng_open_key):
                             if b2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량 원인 입력"):
                                 st.session_state[_ng_open_key] = True
-                                st.rerun()
+                                _rerun("asm_hist")
                         else:
                             b2.button("🚫", key=f"ng_{idx}", use_container_width=True, disabled=True)
                     else:
@@ -2342,10 +2372,10 @@ elif curr_l == "조립 라인":
                                 st.session_state[_asm_search_cnt] += 1
                                 st.session_state.pop(_ng_open_key, None)
                                 _prod_update(row['시리얼'], _upd)
-                                st.rerun()
+                                _rerun("asm_hist")
                         if _nc3.button("취소", key=f"_ng_cancel_asm_{idx}", use_container_width=True):
                             st.session_state.pop(_ng_open_key, None)
-                            st.rerun()
+                            _rerun("asm_hist")
                 # ── 자재 시리얼 토글 표시 ──
                 if st.session_state.get(_asm_tog_key, False):
                     _asm_row_mats = _asm_bulk_mats[_asm_bulk_mats['메인시리얼'] == row['시리얼']] if not _asm_bulk_mats.empty else pd.DataFrame()
@@ -2499,7 +2529,7 @@ elif curr_l == "조립 라인":
                 st.warning("모델, 품목코드, 메인 S/N을 모두 입력해주세요.")
 
     # ── 기존 제품 자재 시리얼 추가 ────────────────────────────────────
-    with st.expander("🔩 기존 제품 자재 시리얼 추가 등록", expanded=False):
+    with st.expander("🔩 기존 제품 자재 시리얼 추가 등록", expanded=_xp("asm_mat")):
         st.caption("메인 S/N을 입력하면 기존 등록된 자재를 조회하고 누락된 자재를 추가할 수 있습니다.")
 
         _add_mat_sn_cnt_key = f"add_mat_sn_cnt_{curr_g}"
@@ -2555,11 +2585,11 @@ elif curr_l == "조립 라인":
                         st.toast(f"⚠️ 이미 추가된 자재 S/N: {add_scan_input.strip()}", icon="⚠️")
                     st.session_state["_autofocus_after_rerun"] = f"add_scan_sn_{curr_g}_{st.session_state[_add_scan_cnt_key] + 1}"
                     st.session_state[_add_scan_cnt_key] += 1
-                    st.rerun()
+                    _rerun("asm_mat")
 
                 if asc3.button("➕ 추가", key=f"add_mat_manual_{curr_g}", use_container_width=True):
                     st.session_state[_add_mat_list_key].append({"자재명": add_sel_mat_name, "자재시리얼": ""})
-                    st.rerun()
+                    _rerun("asm_mat")
 
                 add_mat_list_now = st.session_state[_add_mat_list_key]
                 if add_mat_list_now:
@@ -2580,7 +2610,7 @@ elif curr_l == "조립 라인":
                             _add_should_rerun = True
                     st.session_state[_add_mat_list_key] = add_updated_list
                     if _add_should_rerun:
-                        st.rerun()
+                        _rerun("asm_mat")
 
                     _mat_btn_col, _ = st.columns([1, 2])
                     if _mat_btn_col.button("💾 자재 시리얼 추가 저장", key=f"add_mat_save_{curr_g}", type="primary", use_container_width=True):
@@ -2596,7 +2626,7 @@ elif curr_l == "조립 라인":
                                 st.session_state[_add_scan_cnt_key] = 0
                                 st.cache_data.clear()
                                 st.toast(f"✅ {len(valid_add_mats)}개 자재 시리얼 추가 완료", icon="✅")
-                                st.rerun()
+                                _rerun("asm_mat")
                         else:
                             st.warning("추가할 자재 시리얼을 입력해주세요.")
                 else:
@@ -2621,7 +2651,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     if _wck_key   not in st.session_state: st.session_state[_wck_key]   = {}
     if _wscan_cnt not in st.session_state: st.session_state[_wscan_cnt] = 0
 
-    with st.expander(f"📥 이전 공정({prev}) 완료 — 입고 대기" + (f"  ·  {_wait_cnt}건" if _wait_cnt else "  ·  없음"), expanded=False):
+    with st.expander(f"📥 이전 공정({prev}) 완료 — 입고 대기" + (f"  ·  {_wait_cnt}건" if _wait_cnt else "  ·  없음"), expanded=_xp("chk_wait")):
         if not wait_list.empty:
             _wscan_key = f"wscan_{curr_g}_{curr_l}_{st.session_state[_wscan_cnt]}"
             ws1, ws2 = st.columns([3, 3])
@@ -2637,7 +2667,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         st.session_state[_wck_key][str(wi)] = True
                     st.session_state["_autofocus_after_rerun"] = f"wscan_{curr_g}_{curr_l}_{st.session_state[_wscan_cnt] + 1}"
                     st.session_state[_wscan_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
-                    st.rerun()
+                    _rerun("chk_wait")
                 else:
                     ws1.warning(f"**'{w_scan.strip()}'** — 대기 목록에 없습니다.")
 
@@ -2666,12 +2696,12 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     st.session_state[_wck_key] = {}
                     st.session_state[_wscan_cnt] += 1  # 체크박스 키 리셋
                     _prod_bulk_update(_bulk)
-                    st.rerun()
+                    _rerun("chk_wait")
                 if wba3.button("☐ 선택 해제", key=f"wait_unck_{curr_g}_{curr_l}",
                                use_container_width=True):
                     st.session_state[_wck_key] = {}
                     st.session_state[_wscan_cnt] += 1  # 체크박스 키 리셋
-                    st.rerun()
+                    _rerun("chk_wait")
 
             st.markdown("<hr style='margin:8px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
 
@@ -2703,7 +2733,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 작업자=st.session_state.user_id)
                             st.session_state[_wck_key].pop(str(widx), None)
                             _prod_update(wrow['시리얼'], _upd)
-                            st.rerun()
+                            _rerun("chk_wait")
         else:
             st.info("입고 대기 물량 없음")
 
@@ -2716,7 +2746,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     if _hck_key   not in st.session_state: st.session_state[_hck_key]   = {}
     if _hsrch_cnt not in st.session_state: st.session_state[_hsrch_cnt] = 0
 
-    with st.expander(f"📋 {curr_g} {curr_l} 이력" + (f"  ·  {_hist_cnt}건" if _hist_cnt else "  ·  없음"), expanded=False):
+    with st.expander(f"📋 {curr_g} {curr_l} 이력" + (f"  ·  {_hist_cnt}건" if _hist_cnt else "  ·  없음"), expanded=_xp("chk_hist")):
         if not f_df.empty:
             _hsrch_key = f"hsrch_{curr_g}_{curr_l}_{st.session_state[_hsrch_cnt]}"
             hs1, hs2 = st.columns([3, 3])
@@ -2738,7 +2768,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         st.session_state[_hck_key][str(_hi)] = True
                     st.session_state["_autofocus_after_rerun"] = f"hsrch_{curr_g}_{curr_l}_{st.session_state[_hsrch_cnt] + 1}"
                     st.session_state[_hsrch_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
-                    st.rerun()
+                    _rerun("chk_hist")
 
             _h_checked = [k for k,v in st.session_state[_hck_key].items() if v]
             if _h_checked:
@@ -2766,7 +2796,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     st.session_state[_hck_key] = {}
                     st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                     _prod_bulk_update(_bulk)
-                    st.rerun()
+                    _rerun("chk_hist")
                 if hba4.button("🚫 일괄 불량", key=f"hist_bulk_ng_{curr_g}_{curr_l}",
                                use_container_width=True):
                     if _hist_bulk_ng_cause in ["(선택)", ""]:
@@ -2787,12 +2817,12 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         st.session_state[_hck_key] = {}
                         st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                         _prod_bulk_update(_bulk)
-                        st.rerun()
+                        _rerun("chk_hist")
                 if hba5.button("☐", key=f"hist_unck_{curr_g}_{curr_l}",
                                use_container_width=True, help="선택 해제"):
                     st.session_state[_hck_key] = {}
                     st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
-                    st.rerun()
+                    _rerun("chk_hist")
 
             # Bug fix: STATUS_STYLE2는 전역 STATUS_STYLE과 중복 — 전역 상수 재사용
             STATUS_STYLE2 = STATUS_STYLE
@@ -2837,12 +2867,12 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             st.session_state[_hck_key].pop(str(idx), None)
                             st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                             _prod_update(row['시리얼'], _upd)
-                            st.rerun()
+                            _rerun("chk_hist")
                         _hist_ng_open_key = f"_ng_open_hist_{idx}"
                         if not st.session_state.get(_hist_ng_open_key):
                             if c2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량 원인 입력"):
                                 st.session_state[_hist_ng_open_key] = True
-                                st.rerun()
+                                _rerun("chk_hist")
                         else:
                             c2.button("🚫", key=f"ng_{idx}", use_container_width=True, disabled=True)
                     else:
@@ -2872,10 +2902,10 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 st.session_state[_hsrch_cnt] += 1
                                 st.session_state.pop(_hist_ng_open_key, None)
                                 _prod_update(row['시리얼'], _upd)
-                                st.rerun()
+                                _rerun("chk_hist")
                         if _hnc3.button("취소", key=f"_ng_cancel_hist_{idx}", use_container_width=True):
                             st.session_state.pop(_hist_ng_open_key, None)
-                            st.rerun()
+                            _rerun("chk_hist")
                 # ── 자재 시리얼 토글 표시 ──
                 if st.session_state.get(_hist_tog_key, False):
                     _hist_row_mats = _hist_bulk_mats[_hist_bulk_mats['메인시리얼'] == row['시리얼']] if not _hist_bulk_mats.empty else pd.DataFrame()
@@ -2893,7 +2923,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
 
     # ── 기존 제품 자재 시리얼 조회 / 추가 ────────────────────────────
     MAT_NAME_OPTIONS_QL = st.session_state.get("dropdown_mat_name") or []
-    with st.expander("🔩 자재 시리얼 조회 / 추가 등록", expanded=False):
+    with st.expander("🔩 자재 시리얼 조회 / 추가 등록", expanded=_xp("chk_mat")):
         st.caption("메인 S/N을 입력하면 등록된 자재를 조회하고 누락된 자재를 추가할 수 있습니다.")
 
         _ql_sn_cnt_key = f"ql_sn_cnt_{curr_g}_{curr_l}"
@@ -2952,11 +2982,11 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         st.toast(f"⚠️ 이미 추가된 S/N: {ql_scan_input.strip()}", icon="⚠️")
                     st.session_state["_autofocus_after_rerun"] = f"ql_scan_{curr_g}_{curr_l}_{st.session_state[_ql_scan_cnt_key] + 1}"
                     st.session_state[_ql_scan_cnt_key] += 1
-                    st.rerun()
+                    _rerun("chk_mat")
 
                 if qsc3.button("➕ 추가", key=f"ql_mat_add_{curr_g}_{curr_l}", use_container_width=True):
                     st.session_state[_ql_mat_list_key].append({"자재명": ql_sel_mat, "자재시리얼": ""})
-                    st.rerun()
+                    _rerun("chk_mat")
 
                 ql_mat_list_now = st.session_state[_ql_mat_list_key]
                 if ql_mat_list_now:
@@ -2981,7 +3011,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             _ql_rerun = True
                     st.session_state[_ql_mat_list_key] = ql_updated
                     if _ql_rerun:
-                        st.rerun()
+                        _rerun("chk_mat")
 
                     _ql_btn_col, _ = st.columns([1, 2])
                     if _ql_btn_col.button("💾 자재 시리얼 추가 저장", key=f"ql_save_{curr_g}_{curr_l}",
@@ -2996,7 +3026,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 st.session_state[_ql_scan_cnt_key] = 0
                                 st.cache_data.clear()
                                 st.toast(f"✅ {len(valid_ql_mats)}개 자재 시리얼 추가 완료", icon="✅")
-                                st.rerun()
+                                _rerun("chk_mat")
                         else:
                             st.warning("추가할 자재 시리얼을 입력해주세요.")
                 else:
@@ -3127,7 +3157,7 @@ elif curr_l == "생산 현황 리포트":
         st.divider()
 
         # ── 이력 테이블 ───────────────────────────────────────────────
-        with st.expander(f"📋 전체 이력 테이블  ·  {len(df_rpt)}건", expanded=False):
+        with st.expander(f"📋 전체 이력 테이블  ·  {len(df_rpt)}건", expanded=_xp("rpt_tbl")):
             _RPT_PAGE_SIZE = 50
             _rpt_sorted = df_rpt.sort_values('시간', ascending=False).reset_index(drop=True)
             _rpt_total = len(_rpt_sorted)
@@ -3138,14 +3168,14 @@ elif curr_l == "생산 현황 리포트":
 
             _pr1, _pr2, _pr3 = st.columns([1, 2, 1])
             if _pr1.button("◀ 이전", key="pr_prev", disabled=(_pr_page <= 1)):
-                st.session_state["prod_rpt_page"] -= 1; st.rerun()
+                st.session_state["prod_rpt_page"] -= 1; _rerun("rpt_tbl")
             _pr2.markdown(
                 f"<p style='text-align:center;font-size:0.82rem;color:#8a7f72;margin:6px 0;'>"
                 f"페이지 <b>{_pr_page}</b> / {_rpt_total_pages}　"
                 f"(전체 <b>{_rpt_total:,}</b>건, {_RPT_PAGE_SIZE}건/페이지)</p>",
                 unsafe_allow_html=True)
             if _pr3.button("다음 ▶", key="pr_next", disabled=(_pr_page >= _rpt_total_pages)):
-                st.session_state["prod_rpt_page"] += 1; st.rerun()
+                st.session_state["prod_rpt_page"] += 1; _rerun("rpt_tbl")
 
             _pr_start = (_pr_page - 1) * _RPT_PAGE_SIZE
             st.dataframe(_rpt_sorted.iloc[_pr_start:_pr_start + _RPT_PAGE_SIZE],
@@ -3254,7 +3284,7 @@ elif curr_l == "검사 라인":
     st.divider()
 
     _qc_hist_total = len(db_qc[db_qc['라인'] == '검사 라인'])
-    with st.expander(f"📋 최근 검사 이력  ·  전체 {_qc_hist_total}건 (최근 20건 표시)", expanded=False):
+    with st.expander(f"📋 최근 검사 이력  ·  전체 {_qc_hist_total}건 (최근 20건 표시)", expanded=_xp("qc_hist")):
         hist = db_qc[db_qc['라인'] == '검사 라인'].sort_values('시간', ascending=False).head(20)
         if not hist.empty:
             st.dataframe(hist[['시간', '모델', '시리얼', '상태', '증상', '작업자']].reset_index(drop=True),
@@ -3336,7 +3366,7 @@ elif curr_l == "포장 라인":
     st.divider()
 
     _pk_done_total = len(db_pk[db_pk['상태'] == '완료'])
-    with st.expander(f"📋 최근 완료 이력  ·  전체 {_pk_done_total}건 (최근 20건 표시)", expanded=False):
+    with st.expander(f"📋 최근 완료 이력  ·  전체 {_pk_done_total}건 (최근 20건 표시)", expanded=_xp("pk_hist")):
         hist = db_pk[db_pk['상태'] == '완료'].sort_values('시간', ascending=False).head(20)
         if not hist.empty:
             st.dataframe(hist[['시간', '모델', '시리얼', '작업자']].reset_index(drop=True),
@@ -3592,7 +3622,7 @@ elif curr_l == "생산 지표 관리":
         WIP_STATES = ['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)','불량 처리 중']
         rt_wip = rt_df[rt_df['상태'].isin(WIP_STATES)].sort_values('시간', ascending=False) if not rt_df.empty else pd.DataFrame()
 
-        with st.expander(f"⚡ 실시간 진행 중 ({len(rt_wip)}건)", expanded=False):
+        with st.expander(f"⚡ 실시간 진행 중 ({len(rt_wip)}건)", expanded=_xp("idx_wip")):
             if not rt_wip.empty:
                 BAN_BG = {"제조1반":"#ddeeff","제조2반":"#d4f0e2","제조3반":"#ede0f5"}
                 BAN_CL = {"제조1반":"#2471a3","제조2반":"#1e8449","제조3반":"#6c3483"}
@@ -3641,7 +3671,7 @@ elif curr_l == "생산 지표 관리":
 
     # 입력 폼 (관리자 전용)
     if st.session_state.user_role in CALENDAR_EDIT_ROLES and check_perm("생산 지표 관리", "write"):
-        with st.expander("⚙️ 월 계획 수량 입력 / 변경", expanded=False):
+        with st.expander("⚙️ 월 계획 수량 입력 / 변경", expanded=_xp("idx_plan")):
             st.caption("반/월별 목표 수량을 입력합니다. 변경 시 사유를 선택하면 이력이 자동 기록됩니다.")
             pl1, pl2, pl3 = st.columns([1.5, 1.5, 1.2])
             p_ban  = pl1.selectbox("반", PRODUCTION_GROUPS, key="plan_ban")
@@ -3680,7 +3710,7 @@ elif curr_l == "생산 지표 관리":
                     st.session_state.production_plan[plan_key] = int(p_qty)
                     _clear_plan_cache()
                     st.toast(f"✅ {p_ban} / {p_month} → {p_qty:,}대 저장 완료")
-                    st.rerun()
+                    _rerun("idx_plan")
 
     # ── 월별 달성률 그래프 ────────────────────────────────────────
     plan_map_now = st.session_state.production_plan  # {반_YYYY-MM: 계획수량}
@@ -4476,7 +4506,7 @@ elif curr_l == "OQC 라인":
     st.divider()
 
     # ── 입고 대기 목록 (포장 완료 → OQC 대기 전환) ───────────────
-    with st.expander(f"📥 입고 대기 (검사 합격 제품)  {oqc_wait}건", expanded=False):
+    with st.expander(f"📥 입고 대기 (검사 합격 제품)  {oqc_wait}건", expanded=_xp("oqc_wait")):
         packing_done = db_oqc[
             db_oqc['상태'] == 'OQC대기'
         ].sort_values('시간', ascending=False).reset_index(drop=True)
@@ -4501,7 +4531,7 @@ elif curr_l == "OQC 라인":
                         st.session_state[_oqc_in_ck_key][str(_oi)] = True
                     st.session_state["_autofocus_after_rerun"] = f"oqc_in_sc_{st.session_state[_oqc_in_sc_cnt] + 1}"
                     st.session_state[_oqc_in_sc_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
-                    st.rerun()
+                    _rerun("oqc_wait")
                 else:
                     oi_c1.warning(f"**'{_oqc_in_scan.strip()}'** — 입고 대기 목록에 없습니다.")
     
@@ -4524,11 +4554,11 @@ elif curr_l == "OQC 라인":
                     st.session_state[_oqc_in_ck_key] = {}
                     st.session_state[_oqc_in_sc_cnt] += 1  # 체크박스 키 리셋
                     _prod_bulk_update(_bulk)
-                    st.rerun()
+                    _rerun("oqc_wait")
                 if oib3.button("☐ 해제", key="oqc_in_unck", use_container_width=True):
                     st.session_state[_oqc_in_ck_key] = {}
                     st.session_state[_oqc_in_sc_cnt] += 1  # 체크박스 키 리셋
-                    st.rerun()
+                    _rerun("oqc_wait")
     
             hh = st.columns([0.4, 2, 2, 1.5, 2, 1.5])
             for col, txt in zip(hh, ["☑", "시간", "모델", "반", "시리얼", "OQC 시작"]):
@@ -4551,14 +4581,14 @@ elif curr_l == "OQC 라인":
                         이전상태='OQC대기', 이후상태='OQC중', 작업자=st.session_state.user_id)
                     st.session_state[_oqc_in_ck_key].pop(str(idx), None)
                     _prod_update(row['시리얼'], _upd)
-                    st.rerun()
+                    _rerun("oqc_wait")
         else:
             st.info("OQC 대기 중인 제품이 없습니다.")
     
     st.divider()
 
     # ── OQC 검사 진행 ─────────────────────────────────────────────
-    with st.expander(f"🔍 OQC 검사 진행  {oqc_ing}건", expanded=False):
+    with st.expander(f"🔍 OQC 검사 진행  {oqc_ing}건", expanded=_xp("oqc_ing")):
         oqc_wait_list = db_oqc[db_oqc['상태'] == 'OQC중'].sort_values('시간', ascending=False).reset_index(drop=True)
     
         _oqc_ck_key = f"oqc_ck_{oqc_ban}"
@@ -4582,7 +4612,7 @@ elif curr_l == "OQC 라인":
                         st.session_state[_oqc_ck_key][str(_oi)] = True
                     st.session_state["_autofocus_after_rerun"] = f"oqc_sc_{st.session_state[_oqc_sc_cnt] + 1}"
                     st.session_state[_oqc_sc_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
-                    st.rerun()
+                    _rerun("oqc_ing")
                 else:
                     os1.warning(f"**'{_oqc_scan.strip()}'** — OQC 검사 목록에 없습니다.")
     
@@ -4608,7 +4638,7 @@ elif curr_l == "OQC 라인":
                     st.session_state[_oqc_ck_key] = {}
                     st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                     _prod_bulk_update(_bulk)
-                    st.rerun()
+                    _rerun("oqc_ing")
                 _bulk_defect = ob3.selectbox("부적합 사유", OQC_DEFECT_REASONS,
                                              key="oqc_bulk_defect", label_visibility="collapsed")
                 if ob4.button("🚫 부적합", key="oqc_bulk_ng", use_container_width=True,
@@ -4636,10 +4666,10 @@ elif curr_l == "OQC 라인":
                         st.session_state[_oqc_ck_key] = {}
                         st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                         _prod_bulk_update(_bulk)
-                        st.rerun()
-    
+                        _rerun("oqc_ing")
+
             st.markdown("<hr style='margin:8px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
-    
+
             # 개별 항목 목록 (체크박스 + 개별 판정)
             _oqc_cb_ver = st.session_state[_oqc_sc_cnt]
             # 자재 시리얼 일괄 조회 (N+1 방지)
@@ -4684,7 +4714,7 @@ elif curr_l == "OQC 라인":
                         st.session_state[_oqc_ck_key].pop(str(idx), None)
                         st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                         _prod_update(row['시리얼'], _upd)
-                        st.rerun()
+                        _rerun("oqc_ing")
                     if btn2:
                         if not defect_txt:
                             st.warning("⚠️ 부적합 사유를 먼저 선택해주세요.")
@@ -4702,7 +4732,7 @@ elif curr_l == "OQC 라인":
                             st.session_state[_oqc_ck_key].pop(str(idx), None)
                             st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
                             _prod_update(row['시리얼'], _upd)
-                            st.rerun()
+                            _rerun("oqc_ing")
     
                     # ── 자재 시리얼 인라인 표시 ──
                     _sn_key = row.get('시리얼', '')
@@ -4723,7 +4753,7 @@ elif curr_l == "OQC 라인":
 
     # ── OQC 결과 이력 ─────────────────────────────────────────────
     oqc_done = db_oqc[db_oqc['상태'].isin(['출하승인','부적합(OQC)'])].sort_values('시간', ascending=False)
-    with st.expander(f"📋 OQC 결과 이력  ·  {len(oqc_done)}건", expanded=False):
+    with st.expander(f"📋 OQC 결과 이력  ·  {len(oqc_done)}건", expanded=_xp("oqc_hist")):
     
         if not oqc_done.empty:
             oqc_sn_filter = st.text_input("🔍 S/N 검색", key="oqc_sn_filter", placeholder="시리얼 일부 입력")
@@ -5169,7 +5199,7 @@ elif curr_l == "불량 공정":
             ]
         if wait.empty: continue
         has_any = True
-        with st.expander(f"📍 {g} 불량 처리 대기 ({len(wait)}건)", expanded=False):
+        with st.expander(f"📍 {g} 불량 처리 대기 ({len(wait)}건)", expanded=_xp(f"def_wait_{g}")):
             for row in wait.to_dict('records'):
                 sn_key = row['시리얼']  # idx 대신 실제 시리얼을 키로 사용 (목록 변경 시 키 밀림 방지)
                 with st.container(border=True):
@@ -5249,7 +5279,7 @@ elif curr_l == "불량 공정":
                     # 등록된 자재 시리얼 표시 (기존 시리얼란에 자재 S/N 입력 가능 안내)
                     _def_mats = load_material_serials(row['시리얼'])
                     if not _def_mats.empty:
-                        with st.expander(f"🔩 등록된 자재 시리얼 ({len(_def_mats)}개) — 자재 교체 시 기존 시리얼란에 입력", expanded=False):
+                        with st.expander(f"🔩 등록된 자재 시리얼 ({len(_def_mats)}개) — 자재 교체 시 기존 시리얼란에 입력", expanded=_xp(f"def_mat_{g}")):
                             for _, _dm in _def_mats.iterrows():
                                 _dmc1, _dmc2 = st.columns([1, 1])
                                 _dmc1.caption(f"**{_dm.get('자재명', '')}**")
@@ -5290,7 +5320,7 @@ elif curr_l == "불량 공정":
                                         )
                                         _prod_update(row['시리얼'], _upd)
                                         st.toast(f"✅ 자재 시리얼 교체 완료: {_target_sn} → {_rep_sn}", icon="✅")
-                                        st.rerun()
+                                        _rerun(f"def_wait_{g}")
                                 else:
                                     # 메인 시리얼 교체 (기존 로직)
                                     _fresh_db = load_realtime_ledger()
@@ -5326,7 +5356,7 @@ elif curr_l == "불량 공정":
                                         )
                                         st.session_state.production_db = load_realtime_ledger()
                                         st.toast(f"✅ 교체 완료: {_target_sn} → {_rep_sn}", icon="✅")
-                                        st.rerun()
+                                        _rerun(f"def_wait_{g}")
                             else:
                                 _upd = {
                                     '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
@@ -5340,7 +5370,7 @@ elif curr_l == "불량 공정":
                                     비고=f"원인:{v_c} / 조치:{v_a}"
                                 )
                                 _prod_update(row['시리얼'], _upd)
-                                st.rerun()
+                                _rerun(f"def_wait_{g}")
                         else:
                             st.warning("불량 원인과 수리 조치를 모두 선택해주세요.")
     if not has_any:
@@ -5395,7 +5425,7 @@ elif curr_l == "수리 현황 리포트":
 
     # ── 감사 로그 조회 ────────────────────────────────────────────
     st.divider()
-    with st.expander("🔍 감사 로그 (상태 변경 이력)", expanded=False):
+    with st.expander("🔍 감사 로그 (상태 변경 이력)", expanded=_xp("repair_audit")):
         # 필터
         af1, af2, af3, af4 = st.columns([1.5, 1.5, 2, 1])
         a_ban    = af1.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="audit_ban")
