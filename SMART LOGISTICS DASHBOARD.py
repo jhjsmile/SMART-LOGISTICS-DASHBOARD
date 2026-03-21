@@ -1971,7 +1971,8 @@ if curr_l == "현황판":
                 db_all.groupby(['반','라인']).size().reset_index(name='수량'),
                 x='라인', y='수량', color='반', barmode='group',
                 title="반별 공정 진행 현황", template="plotly_white",
-                text='수량'
+                text='수량',
+                category_orders={"라인": ["조립 라인", "검사 라인", "OQC 라인", "포장 라인"]}
             )
             fig.update_traces(textposition='outside', textfont_size=11)
             fig.update_yaxes(dtick=5)
