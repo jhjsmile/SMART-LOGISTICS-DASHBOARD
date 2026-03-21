@@ -7266,20 +7266,20 @@ elif curr_l == "플로우차트":
     _fc_tab1, _fc_tab2 = st.tabs(["전체 상세 플로우", "작업자 흐름도"])
 
     with _fc_tab1:
-        _fc_path1 = "assets/전체_상세_플로우차트.html"
+        _fc_path1 = "assets/전체 상세 플로우 차트.html"
         if os.path.exists(_fc_path1):
             with open(_fc_path1, "r", encoding="utf-8") as _f:
                 st.components.v1.html(_f.read(), height=900, scrolling=True)
         else:
-            st.warning("⚠️ 파일을 찾을 수 없습니다: assets/전체_상세_플로우차트.html")
+            st.warning("⚠️ 파일을 찾을 수 없습니다: assets/전체 상세 플로우 차트.html")
 
     with _fc_tab2:
-        _fc_path2 = "assets/작업자_흐름도_플로우차트.html"
+        _fc_path2 = "assets/작업자 흐름도 플로우 차트.html"
         if os.path.exists(_fc_path2):
             with open(_fc_path2, "r", encoding="utf-8") as _f:
                 st.components.v1.html(_f.read(), height=900, scrolling=True)
         else:
-            st.warning("⚠️ 파일을 찾을 수 없습니다: assets/작업자_흐름도_플로우차트.html")
+            st.warning("⚠️ 파일을 찾을 수 없습니다: assets/작업자 흐름도 플로우 차트.html")
 
 
 # =================================================================
