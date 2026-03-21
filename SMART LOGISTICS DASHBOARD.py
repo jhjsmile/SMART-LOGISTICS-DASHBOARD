@@ -143,10 +143,10 @@ COLOR_INFO = "#17a2b8"
 # =================================================================
 
 # =================================================================
-# 1. 시스템 전역 설정 (v22.3 - 반응형)
+# 1. 시스템 전역 설정 (v1.0.0 - 반응형)
 # =================================================================
 st.set_page_config(
-    page_title="생산 통합 관리 시스템 v22.3",
+    page_title="생산 통합 관리 시스템 v1.0.0",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -181,9 +181,9 @@ PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
 CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower", "schedule_manager"]
 
 # ── 사용 설명서 PDF (외부 파일 로드) ────────────────────────────────
-# PDF 파일을 소스 코드와 같은 폴더에 위치시키세요: PMS_v22.3_사용설명서.pdf
+# PDF 파일을 소스 코드와 같은 폴더에 위치시키세요: PMS_v1.0.0_사용설명서.pdf
 import os as _os, base64 as _b64_loader
-_PDF_PATH = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "PMS_v22.3_사용설명서.pdf")
+_PDF_PATH = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "PMS_v1.0.0_사용설명서.pdf")
 def _load_manual_pdf_b64() -> str:
     if _os.path.exists(_PDF_PATH):
         with open(_PDF_PATH, "rb") as _f:
@@ -270,7 +270,7 @@ STATUS_BG = {
 st.markdown("""
     <style>
     /* ════════════════════════════════════════
-       파스텔 테마 (v22.3)
+       파스텔 테마 (v1.0.0)
        배경: 따뜻한 크림/페이퍼 톤
        강조: 소프트 블루 · 세이지 그린 · 피치 · 라벤더
     ════════════════════════════════════════ */
@@ -927,7 +927,9 @@ def show_inline_day_panel():
                 model = fe1.text_input("모델명", value=str(r.get('모델명', '')))
                 pn    = fe2.text_input("P/N",    value=str(r.get('pn', '')))
                 ff1, ff2 = st.columns(2)
-                qty   = ff1.number_input("조립수", min_value=0, step=1, value=int(r.get('조립수', 0) or 0))
+                try: _qty_val = int(float(r.get('조립수', 0))) if str(r.get('조립수', '')).strip() not in ('', 'nan', 'None') else 0
+                except (ValueError, TypeError): _qty_val = 0
+                qty   = ff1.number_input("조립수", min_value=0, step=1, value=_qty_val)
                 ship  = ff2.text_input("출하계획", value=str(r.get('출하계획', '')))
                 note  = st.text_input("특이사항", value=str(r.get('특이사항', '')))
                 etc   = st.text_input("기타")
@@ -1412,7 +1414,7 @@ def clear_cal() -> None:
     st.session_state.cal_action      = None
     st.session_state.cal_action_data = None
 
-st.sidebar.markdown("### 🏭 생산 관리 시스템 v22.3")
+st.sidebar.markdown("### 🏭 생산 관리 시스템 v1.0.0")
 st.sidebar.markdown(f"**{ROLE_LABELS.get(st.session_state.user_role, '')}**")
 st.sidebar.caption(f"ID: {st.session_state.user_id}")
 st.sidebar.divider()
@@ -1633,7 +1635,7 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                 cat_counts = {}
                 event_count = 0
                 if not day_data.empty:
-                    _cat_col = day_data['카테고리'].fillna('기타').astype(str).replace('', '기타')
+                    _cat_col = day_data['카테고리'].fillna('기타').astype(str).replace({'': '기타', 'nan': '기타'})
                     cat_counts = _cat_col.value_counts().to_dict()
                     event_count = len(day_data)
 
@@ -6644,7 +6646,7 @@ elif curr_l == "마스터 관리":
                 st.rerun()
 
 # =================================================================
-# [ PMS v22.3 종료 ]
+# [ PMS v1.0.0 종료 ]
 # =================================================================
 
 # ── 사용 설명서 ──────────────────────────────────────────────────
