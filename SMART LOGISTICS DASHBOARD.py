@@ -2021,7 +2021,7 @@ if curr_l == "현황판":
     for g in PRODUCTION_GROUPS:
         gdf  = db_all[db_all['반'] == g]
         완료 = len(gdf[(gdf['라인']=='포장 라인')&(gdf['상태']=='완료')])
-        재공 = len(gdf[gdf['상태'].isin(['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중'])])
+        재공 = len(gdf[gdf['상태'].isin(['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)'])])
         불량 = len(gdf[gdf['상태'].str.contains('불량',na=False)])
         투입 = len(gdf)
         cards_html += (
