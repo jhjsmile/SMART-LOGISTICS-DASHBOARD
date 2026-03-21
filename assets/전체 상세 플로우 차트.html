@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SMART LOGISTICS DASHBOARD — 전체 로직 플로우차트</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+      background: #f0f4f8;
+      color: #1e293b;
+      min-height: 100vh;
+      padding: 32px 20px;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #1e40af;
+      letter-spacing: -0.5px;
+    }
+    header p {
+      margin-top: 6px;
+      font-size: 0.9rem;
+      color: #64748b;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 28px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.82rem;
+      color: #374151;
+    }
+    .legend-box {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+      padding: 28px 20px;
+      max-width: 1400px;
+      margin: 0 auto 32px auto;
+      overflow-x: auto;
+    }
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 18px;
+      padding-left: 4px;
+      border-left: 4px solid #3b82f6;
+      padding-left: 10px;
+    }
+    .mermaid {
+      text-align: center;
+    }
+    footer {
+      text-align: center;
+      font-size: 0.78rem;
+      color: #94a3b8;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🚀 SMART LOGISTICS DASHBOARD</h1>
+  <p>전체 시스템 로직 플로우차트 — 인증 / 라우팅 / 실시간 동기화 / 데이터 흐름</p>
+</header>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-box" style="background:#dbeafe"></div> 앱 시작 / 진입점</div>
+  <div class="legend-item"><div class="legend-box" style="background:#fef9c3"></div> 인증 / 권한</div>
+  <div class="legend-item"><div class="legend-box" style="background:#dcfce7"></div> 주요 기능 모듈</div>
+  <div class="legend-item"><div class="legend-box" style="background:#fce7f3"></div> 데이터베이스 (Supabase)</div>
+  <div class="legend-item"><div class="legend-box" style="background:#ede9fe"></div> 실시간 / 동기화</div>
+  <div class="legend-item"><div class="legend-box" style="background:#ffedd5"></div> 조건 / 분기</div>
+</div>
+
+<!-- 1. 전체 흐름 -->
+<div class="card">
+  <h2>① 전체 앱 흐름 (App Lifecycle)</h2>
+  <div class="mermaid">
+flowchart TD
+    A([🚀 앱 시작\nstreamlit run]) --> B[세션 상태 초기화\nst.session_state]
+    B --> C{로그인\n여부 확인}
+    C -- 미로그인 --> D[🔐 로그인 페이지\nauth.py]
+    D --> E[ID / PW 입력]
+    E --> F[bcrypt 해시 검증\n+ Supabase users 조회]
+    F -- 실패 --> E
+    F -- 성공 --> G[역할·권한 로딩\nrole / permissions]
+    G --> H[실시간 리스너 활성화\nrealtime.py]
+    H --> I{WebSocket\n연결 가능?}
+    I -- Yes --> J[Supabase Realtime\nWebSocket 구독]
+    I -- No --> K[15초 폴링\nAuto-refresh Fallback]
+    J --> L
+    K --> L[🏠 메인 대시보드\n라우팅 진입]
+    C -- 로그인됨 --> L
+
+    style A fill:#dbeafe,stroke:#3b82f6
+    style D fill:#fef9c3,stroke:#eab308
+    style F fill:#fef9c3,stroke:#eab308
+    style G fill:#fef9c3,stroke:#eab308
+    style H fill:#ede9fe,stroke:#8b5cf6
+    style J fill:#ede9fe,stroke:#8b5cf6
+    style K fill:#ede9fe,stroke:#8b5cf6
+    style L fill:#dcfce7,stroke:#22c55e
+  </div>
+</div>
+
+<!-- 2. 권한 / 라우팅 -->
+<div class="card">
+  <h2>② 권한 체계 & 페이지 라우팅</h2>
+  <div class="mermaid">
+flowchart LR
+    U[로그인 사용자] --> R{역할 확인}
+    R --> M1[Master\n최고 관리자]
+    R --> M2[Admin\n관리자]
+    R --> M3[Control Tower\n관제탑]
+    R --> M4[팀장\n제조1·2·3반]
+
+    M1 & M2 & M3 & M4 --> NAV[📋 페이지 네비게이션]
+
+    NAV --> P1[🏠 대시보드\nKPI 현황]
+    NAV --> P2[🏭 생산 라인\n4개 공정]
+    NAV --> P3[📅 일정 캘린더\n주간·월간]
+    NAV --> P4[📦 마스터 데이터\n모델·P/N 관리]
+    NAV --> P5[📊 리포트\n감사 로그·불량 분석]
+    NAV --> P6[⚙️ 관리자 패널\n사용자 권한 관리]
+    NAV --> P7[📖 사용자 매뉴얼\n임베디드 PDF]
+
+    style U fill:#fef9c3,stroke:#eab308
+    style NAV fill:#dbeafe,stroke:#3b82f6
+    style P1 fill:#dcfce7,stroke:#22c55e
+    style P2 fill:#dcfce7,stroke:#22c55e
+    style P3 fill:#dcfce7,stroke:#22c55e
+    style P4 fill:#dcfce7,stroke:#22c55e
+    style P5 fill:#dcfce7,stroke:#22c55e
+    style P6 fill:#dcfce7,stroke:#22c55e
+    style P7 fill:#dcfce7,stroke:#22c55e
+  </div>
+</div>
+
+<!-- 3. 생산 라인 로직 -->
+<div class="card">
+  <h2>③ 생산 관리 모듈 (Production Management)</h2>
+  <div class="mermaid">
+flowchart TD
+    S[생산 라인 페이지 진입] --> SN[시리얼 번호 스캔 / 입력]
+    SN --> ST{현재 공정 단계}
+    ST --> A1[조립 Assembly]
+    ST --> A2[검사 QC Inspection]
+    ST --> A3[최종 검사 OQC]
+    ST --> A4[포장 Packing]
+
+    A1 & A2 & A3 & A4 --> CHK{불량 여부}
+    CHK -- 정상 --> OK[✅ 통과 처리\n상태: PASS]
+    CHK -- 불량 --> NG[❌ 불량 등록\n원인 분류]
+    NG --> REP{수리 가능?}
+    REP -- Yes --> FIX[수리 작업\n자재 교체 기록]
+    FIX --> OK
+    REP -- No --> SCRAP[폐기 처리]
+
+    OK --> OPT[옵티미스틱 업데이트\n메모리 즉시 반영]
+    SCRAP --> OPT
+    OPT --> DB[(Supabase\nproduction 테이블)]
+    DB --> LOG[(audit_log\n감사 로그 기록)]
+
+    style S fill:#dbeafe,stroke:#3b82f6
+    style OPT fill:#ede9fe,stroke:#8b5cf6
+    style DB fill:#fce7f3,stroke:#ec4899
+    style LOG fill:#fce7f3,stroke:#ec4899
+    style OK fill:#dcfce7,stroke:#22c55e
+    style NG fill:#fee2e2,stroke:#ef4444
+    style SCRAP fill:#fee2e2,stroke:#ef4444
+  </div>
+</div>
+
+<!-- 4. 실시간 데이터 동기화 -->
+<div class="card">
+  <h2>④ 실시간 데이터 동기화 흐름 (Realtime Sync)</h2>
+  <div class="mermaid">
+flowchart LR
+    UI[🖥️ UI 사용자 액션] --> OPT[옵티미스틱 업데이트\n메모리 즉시 반영]
+    OPT --> DB[(Supabase DB\nProduction / Schedule)]
+    DB --> RT{Realtime\n이벤트 감지}
+    RT -- WebSocket --> CACHE[캐시 선택적 무효화\nTable-specific invalidation]
+    RT -- 15초 폴링 --> CACHE
+    CACHE --> RELOAD[최소 재렌더링\nst.rerun 최소화]
+    RELOAD --> UI
+
+    DB --> AL[(audit_log\n모든 변경 기록)]
+    DB --> TELE[📱 Telegram 알림 발송]
+
+    style UI fill:#dbeafe,stroke:#3b82f6
+    style OPT fill:#ede9fe,stroke:#8b5cf6
+    style DB fill:#fce7f3,stroke:#ec4899
+    style RT fill:#ede9fe,stroke:#8b5cf6
+    style CACHE fill:#ede9fe,stroke:#8b5cf6
+    style AL fill:#fce7f3,stroke:#ec4899
+    style TELE fill:#ffedd5,stroke:#f97316
+  </div>
+</div>
+
+<!-- 5. 캘린더 / 일정 관리 -->
+<div class="card">
+  <h2>⑤ 일정 관리 모듈 (Calendar & Schedule)</h2>
+  <div class="mermaid">
+flowchart TD
+    CAL[📅 캘린더 페이지] --> VIEW{뷰 선택}
+    VIEW --> WK[주간 뷰\n시간별 생산 스케줄]
+    VIEW --> MO[월간 뷰\n전체 계획 개요]
+
+    WK & MO --> EDIT[인라인 편집\n다이얼로그 없이 직접 수정]
+    EDIT --> WHY[변경 사유 필수 입력]
+    WHY --> DB[(Supabase\nproduction_schedule)]
+    DB --> CHGLOG[(schedule_change_log\n변경 이력 기록)]
+
+    EDIT --> GRP{생산 그룹}
+    GRP --> G1[제조 1반]
+    GRP --> G2[제조 2반]
+    GRP --> G3[제조 3반]
+
+    style CAL fill:#dbeafe,stroke:#3b82f6
+    style DB fill:#fce7f3,stroke:#ec4899
+    style CHGLOG fill:#fce7f3,stroke:#ec4899
+    style G1 fill:#dcfce7,stroke:#22c55e
+    style G2 fill:#dcfce7,stroke:#22c55e
+    style G3 fill:#dcfce7,stroke:#22c55e
+  </div>
+</div>
+
+<!-- 6. 데이터베이스 구조 -->
+<div class="card">
+  <h2>⑥ Supabase 데이터베이스 테이블 구조</h2>
+  <div class="mermaid">
+flowchart LR
+    SB[(🗄️ Supabase)]
+
+    SB --> T1[users\n사용자·역할·권한]
+    SB --> T2[production\n생산 원장 실시간]
+    SB --> T3[production_schedule\n일별 생산 계획]
+    SB --> T4[production_plan\n생산 계획 문서]
+    SB --> T5[model_master\n제품 모델 설정]
+    SB --> T6[material_serials\n자재 시리얼 추적]
+    SB --> T7[audit_log\n전체 활동 로그]
+    SB --> T8[schedule_change_log\n일정 변경 이력]
+
+    style SB fill:#fce7f3,stroke:#ec4899
+    style T1 fill:#fef9c3,stroke:#eab308
+    style T2 fill:#dcfce7,stroke:#22c55e
+    style T3 fill:#dcfce7,stroke:#22c55e
+    style T4 fill:#dcfce7,stroke:#22c55e
+    style T5 fill:#dbeafe,stroke:#3b82f6
+    style T6 fill:#dbeafe,stroke:#3b82f6
+    style T7 fill:#ffedd5,stroke:#f97316
+    style T8 fill:#ffedd5,stroke:#f97316
+  </div>
+</div>
+
+<!-- 7. 모듈 아키텍처 -->
+<div class="card">
+  <h2>⑦ 코드 모듈 아키텍처 (modules/)</h2>
+  <div class="mermaid">
+flowchart TD
+    MAIN[📄 SMART LOGISTICS DASHBOARD.py\n메인 애플리케이션]
+
+    MAIN --> AUTH[modules/auth.py\n인증·세션·권한 관리\nbcrypt 해시 검증]
+    MAIN --> DBM[modules/database.py\nSupabase 쿼리·연결\n캐시·페이지네이션]
+    MAIN --> RT[modules/realtime.py\nWebSocket 구독\n변경 감지·캐시 무효화]
+    MAIN --> UT[modules/utils.py\n공통 유틸리티\n데이터 처리·포맷팅]
+
+    MAIN --> SQL[📄 SQL DB VERSION.py\nDB 스키마 대안 버전]
+
+    AUTH --> DB[(Supabase)]
+    DBM --> DB
+    RT --> DB
+
+    style MAIN fill:#dbeafe,stroke:#3b82f6,font-weight:bold
+    style AUTH fill:#fef9c3,stroke:#eab308
+    style DBM fill:#fce7f3,stroke:#ec4899
+    style RT fill:#ede9fe,stroke:#8b5cf6
+    style UT fill:#dcfce7,stroke:#22c55e
+    style SQL fill:#ffedd5,stroke:#f97316
+    style DB fill:#fce7f3,stroke:#ec4899
+  </div>
+</div>
+
+<footer>
+  SMART LOGISTICS DASHBOARD · 전체 로직 플로우차트 · 2026
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#dbeafe',
+      primaryBorderColor: '#3b82f6',
+      primaryTextColor: '#1e293b',
+      lineColor: '#64748b',
+      secondaryColor: '#f1f5f9',
+      tertiaryColor: '#f8fafc',
+      fontSize: '14px'
+    },
+    flowchart: {
+      curve: 'basis',
+      padding: 20,
+      nodeSpacing: 40,
+      rankSpacing: 50
+    }
+  });
+</script>
+</body>
+</html>

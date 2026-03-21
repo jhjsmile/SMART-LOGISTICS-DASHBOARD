@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SMART LOGISTICS — 작업자 공정 플로우</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+  background: #f0f4f8;
+  padding: 32px 20px;
+}
+
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.09);
+  padding: 36px 32px 40px;
+}
+
+h1 { text-align:center; font-size:1.35rem; color:#1e293b; margin-bottom:6px; }
+.sub { text-align:center; font-size:0.82rem; color:#64748b; margin-bottom:20px; }
+
+/* 상태 배지 행 */
+.status-bar {
+  display:flex; align-items:center; justify-content:center;
+  flex-wrap:wrap; gap:4px;
+  background:#1e3a5f; border-radius:10px;
+  padding:10px 16px; margin-bottom:12px;
+}
+.status-bar .lbl { font-size:0.72rem; color:#93c5fd; font-weight:700; margin-right:6px; }
+.pill { padding:3px 11px; border-radius:12px; font-size:0.72rem; font-weight:700; color:#fff; }
+.sep { color:#93c5fd; font-size:0.85rem; }
+
+/* 경고 */
+.notice {
+  text-align:center; font-size:0.78rem; color:#9a3412;
+  background:#fff7ed; border:1px solid #fed7aa;
+  border-radius:8px; padding:7px 16px; margin-bottom:24px;
+}
+
+/* ── 공통 노드 ── */
+.node {
+  padding:7px 14px; border-radius:8px;
+  font-size:0.8rem; font-weight:600; text-align:center; line-height:1.4;
+}
+.n-start { background:#1e3a5f; color:#fff; border-radius:20px; padding:7px 22px; }
+.n-info  { background:#dbeafe; color:#1e40af; border:1.5px solid #93c5fd; }
+.n-group { background:#ede9fe; color:#5b21b6; border:1.5px solid #c4b5fd; }
+.n-line  { background:#e0f2fe; color:#0369a1; border:1.5px solid #7dd3fc; }
+.n-scan  { background:#f1f5f9; color:#475569; border:1.5px solid #cbd5e1; font-size:0.75rem; }
+.n-pass  { background:#dcfce7; color:#15803d; border:1.5px solid #86efac; }
+.n-fail  { background:#fee2e2; color:#b91c1c; border:1.5px solid #fca5a5; }
+.n-repair{ background:#fef9c3; color:#854d0e; border:1.5px solid #fde047; }
+.n-return{ background:#ffedd5; color:#9a3412; border:1.5px solid #fdba74; }
+.n-end   { background:#1e293b; color:#fff; border-radius:20px; padding:7px 22px; }
+
+/* 화살표 */
+.av { text-align:center; color:#94a3b8; font-size:1rem; line-height:1.2; margin:2px 0; }
+.ah { color:#94a3b8; font-size:1rem; flex-shrink:0; margin:0 4px; }
+
+/* ── TOP 섹션 ── */
+.top-section {
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  margin-bottom:0;
+}
+
+/* 브랜치 커넥터: 1 → 4 */
+.branch {
+  display:flex; width:100%; margin-bottom:0;
+}
+.branch-seg {
+  flex:1; height:22px;
+  border-top:2px solid #94a3b8;
+}
+.branch-seg.bl { border-left:2px solid #94a3b8; border-top-left-radius:6px; }
+.branch-seg.br { border-right:2px solid #94a3b8; border-top-right-radius:6px; }
+
+.branch-arrows {
+  display:flex; width:100%;
+}
+.branch-arrows > div {
+  flex:1; text-align:center; color:#94a3b8; font-size:1rem; line-height:1;
+}
+
+/* ── 4개 컬럼 ── */
+.cols {
+  display:flex; width:100%; gap:0;
+  border: 1.5px solid #e2e8f0;
+  border-radius:12px;
+  overflow:hidden;
+}
+
+.col {
+  flex:1; display:flex; flex-direction:column; align-items:center;
+  padding:12px 10px 16px;
+  gap:4px;
+  border-right:1.5px solid #e2e8f0;
+}
+.col:last-child { border-right:none; }
+
+/* 컬럼 헤더 */
+.col-hd {
+  width:100%; text-align:center;
+  padding:7px 8px; border-radius:8px;
+  font-size:0.82rem; font-weight:700; color:#fff;
+  margin-bottom:6px;
+}
+.hd-asm  { background:#6b7280; }
+.hd-insp { background:#3b82f6; }
+.hd-oqc  { background:#f97316; }
+.hd-pack { background:#ec4899; }
+
+/* 작업 박스 (공정 상태 강조) */
+.work-box {
+  width:100%; padding:8px 10px; border-radius:8px;
+  text-align:center; font-size:0.78rem; line-height:1.4;
+  border:2px solid;
+  background:#f8fafc;
+}
+.wb-asm  { border-color:#6b7280; }
+.wb-insp { border-color:#3b82f6; }
+.wb-oqc  { border-color:#f97316; }
+.wb-pack { border-color:#ec4899; }
+.work-box strong { display:block; font-size:0.85rem; margin-bottom:2px; }
+
+/* 다이아몬드 */
+.diamond-wrap { display:flex; justify-content:center; margin:2px 0; }
+.diamond {
+  width:72px; height:72px;
+  background:#fef9c3; border:2px solid #eab308;
+  transform:rotate(45deg);
+  display:flex; align-items:center; justify-content:center;
+}
+.diamond-inner {
+  transform:rotate(-45deg);
+  font-size:0.68rem; font-weight:700; color:#854d0e;
+  text-align:center; line-height:1.3; width:62px;
+}
+
+/* 분기: 정상 / 불량 */
+.fork {
+  display:flex; width:100%; gap:4px; margin-top:2px;
+}
+.fork-side {
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+}
+.fork-label {
+  font-size:0.65rem; font-weight:700;
+}
+.lbl-ok  { color:#22c55e; }
+.lbl-ng  { color:#ef4444; }
+.av-ok { color:#22c55e; font-size:0.9rem; text-align:center; }
+.av-ng { color:#ef4444; font-size:0.9rem; text-align:center; }
+
+/* ── 불량 집합 커넥터 ── */
+.defect-branch {
+  display:flex; width:100%; margin-top:0;
+}
+.defect-seg {
+  flex:1; height:22px;
+  border-bottom:2px solid #fca5a5;
+}
+.defect-seg.bl { border-left:2px solid #fca5a5; border-bottom-left-radius:6px; }
+.defect-seg.br { border-right:2px solid #fca5a5; border-bottom-right-radius:6px; }
+.defect-down-arr { text-align:center; color:#ef4444; font-size:1.1rem; line-height:1.2; margin-bottom:4px; }
+
+/* ── 불량 처리 섹션 ── */
+.defect-section {
+  display:flex; align-items:center; justify-content:center;
+  flex-wrap:wrap; gap:6px;
+  padding:16px 20px;
+  background:#fff1f2; border:2px solid #fecdd3; border-radius:12px;
+}
+.defect-title {
+  font-size:0.78rem; font-weight:700; color:#be123c;
+  margin-right:4px; white-space:nowrap;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>🔧 작업자 공정 플로우차트</h1>
+  <p class="sub">SMART LOGISTICS DASHBOARD — 라인별 공정 흐름</p>
+
+  <!-- 상태 배지 -->
+  <div class="status-bar">
+    <span class="lbl">제품 상태 흐름</span>
+    <span class="pill" style="background:#6b7280">조립중</span><span class="sep">▶</span>
+    <span class="pill" style="background:#3b82f6">검사대기</span><span class="sep">▶</span>
+    <span class="pill" style="background:#22c55e">검사중</span><span class="sep">▶</span>
+    <span class="pill" style="background:#f59e0b">OQC대기</span><span class="sep">▶</span>
+    <span class="pill" style="background:#f97316">OQC중</span><span class="sep">▶</span>
+    <span class="pill" style="background:#8b5cf6">출하승인</span><span class="sep">▶</span>
+    <span class="pill" style="background:#ec4899">포장중</span><span class="sep">▶</span>
+    <span class="pill" style="background:#1e293b">✔ 완료</span>
+  </div>
+
+
+  <!-- TOP 플로우 -->
+  <div class="top-section">
+    <div class="node n-start">🔐 로그인</div>
+    <div class="av">▼</div>
+    <div class="node n-info">대시보드 — 오늘 생산 현황 확인</div>
+    <div class="av">▼</div>
+    <div class="node n-group">담당 반 선택 &nbsp;|&nbsp; 제조1반 · 제조2반 · 제조3반</div>
+    <div class="av">▼</div>
+    <div class="node n-line">라인 선택 &nbsp;|&nbsp; 라인 A · B · C · D</div>
+    <div class="av">▼</div>
+  </div>
+
+  <!-- 1 → 4 브랜치 -->
+  <div class="branch">
+    <div class="branch-seg bl"></div>
+    <div class="branch-seg"></div>
+    <div class="branch-seg"></div>
+    <div class="branch-seg br"></div>
+  </div>
+  <div class="branch-arrows">
+    <div>▼</div><div>▼</div><div>▼</div><div>▼</div>
+  </div>
+
+  <!-- 4개 라인 컬럼 -->
+  <div class="cols">
+
+    <!-- 조립 라인 -->
+    <div class="col">
+      <div class="col-hd hd-asm">🔩 조립 라인</div>
+      <div class="node n-scan">📷 시리얼 스캔</div>
+      <div class="av">▼</div>
+      <div class="work-box wb-asm">
+        <strong style="color:#6b7280">조립중</strong>
+        부품 조립 작업 수행
+      </div>
+      <div class="av">▼</div>
+      <div class="diamond-wrap">
+        <div class="diamond">
+          <div class="diamond-inner">이상<br>없음?</div>
+        </div>
+      </div>
+      <div class="fork">
+        <div class="fork-side">
+          <span class="fork-label lbl-ok">✅ 정상</span>
+          <div class="av-ok">▼</div>
+          <div class="node n-pass" style="font-size:0.73rem;width:100%;text-align:center;">
+            검사대기<br>상태 전환
+          </div>
+        </div>
+        <div class="fork-side">
+          <span class="fork-label lbl-ng">❌ 불량</span>
+          <div class="av-ng">▼</div>
+          <div class="node n-fail" style="font-size:0.73rem;width:100%;text-align:center;">
+            불량 발생<br>↓ 하단
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 검사 라인 -->
+    <div class="col">
+      <div class="col-hd hd-insp">🔍 검사 라인</div>
+      <div class="node n-scan">📷 시리얼 스캔</div>
+      <div class="av">▼</div>
+      <div class="work-box wb-insp">
+        <strong style="color:#3b82f6">검사중</strong>
+        품질 검사 수행
+      </div>
+      <div class="av">▼</div>
+      <div class="diamond-wrap">
+        <div class="diamond">
+          <div class="diamond-inner">검사<br>통과?</div>
+        </div>
+      </div>
+      <div class="fork">
+        <div class="fork-side">
+          <span class="fork-label lbl-ok">✅ 합격</span>
+          <div class="av-ok">▼</div>
+          <div class="node n-pass" style="font-size:0.73rem;width:100%;text-align:center;">
+            OQC대기<br>상태 전환
+          </div>
+        </div>
+        <div class="fork-side">
+          <span class="fork-label lbl-ng">❌ 불량</span>
+          <div class="av-ng">▼</div>
+          <div class="node n-fail" style="font-size:0.73rem;width:100%;text-align:center;">
+            불량 유형<br>↓ 하단
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OQC 라인 -->
+    <div class="col">
+      <div class="col-hd hd-oqc">✅ OQC 라인</div>
+      <div class="node n-scan">📷 시리얼 스캔</div>
+      <div class="av">▼</div>
+      <div class="work-box wb-oqc">
+        <strong style="color:#f97316">OQC중</strong>
+        출하 전 최종 검사
+      </div>
+      <div class="av">▼</div>
+      <div class="diamond-wrap">
+        <div class="diamond">
+          <div class="diamond-inner">OQC<br>합격?</div>
+        </div>
+      </div>
+      <div class="fork">
+        <div class="fork-side">
+          <span class="fork-label lbl-ok">✅ 합격</span>
+          <div class="av-ok">▼</div>
+          <div class="node n-pass" style="font-size:0.73rem;width:100%;text-align:center;">
+            출하승인<br>상태 전환
+          </div>
+        </div>
+        <div class="fork-side">
+          <span class="fork-label lbl-ng">❌ 불합격</span>
+          <div class="av-ng">▼</div>
+          <div class="node n-fail" style="font-size:0.73rem;width:100%;text-align:center;">
+            사유 기재<br>↓ 하단
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 포장 라인 -->
+    <div class="col">
+      <div class="col-hd hd-pack">📦 포장 라인</div>
+      <div class="node n-scan">📷 시리얼 스캔</div>
+      <div class="av">▼</div>
+      <div class="work-box wb-pack">
+        <strong style="color:#ec4899">포장중</strong>
+        제품 포장 작업
+      </div>
+      <div class="av">▼</div>
+      <div class="diamond-wrap">
+        <div class="diamond">
+          <div class="diamond-inner">포장<br>정상?</div>
+        </div>
+      </div>
+      <div class="fork">
+        <div class="fork-side">
+          <span class="fork-label lbl-ok">✅ 완료</span>
+          <div class="av-ok">▼</div>
+          <div class="node n-end" style="font-size:0.73rem;width:100%;text-align:center;border-radius:12px;">
+            ✔ 완료<br>출하 대기
+          </div>
+        </div>
+        <div class="fork-side">
+          <span class="fork-label lbl-ng">❌ 불량</span>
+          <div class="av-ng">▼</div>
+          <div class="node n-fail" style="font-size:0.73rem;width:100%;text-align:center;">
+            포장 불량<br>↓ 하단
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /cols -->
+
+  <!-- 4 → 1 불량 수렴 브랜치 -->
+  <div class="defect-branch" style="margin-top:0;">
+    <div class="defect-seg bl"></div>
+    <div class="defect-seg"></div>
+    <div class="defect-seg"></div>
+    <div class="defect-seg br"></div>
+  </div>
+  <div class="defect-down-arr">▼</div>
+
+  <!-- 불량 처리 섹션 -->
+  <div class="defect-section">
+    <span class="defect-title">🔴 불량 발생 공통 처리 흐름</span>
+    <div class="node n-fail" style="font-size:0.76rem;">불량 처리 중<br>담당자 확인</div>
+    <span class="ah">▶</span>
+    <div class="node" style="font-size:0.76rem;border:1.5px solid #94a3b8;background:#f8fafc;color:#334155;">불량 공정<br>원인 분석</div>
+    <span class="ah">▶</span>
+    <div class="node n-repair" style="font-size:0.76rem;">수리 완료<br>(재투입)</div>
+    <span class="ah">▶</span>
+    <div class="node n-return" style="font-size:0.76rem;">🔁 검사대기 복귀<br>해당 라인으로</div>
+  </div>
+
+</div><!-- /page -->
+</body>
+</html>
