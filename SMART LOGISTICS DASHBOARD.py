@@ -881,6 +881,9 @@ def _rerun(xp_key: str = None) -> None:
 
 def show_inline_day_panel():
     """캘린더 날짜 클릭 시 인라인으로 일정 표시 (dialog 대신)"""
+    # 이 패널이 어느 캘린더 expander 안에서 열렸는지 추적
+    _dp_xp_key = st.session_state.get("_cal_active_xp", "cal_weekly")
+
     action      = st.session_state.get("cal_action")
     action_data = st.session_state.get("cal_action_data")
     if not action or not action_data:
@@ -899,7 +902,7 @@ def show_inline_day_panel():
             if matched.empty:
                 st.warning("일정을 찾을 수 없습니다.")
                 if st.button("닫기", key="inline_edit_notfound_close"):
-                    st.session_state.cal_action = None; st.rerun()
+                    st.session_state.cal_action = None; _rerun(_dp_xp_key)
                 return
 
             r = matched.iloc[0]
@@ -908,7 +911,7 @@ def show_inline_day_panel():
             ph1, ph2 = st.columns([8, 1])
             ph1.markdown(f"✏️ **일정 수정** — {saved_date}")
             if ph2.button("✖", key="inline_edit_close"):
-                st.session_state.cal_action = None; st.rerun()
+                st.session_state.cal_action = None; _rerun(_dp_xp_key)
 
             if not can_edit:
                 st.info(f"카테고리: {r.get('카테고리','')} / 모델명: {r.get('모델명','')} / 조립수: {r.get('조립수',0)}대")
@@ -957,19 +960,19 @@ def show_inline_day_panel():
                             _clear_schedule_cache()
                             st.session_state.schedule_db    = load_schedule()
                             st.session_state[save_done_key] = True
-                            st.rerun()
+                            _rerun(_dp_xp_key)
                 if c2.form_submit_button("🔙 목록으로", use_container_width=True):
                     st.session_state.cal_action      = "view_day"
                     st.session_state.cal_action_data = saved_date
                     st.session_state[save_done_key]  = False
-                    st.rerun()
+                    _rerun(_dp_xp_key)
                 if c3.form_submit_button("🗑️ 삭제", use_container_width=True):
                     delete_schedule(sch_id)
                     _clear_schedule_cache()
                     st.session_state.schedule_db    = load_schedule()
                     st.session_state.cal_action     = None
                     st.session_state[save_done_key] = False
-                    st.rerun()
+                    _rerun(_dp_xp_key)
             if st.session_state.get(save_done_key):
                 st.success("저장되었습니다.")
             return
@@ -980,7 +983,7 @@ def show_inline_day_panel():
             ph1, ph2 = st.columns([8, 1])
             ph1.markdown(f"➕ **일정 추가** — {selected_date}")
             if ph2.button("✖", key="inline_add_close"):
-                st.session_state.cal_action = None; st.rerun()
+                st.session_state.cal_action = None; _rerun(_dp_xp_key)
 
             if not can_edit:
                 st.warning("일정 추가 권한이 없습니다.")
@@ -1039,7 +1042,7 @@ def show_inline_day_panel():
                             st.session_state.cal_action       = "view_day"
                             st.session_state.cal_action_data  = selected_date
                             st.session_state["_sch_add_toast"] = f"✅ [{ban}] {selected_date} 일정 등록 완료"
-                            st.rerun()
+                            _rerun(_dp_xp_key)
                         # 실패 시: insert_schedule() 내부에서 st.error() 호출됨
                         # rerun 없이 폼 유지 → 에러 메시지가 폼 안에 표시됨
                     else:
@@ -1067,7 +1070,7 @@ def show_inline_day_panel():
             unsafe_allow_html=True
         )
         if ph2.button("✖ 닫기", key="inline_view_close"):
-            st.session_state.cal_action = None; st.rerun()
+            st.session_state.cal_action = None; _rerun(_dp_xp_key)
 
         if not day_data.empty:
             BAN_COLORS = {"제조1반": "#2471a3", "제조2반": "#1e8449", "제조3반": "#6c3483"}
@@ -1123,10 +1126,10 @@ def show_inline_day_panel():
                                 st.session_state.cal_action      = "edit"
                                 st.session_state.cal_action_data = int(row_id)
                                 st.session_state.cal_action_sub  = None
-                                st.rerun()
+                                _rerun(_dp_xp_key)
                             if bc2.button("🗑️", key=f"del_{row_id}", help="삭제"):
                                 st.session_state[confirm_key] = True
-                                st.rerun()
+                                _rerun(_dp_xp_key)
                         else:
                             st.warning(f"⚠️ [{model_v}] 일정을 삭제하시겠습니까?")
                             y1, y2 = st.columns(2)
@@ -1139,10 +1142,10 @@ def show_inline_day_panel():
                                     st.session_state["_sch_del_toast"] = f"✅ [{model_v}] 일정이 삭제되었습니다."
                                 else:
                                     st.session_state["_sch_del_toast"] = "❌ 삭제 실패 — DB 오류가 발생했습니다."
-                                st.rerun()
+                                _rerun(_dp_xp_key)
                             if y2.button("취소", key=f"del_no_{row_id}", use_container_width=True):
                                 st.session_state[confirm_key] = False
-                                st.rerun()
+                                _rerun(_dp_xp_key)
         else:
             st.info("등록된 일정이 없습니다.")
 
@@ -1152,7 +1155,7 @@ def show_inline_day_panel():
             if _cal_btn_col.button("➕ 이 날짜에 일정 추가", key="inline_add_btn", use_container_width=True, type="primary"):
                 st.session_state.cal_action      = "add"
                 st.session_state.cal_action_data = selected_date
-                st.rerun()
+                _rerun(_dp_xp_key)
 
 # =================================================================
 # 5. 세션 상태 초기화
@@ -1632,12 +1635,14 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                 btn_label  = f"{day}{today_mark}"
 
                 # ── 날짜 버튼
+                _cal_xp_key = "cal_weekly" if key_prefix == "wk" else "cal_monthly"
                 day_cls = "cal-today-btn" if is_today else "cal-day-btn"
                 st.markdown(f"<div class='{day_cls}'>", unsafe_allow_html=True)
                 if st.button(btn_label, key=f"{key_prefix}_{day_str}", use_container_width=True):
                     st.session_state.cal_action      = "view_day"
                     st.session_state.cal_action_data = day_str
-                    st.rerun()
+                    st.session_state["_cal_active_xp"] = _cal_xp_key
+                    _rerun(_cal_xp_key)
                 st.markdown("</div>", unsafe_allow_html=True)
 
                 # ── 카테고리별 뱃지 (건수만)
@@ -1685,7 +1690,7 @@ def render_calendar_weekly():
     week_idx = min(st.session_state.cal_week_idx, len(cal_weeks)-1)
     exp_label = f"📅 주별 캘린더  —  {cal_year}년 {cal_month}월 {week_idx+1}주차"
 
-    with st.expander(exp_label, expanded=False):
+    with st.expander(exp_label, expanded=_xp("cal_weekly")):
         # 월 네비게이션
         h1, h2, h3, h4 = st.columns([1, 1, 4, 1])
         if h1.button("◀ 이전달", key="w_prev_month", use_container_width=True):
@@ -1693,13 +1698,13 @@ def render_calendar_weekly():
             if cal_month == 1: st.session_state.cal_year -= 1; st.session_state.cal_month = 12
             else: st.session_state.cal_month -= 1
             st.session_state.cal_week_idx = 0
-            st.rerun()
+            _rerun("cal_weekly")
         if h2.button("오늘", key="w_today", use_container_width=True):
             clear_cal()
             st.session_state.cal_year      = today.year
             st.session_state.cal_month     = today.month
             st.session_state.cal_auto_week = True
-            st.rerun()
+            _rerun("cal_weekly")
         h3.markdown(
             f"<p style='text-align:center; font-weight:bold; margin:8px 0; font-size:1rem;'>"
             f"{cal_year}년 {cal_month}월 {week_idx+1}주차</p>",
@@ -1709,7 +1714,7 @@ def render_calendar_weekly():
             if cal_month == 12: st.session_state.cal_year += 1; st.session_state.cal_month = 1
             else: st.session_state.cal_month += 1
             st.session_state.cal_week_idx = 0
-            st.rerun()
+            _rerun("cal_weekly")
 
         # 주 네비게이션
         w1, w2, w3 = st.columns([1, 4, 1])
@@ -1722,7 +1727,7 @@ def render_calendar_weekly():
                 else: st.session_state.cal_month -= 1
                 prev_weeks = calendar.monthcalendar(st.session_state.cal_year, st.session_state.cal_month)
                 st.session_state.cal_week_idx = len(prev_weeks) - 1
-            st.rerun()
+            _rerun("cal_weekly")
         w2.markdown(
             f"<p style='text-align:center; color:#8a7f72; margin:8px 0;'>"
             f"{cal_year}년 {cal_month}월 {week_idx+1}주차</p>",
@@ -1735,7 +1740,7 @@ def render_calendar_weekly():
                 if cal_month == 12: st.session_state.cal_year += 1; st.session_state.cal_month = 1
                 else: st.session_state.cal_month += 1
                 st.session_state.cal_week_idx = 0
-            st.rerun()
+            _rerun("cal_weekly")
 
         _render_legend()
         _render_cal_cells(sch_df, cal_year, cal_month,
@@ -1772,18 +1777,18 @@ def render_calendar_monthly(
 
     exp_label = f"🗓️ 월별 캘린더  —  {cal_year}년 {cal_month}월 전체"
 
-    with st.expander(exp_label, expanded=False):
+    with st.expander(exp_label, expanded=_xp("cal_monthly")):
         h1, h2, h3, h4 = st.columns([1, 1, 4, 1])
         if h1.button("◀ 이전달", key="m_prev_month", use_container_width=True):
             clear_cal()
             if cal_month == 1: st.session_state.cal_month_year = cal_year - 1; st.session_state.cal_month_month = 12
             else: st.session_state.cal_month_year = cal_year; st.session_state.cal_month_month = cal_month - 1
-            st.rerun()
+            _rerun("cal_monthly")
         if h2.button("오늘", key="m_today", use_container_width=True):
             clear_cal()
             st.session_state.cal_month_year  = today.year
             st.session_state.cal_month_month = today.month
-            st.rerun()
+            _rerun("cal_monthly")
         h3.markdown(
             f"<p style='text-align:center; font-weight:bold; margin:8px 0; font-size:1rem;'>"
             f"{cal_year}년 {cal_month}월 전체</p>",
@@ -1792,7 +1797,7 @@ def render_calendar_monthly(
             clear_cal()
             if cal_month == 12: st.session_state.cal_month_year = cal_year + 1; st.session_state.cal_month_month = 1
             else: st.session_state.cal_month_year = cal_year; st.session_state.cal_month_month = cal_month + 1
-            st.rerun()
+            _rerun("cal_monthly")
 
         _render_legend()
         _render_cal_cells(sch_df, cal_year, cal_month,
