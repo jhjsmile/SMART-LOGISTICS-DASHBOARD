@@ -192,14 +192,14 @@ def _load_manual_pdf_b64() -> str:
 _MANUAL_PDF_B64 = _load_manual_pdf_b64()
 
 ROLES = {
-    "master":           ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼"],
-    "admin":            ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼"],
-    "control_tower":    ["생산 지표 관리", "생산 현황 리포트", "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼"],
-    "assembly_team":    ["조립 라인", "작업자 매뉴얼"],
-    "qc_team":          ["검사 라인", "불량 공정", "작업자 매뉴얼"],
-    "packing_team":     ["포장 라인", "작업자 매뉴얼"],
-    "schedule_manager": ["생산 지표 관리", "작업자 매뉴얼"],
-    "oqc_team":         ["OQC 라인", "작업자 매뉴얼"],
+    "master":           ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼", "플로우차트"],
+    "admin":            ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼", "플로우차트"],
+    "control_tower":    ["생산 지표 관리", "생산 현황 리포트", "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼", "플로우차트"],
+    "assembly_team":    ["조립 라인", "작업자 매뉴얼", "플로우차트"],
+    "qc_team":          ["검사 라인", "불량 공정", "작업자 매뉴얼", "플로우차트"],
+    "packing_team":     ["포장 라인", "작업자 매뉴얼", "플로우차트"],
+    "schedule_manager": ["생산 지표 관리", "작업자 매뉴얼", "플로우차트"],
+    "oqc_team":         ["OQC 라인", "작업자 매뉴얼", "플로우차트"],
 }
 
 ROLE_LABELS = {
@@ -1503,6 +1503,12 @@ if "관리자 매뉴얼" in allowed_nav:
         type="primary" if st.session_state.current_line == "관리자 매뉴얼" else "secondary"):
         clear_cal()
         st.session_state.current_line = "관리자 매뉴얼"
+        st.rerun()
+if "플로우차트" in allowed_nav:
+    if st.sidebar.button("📊 시스템 플로우차트", use_container_width=True,
+        type="primary" if st.session_state.current_line == "플로우차트" else "secondary"):
+        clear_cal()
+        st.session_state.current_line = "플로우차트"
         st.rerun()
 
 # ── 관리자 도움 요청 (항상 표시) ─────────────────────────────────
@@ -5810,7 +5816,7 @@ elif curr_l == "마스터 관리":
                     # ── 일반 메뉴 권한 (읽기/쓰기/수정 각각 체크) ───────────
                     st.markdown("**일반 메뉴 권한:**")
                     _general_menus = ["생산 지표 관리", "OQC 라인", "생산 현황 리포트", "불량 공정",
-                                      "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼"]
+                                      "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼", "플로우차트"]
 
                     _gh = st.columns([2.2, 0.7, 0.7, 0.7])
                     _gh[0].markdown("**메뉴**")
@@ -7250,6 +7256,30 @@ elif curr_l == "관리자 매뉴얼":
     st.markdown("<br>", unsafe_allow_html=True)
     st.info("📌 Supabase 테이블 편집은 [supabase.com](https://supabase.com) → 프로젝트 → Table Editor에서 진행합니다.")
 
+elif curr_l == "플로우차트":
+    # ══════════════════════════════════════════════════════════
+    # 📊 시스템 플로우차트
+    # ══════════════════════════════════════════════════════════
+    st.markdown("<h2 class='centered-title'>📊 시스템 플로우차트</h2>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    _fc_tab1, _fc_tab2 = st.tabs(["전체 상세 플로우", "작업자 흐름도"])
+
+    with _fc_tab1:
+        _fc_path1 = "assets/전체_상세_플로우차트.html"
+        if os.path.exists(_fc_path1):
+            with open(_fc_path1, "r", encoding="utf-8") as _f:
+                st.components.v1.html(_f.read(), height=900, scrolling=True)
+        else:
+            st.warning("⚠️ 파일을 찾을 수 없습니다: assets/전체_상세_플로우차트.html")
+
+    with _fc_tab2:
+        _fc_path2 = "assets/작업자_흐름도_플로우차트.html"
+        if os.path.exists(_fc_path2):
+            with open(_fc_path2, "r", encoding="utf-8") as _f:
+                st.components.v1.html(_f.read(), height=900, scrolling=True)
+        else:
+            st.warning("⚠️ 파일을 찾을 수 없습니다: assets/작업자_흐름도_플로우차트.html")
 
 
 # =================================================================
