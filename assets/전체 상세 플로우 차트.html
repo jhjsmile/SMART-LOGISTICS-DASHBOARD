@@ -302,6 +302,51 @@ flowchart TD
   </div>
 </div>
 
+<!-- 8. 버전 관리 규칙 -->
+<div class="card">
+  <h2>⑧ 버전 관리 규칙 (Version Management)</h2>
+  <div style="display:flex; gap:20px; flex-wrap:wrap; padding: 4px 0;">
+
+    <!-- Major -->
+    <div style="flex:1; min-width:220px; background:#fee2e2; border:1.5px solid #fca5a5; border-radius:12px; padding:20px 22px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+        <span style="background:#ef4444; color:#fff; font-size:1rem; font-weight:800; padding:4px 14px; border-radius:20px;">Major</span>
+        <span style="font-family:monospace; font-size:1rem; font-weight:700; color:#b91c1c;">v1.x.x</span>
+      </div>
+      <p style="font-size:0.83rem; color:#7f1d1d; font-weight:600; margin-bottom:8px;">기존 방식과 호환되지 않는 큰 변화</p>
+      <ul style="font-size:0.78rem; color:#991b1b; padding-left:16px; line-height:1.8;">
+        <li>검사 로직 전체 변경</li>
+        <li>새로운 DB 연동</li>
+      </ul>
+    </div>
+
+    <!-- Minor -->
+    <div style="flex:1; min-width:220px; background:#fef9c3; border:1.5px solid #fde047; border-radius:12px; padding:20px 22px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+        <span style="background:#eab308; color:#fff; font-size:1rem; font-weight:800; padding:4px 14px; border-radius:20px;">Minor</span>
+        <span style="font-family:monospace; font-size:1rem; font-weight:700; color:#854d0e;">vx.1.x</span>
+      </div>
+      <p style="font-size:0.83rem; color:#713f12; font-weight:600; margin-bottom:8px;">기능 추가</p>
+      <ul style="font-size:0.78rem; color:#92400e; padding-left:16px; line-height:1.8;">
+        <li>새로운 배열의 키보드 검사 기능 추가</li>
+      </ul>
+    </div>
+
+    <!-- Patch -->
+    <div style="flex:1; min-width:220px; background:#dcfce7; border:1.5px solid #86efac; border-radius:12px; padding:20px 22px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+        <span style="background:#22c55e; color:#fff; font-size:1rem; font-weight:800; padding:4px 14px; border-radius:20px;">Patch</span>
+        <span style="font-family:monospace; font-size:1rem; font-weight:700; color:#14532d;">vx.x.1</span>
+      </div>
+      <p style="font-size:0.83rem; color:#14532d; font-weight:600; margin-bottom:8px;">단순 버그 수정</p>
+      <ul style="font-size:0.78rem; color:#166534; padding-left:16px; line-height:1.8;">
+        <li>특정 키 인식 딜레이 문제 해결</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
 <footer>
   SMART LOGISTICS DASHBOARD · 전체 로직 플로우차트 · 2026
 </footer>
