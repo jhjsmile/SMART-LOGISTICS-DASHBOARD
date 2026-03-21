@@ -2245,22 +2245,19 @@ elif curr_l == "조립 라인":
             _asm_search_cnt = f"asm_search_cnt_{curr_g}"
             if _asm_search_cnt not in st.session_state:
                 st.session_state[_asm_search_cnt] = 0
-            _asm_search_key = f"sn_search_{curr_g}_{st.session_state[_asm_search_cnt]}"
+            _asm_search_key = f"sn_search_{curr_g}"
             sc1, sc2 = st.columns([2, 2])
             sn_search = sc1.text_input("🔍 시리얼 검색", placeholder="S/N 스캔 또는 입력...", key=_asm_search_key)
-            if st.session_state.pop("_autofocus_after_rerun", None) == _asm_search_key:
-                _inject_autofocus()
             if sn_search.strip():
                 f_df_view = f_df[f_df['시리얼'].str.contains(sn_search.strip(), case=False, na=False)]
                 if f_df_view.empty:
                     st.warning(f"🔍 **'{sn_search.strip()}'** 에 해당하는 시리얼이 없습니다.")
-                # 성능: iterrows 대신 벡터 마스크 + index 직접 참조
+                # 매칭 항목 자동 체크: 위젯 키 직접 설정으로 rerun 없이 적용
+                _asm_cb_ver_now = st.session_state[_asm_search_cnt]
                 _wip_mask = f_df_view['상태'].isin(["조립중", "수리 완료(재투입)"])
                 for _si in f_df_view.index[_wip_mask]:
                     st.session_state[_asm_chk_key][str(_si)] = True
-                st.session_state["_autofocus_after_rerun"] = f"sn_search_{curr_g}_{st.session_state[_asm_search_cnt] + 1}"
-                st.session_state[_asm_search_cnt] += 1  # 키 변경 → 체크박스 새 키로 재렌더 → value= 적용
-                _rerun("asm_hist")
+                    st.session_state[f"asm_cb_{curr_g}_{_si}_{_asm_cb_ver_now}"] = True
             else:
                 f_df_view = f_df
 
@@ -2753,12 +2750,10 @@ elif curr_l in ["검사 라인", "포장 라인"]:
 
     with st.expander(f"📋 {curr_g} {curr_l} 이력" + (f"  ·  {_hist_cnt}건" if _hist_cnt else "  ·  없음"), expanded=_xp("chk_hist"), key="_xp_chk_hist"):
         if not f_df.empty:
-            _hsrch_key = f"hsrch_{curr_g}_{curr_l}_{st.session_state[_hsrch_cnt]}"
+            _hsrch_key = f"hsrch_{curr_g}_{curr_l}"
             hs1, hs2 = st.columns([3, 3])
             _sn_search_qp = hs1.text_input("🔍 시리얼 스캔/검색",
                 placeholder="스캔 또는 입력 → 자동 체크", key=_hsrch_key)
-            if st.session_state.pop("_autofocus_after_rerun", None) == _hsrch_key:
-                _inject_autofocus()
 
             f_df_view = f_df
             if _sn_search_qp.strip():
@@ -2769,11 +2764,10 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     hs1.warning(f"**'{_sn_search_qp.strip()}'** — 처리 가능한 시리얼이 없습니다.")
                 else:
                     f_df_view = _search_result
+                    _hcb_ver_now = st.session_state[_hsrch_cnt]
                     for _hi in f_df_view.index:
                         st.session_state[_hck_key][str(_hi)] = True
-                    st.session_state["_autofocus_after_rerun"] = f"hsrch_{curr_g}_{curr_l}_{st.session_state[_hsrch_cnt] + 1}"
-                    st.session_state[_hsrch_cnt] += 1  # 키 변경 → 체크박스 강제 재렌더
-                    _rerun("chk_hist")
+                        st.session_state[f"hck_{curr_g}_{curr_l}_{_hi}_{_hcb_ver_now}"] = True
 
             _h_checked = [k for k,v in st.session_state[_hck_key].items() if v]
             if _h_checked:
