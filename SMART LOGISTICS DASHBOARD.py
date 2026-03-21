@@ -1690,7 +1690,7 @@ def render_calendar_weekly():
     week_idx = min(st.session_state.cal_week_idx, len(cal_weeks)-1)
     exp_label = f"📅 주별 캘린더  —  {cal_year}년 {cal_month}월 {week_idx+1}주차"
 
-    with st.expander(exp_label, expanded=_xp("cal_weekly")):
+    with st.expander(exp_label, expanded=_xp("cal_weekly"), key="_xp_cal_weekly"):
         # 월 네비게이션
         h1, h2, h3, h4 = st.columns([1, 1, 4, 1])
         if h1.button("◀ 이전달", key="w_prev_month", use_container_width=True):
@@ -1777,7 +1777,7 @@ def render_calendar_monthly(
 
     exp_label = f"🗓️ 월별 캘린더  —  {cal_year}년 {cal_month}월 전체"
 
-    with st.expander(exp_label, expanded=_xp("cal_monthly")):
+    with st.expander(exp_label, expanded=_xp("cal_monthly"), key="_xp_cal_monthly"):
         h1, h2, h3, h4 = st.columns([1, 1, 4, 1])
         if h1.button("◀ 이전달", key="m_prev_month", use_container_width=True):
             clear_cal()
@@ -2095,7 +2095,7 @@ elif curr_l == "조립 라인":
 
     # 오늘 일정 카드
     _today_label = f"📋 오늘({today_str}) {curr_g} 작업 일정" + (f"  ·  {len(today_sch)}건" if not today_sch.empty else "  ·  없음")
-    with st.expander(_today_label, expanded=_xp("asm_sch_today")):
+    with st.expander(_today_label, expanded=_xp("asm_sch_today"), key="_xp_asm_sch_today"):
         if today_sch.empty:
             st.info("오늘 등록된 작업 일정이 없습니다.")
         else:
@@ -2129,7 +2129,7 @@ elif curr_l == "조립 라인":
         (sch_all['반'] == curr_g)
     ] if not sch_all.empty else pd.DataFrame()
     _month_sch_cnt = len(_month_sch_pre)
-    with st.expander(f"📅 {curr_g} 이번 달 전체 일정 보기  ·  {_month_sch_cnt}건" if _month_sch_cnt else f"📅 {curr_g} 이번 달 전체 일정 보기  ·  없음", expanded=_xp("asm_sch_month")):
+    with st.expander(f"📅 {curr_g} 이번 달 전체 일정 보기  ·  {_month_sch_cnt}건" if _month_sch_cnt else f"📅 {curr_g} 이번 달 전체 일정 보기  ·  없음", expanded=_xp("asm_sch_month"), key="_xp_asm_sch_month"):
         month_sch = _month_sch_pre
         if not month_sch.empty:
             show_cols = ['날짜','카테고리','모델명','pn','조립수','출하계획','특이사항']
@@ -2214,7 +2214,7 @@ elif curr_l == "조립 라인":
 
     # ── 모델/품목별 수량 카운트 + 생산 이력 ─────────────────────────
     if not f_df.empty:
-        with st.expander(f"📊 {curr_g} 조립 라인 수량 현황  ·  {len(f_df)}건", expanded=_xp("asm_cnt")):
+        with st.expander(f"📊 {curr_g} 조립 라인 수량 현황  ·  {len(f_df)}건", expanded=_xp("asm_cnt"), key="_xp_asm_cnt"):
             grp = f_df.groupby(['모델','품목코드'])
             count_rows = []
             for (model, pn), gdf in grp:
@@ -2237,7 +2237,7 @@ elif curr_l == "조립 라인":
                     sc3.metric("🏗️ 작업중", wip)
                     sc4.metric("🚨 불량", defect, delta=None if defect == 0 else f"{defect}건", delta_color="inverse")
 
-        with st.expander(f"📋 {curr_g} 생산 이력  ·  {len(f_df)}건", expanded=_xp("asm_hist")):
+        with st.expander(f"📋 {curr_g} 생산 이력  ·  {len(f_df)}건", expanded=_xp("asm_hist"), key="_xp_asm_hist"):
             _asm_chk_key = f"asm_checked_{curr_g}"
             if _asm_chk_key not in st.session_state:
                 st.session_state[_asm_chk_key] = {}
@@ -2534,7 +2534,7 @@ elif curr_l == "조립 라인":
                 st.warning("모델, 품목코드, 메인 S/N을 모두 입력해주세요.")
 
     # ── 기존 제품 자재 시리얼 추가 ────────────────────────────────────
-    with st.expander("🔩 기존 제품 자재 시리얼 추가 등록", expanded=_xp("asm_mat")):
+    with st.expander("🔩 기존 제품 자재 시리얼 추가 등록", expanded=_xp("asm_mat"), key="_xp_asm_mat"):
         st.caption("메인 S/N을 입력하면 기존 등록된 자재를 조회하고 누락된 자재를 추가할 수 있습니다.")
 
         _add_mat_sn_cnt_key = f"add_mat_sn_cnt_{curr_g}"
@@ -2656,7 +2656,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     if _wck_key   not in st.session_state: st.session_state[_wck_key]   = {}
     if _wscan_cnt not in st.session_state: st.session_state[_wscan_cnt] = 0
 
-    with st.expander(f"📥 이전 공정({prev}) 완료 — 입고 대기" + (f"  ·  {_wait_cnt}건" if _wait_cnt else "  ·  없음"), expanded=_xp("chk_wait")):
+    with st.expander(f"📥 이전 공정({prev}) 완료 — 입고 대기" + (f"  ·  {_wait_cnt}건" if _wait_cnt else "  ·  없음"), expanded=_xp("chk_wait"), key="_xp_chk_wait"):
         if not wait_list.empty:
             _wscan_key = f"wscan_{curr_g}_{curr_l}_{st.session_state[_wscan_cnt]}"
             ws1, ws2 = st.columns([3, 3])
@@ -2751,7 +2751,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     if _hck_key   not in st.session_state: st.session_state[_hck_key]   = {}
     if _hsrch_cnt not in st.session_state: st.session_state[_hsrch_cnt] = 0
 
-    with st.expander(f"📋 {curr_g} {curr_l} 이력" + (f"  ·  {_hist_cnt}건" if _hist_cnt else "  ·  없음"), expanded=_xp("chk_hist")):
+    with st.expander(f"📋 {curr_g} {curr_l} 이력" + (f"  ·  {_hist_cnt}건" if _hist_cnt else "  ·  없음"), expanded=_xp("chk_hist"), key="_xp_chk_hist"):
         if not f_df.empty:
             _hsrch_key = f"hsrch_{curr_g}_{curr_l}_{st.session_state[_hsrch_cnt]}"
             hs1, hs2 = st.columns([3, 3])
@@ -2928,7 +2928,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
 
     # ── 기존 제품 자재 시리얼 조회 / 추가 ────────────────────────────
     MAT_NAME_OPTIONS_QL = st.session_state.get("dropdown_mat_name") or []
-    with st.expander("🔩 자재 시리얼 조회 / 추가 등록", expanded=_xp("chk_mat")):
+    with st.expander("🔩 자재 시리얼 조회 / 추가 등록", expanded=_xp("chk_mat"), key="_xp_chk_mat"):
         st.caption("메인 S/N을 입력하면 등록된 자재를 조회하고 누락된 자재를 추가할 수 있습니다.")
 
         _ql_sn_cnt_key = f"ql_sn_cnt_{curr_g}_{curr_l}"
@@ -3162,7 +3162,7 @@ elif curr_l == "생산 현황 리포트":
         st.divider()
 
         # ── 이력 테이블 ───────────────────────────────────────────────
-        with st.expander(f"📋 전체 이력 테이블  ·  {len(df_rpt)}건", expanded=_xp("rpt_tbl")):
+        with st.expander(f"📋 전체 이력 테이블  ·  {len(df_rpt)}건", expanded=_xp("rpt_tbl"), key="_xp_rpt_tbl"):
             _RPT_PAGE_SIZE = 50
             _rpt_sorted = df_rpt.sort_values('시간', ascending=False).reset_index(drop=True)
             _rpt_total = len(_rpt_sorted)
@@ -3289,7 +3289,7 @@ elif curr_l == "검사 라인":
     st.divider()
 
     _qc_hist_total = len(db_qc[db_qc['라인'] == '검사 라인'])
-    with st.expander(f"📋 최근 검사 이력  ·  전체 {_qc_hist_total}건 (최근 20건 표시)", expanded=_xp("qc_hist")):
+    with st.expander(f"📋 최근 검사 이력  ·  전체 {_qc_hist_total}건 (최근 20건 표시)", expanded=_xp("qc_hist"), key="_xp_qc_hist"):
         hist = db_qc[db_qc['라인'] == '검사 라인'].sort_values('시간', ascending=False).head(20)
         if not hist.empty:
             st.dataframe(hist[['시간', '모델', '시리얼', '상태', '증상', '작업자']].reset_index(drop=True),
@@ -3371,7 +3371,7 @@ elif curr_l == "포장 라인":
     st.divider()
 
     _pk_done_total = len(db_pk[db_pk['상태'] == '완료'])
-    with st.expander(f"📋 최근 완료 이력  ·  전체 {_pk_done_total}건 (최근 20건 표시)", expanded=_xp("pk_hist")):
+    with st.expander(f"📋 최근 완료 이력  ·  전체 {_pk_done_total}건 (최근 20건 표시)", expanded=_xp("pk_hist"), key="_xp_pk_hist"):
         hist = db_pk[db_pk['상태'] == '완료'].sort_values('시간', ascending=False).head(20)
         if not hist.empty:
             st.dataframe(hist[['시간', '모델', '시리얼', '작업자']].reset_index(drop=True),
@@ -3627,7 +3627,7 @@ elif curr_l == "생산 지표 관리":
         WIP_STATES = ['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)','불량 처리 중']
         rt_wip = rt_df[rt_df['상태'].isin(WIP_STATES)].sort_values('시간', ascending=False) if not rt_df.empty else pd.DataFrame()
 
-        with st.expander(f"⚡ 실시간 진행 중 ({len(rt_wip)}건)", expanded=_xp("idx_wip")):
+        with st.expander(f"⚡ 실시간 진행 중 ({len(rt_wip)}건)", expanded=_xp("idx_wip"), key="_xp_idx_wip"):
             if not rt_wip.empty:
                 BAN_BG = {"제조1반":"#ddeeff","제조2반":"#d4f0e2","제조3반":"#ede0f5"}
                 BAN_CL = {"제조1반":"#2471a3","제조2반":"#1e8449","제조3반":"#6c3483"}
@@ -3676,7 +3676,7 @@ elif curr_l == "생산 지표 관리":
 
     # 입력 폼 (관리자 전용)
     if st.session_state.user_role in CALENDAR_EDIT_ROLES and check_perm("생산 지표 관리", "write"):
-        with st.expander("⚙️ 월 계획 수량 입력 / 변경", expanded=_xp("idx_plan")):
+        with st.expander("⚙️ 월 계획 수량 입력 / 변경", expanded=_xp("idx_plan"), key="_xp_idx_plan"):
             st.caption("반/월별 목표 수량을 입력합니다. 변경 시 사유를 선택하면 이력이 자동 기록됩니다.")
             pl1, pl2, pl3 = st.columns([1.5, 1.5, 1.2])
             p_ban  = pl1.selectbox("반", PRODUCTION_GROUPS, key="plan_ban")
@@ -4511,7 +4511,7 @@ elif curr_l == "OQC 라인":
     st.divider()
 
     # ── 입고 대기 목록 (포장 완료 → OQC 대기 전환) ───────────────
-    with st.expander(f"📥 입고 대기 (검사 합격 제품)  {oqc_wait}건", expanded=_xp("oqc_wait")):
+    with st.expander(f"📥 입고 대기 (검사 합격 제품)  {oqc_wait}건", expanded=_xp("oqc_wait"), key="_xp_oqc_wait"):
         packing_done = db_oqc[
             db_oqc['상태'] == 'OQC대기'
         ].sort_values('시간', ascending=False).reset_index(drop=True)
@@ -4593,7 +4593,7 @@ elif curr_l == "OQC 라인":
     st.divider()
 
     # ── OQC 검사 진행 ─────────────────────────────────────────────
-    with st.expander(f"🔍 OQC 검사 진행  {oqc_ing}건", expanded=_xp("oqc_ing")):
+    with st.expander(f"🔍 OQC 검사 진행  {oqc_ing}건", expanded=_xp("oqc_ing"), key="_xp_oqc_ing"):
         oqc_wait_list = db_oqc[db_oqc['상태'] == 'OQC중'].sort_values('시간', ascending=False).reset_index(drop=True)
     
         _oqc_ck_key = f"oqc_ck_{oqc_ban}"
@@ -4758,7 +4758,7 @@ elif curr_l == "OQC 라인":
 
     # ── OQC 결과 이력 ─────────────────────────────────────────────
     oqc_done = db_oqc[db_oqc['상태'].isin(['출하승인','부적합(OQC)'])].sort_values('시간', ascending=False)
-    with st.expander(f"📋 OQC 결과 이력  ·  {len(oqc_done)}건", expanded=_xp("oqc_hist")):
+    with st.expander(f"📋 OQC 결과 이력  ·  {len(oqc_done)}건", expanded=_xp("oqc_hist"), key="_xp_oqc_hist"):
     
         if not oqc_done.empty:
             oqc_sn_filter = st.text_input("🔍 S/N 검색", key="oqc_sn_filter", placeholder="시리얼 일부 입력")
@@ -5204,7 +5204,7 @@ elif curr_l == "불량 공정":
             ]
         if wait.empty: continue
         has_any = True
-        with st.expander(f"📍 {g} 불량 처리 대기 ({len(wait)}건)", expanded=_xp(f"def_wait_{g}")):
+        with st.expander(f"📍 {g} 불량 처리 대기 ({len(wait)}건)", expanded=_xp(f"def_wait_{g}"), key=f"_xp_def_wait_{g}"):
             for row in wait.to_dict('records'):
                 sn_key = row['시리얼']  # idx 대신 실제 시리얼을 키로 사용 (목록 변경 시 키 밀림 방지)
                 with st.container(border=True):
@@ -5284,7 +5284,7 @@ elif curr_l == "불량 공정":
                     # 등록된 자재 시리얼 표시 (기존 시리얼란에 자재 S/N 입력 가능 안내)
                     _def_mats = load_material_serials(row['시리얼'])
                     if not _def_mats.empty:
-                        with st.expander(f"🔩 등록된 자재 시리얼 ({len(_def_mats)}개) — 자재 교체 시 기존 시리얼란에 입력", expanded=_xp(f"def_mat_{g}")):
+                        with st.expander(f"🔩 등록된 자재 시리얼 ({len(_def_mats)}개) — 자재 교체 시 기존 시리얼란에 입력", expanded=_xp(f"def_mat_{g}"), key=f"_xp_def_mat_{g}"):
                             for _, _dm in _def_mats.iterrows():
                                 _dmc1, _dmc2 = st.columns([1, 1])
                                 _dmc1.caption(f"**{_dm.get('자재명', '')}**")
@@ -5430,7 +5430,7 @@ elif curr_l == "수리 현황 리포트":
 
     # ── 감사 로그 조회 ────────────────────────────────────────────
     st.divider()
-    with st.expander("🔍 감사 로그 (상태 변경 이력)", expanded=_xp("repair_audit")):
+    with st.expander("🔍 감사 로그 (상태 변경 이력)", expanded=_xp("repair_audit"), key="_xp_repair_audit"):
         # 필터
         af1, af2, af3, af4 = st.columns([1.5, 1.5, 2, 1])
         a_ban    = af1.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="audit_ban")
