@@ -4760,7 +4760,15 @@ elif curr_l == "OQC 라인":
     st.divider()
 
     # ── OQC 결과 이력 ─────────────────────────────────────────────
-    oqc_done = db_oqc[db_oqc['상태'].isin(['출하승인','부적합(OQC)'])].sort_values('시간', ascending=False)
+    # 부적합 판정 후 불량 처리 중으로 이관된 항목도 포함 (수리 컬럼 기준)
+    _oqc_fail_transferred = db_oqc[
+        (db_oqc['상태'] == '불량 처리 중') &
+        (db_oqc['수리'].str.contains('OQC 부적합 판정', na=False))
+    ]
+    oqc_done = pd.concat([
+        db_oqc[db_oqc['상태'].isin(['출하승인', '부적합(OQC)'])],
+        _oqc_fail_transferred
+    ]).drop_duplicates(subset=['시리얼']).sort_values('시간', ascending=False)
     with st.expander(f"📋 OQC 결과 이력  ·  {len(oqc_done)}건", expanded=_xp("oqc_hist"), key="_xp_oqc_hist"):
     
         if not oqc_done.empty:
@@ -4791,10 +4799,15 @@ elif curr_l == "OQC 라인":
                                  use_container_width=True, help="클릭하여 자재 시리얼 조회"):
                     st.session_state[_oqc_done_tog] = not st.session_state.get(_oqc_done_tog, False)
                 결과 = row.get('상태','')
+                _is_oqc_transferred = (결과 == '불량 처리 중' and
+                    'OQC 부적합 판정' in str(row.get('수리','')))
                 if 결과 == '출하승인':
                     rr2[4].markdown("<span style='background:#d4f0e2;color:#1f6640;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>✅ 출하승인</span>", unsafe_allow_html=True)
                 else:
-                    rr2[4].markdown("<span style='background:#fde8e7;color:#7a2e2a;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>🚫 부적합</span>", unsafe_allow_html=True)
+                    if _is_oqc_transferred:
+                        rr2[4].markdown("<span style='background:#fde8e7;color:#7a2e2a;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>🚫 부적합 · 이관완료</span>", unsafe_allow_html=True)
+                    else:
+                        rr2[4].markdown("<span style='background:#fde8e7;color:#7a2e2a;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>🚫 부적합</span>", unsafe_allow_html=True)
                     if 결과 == '부적합(OQC)':
                         if rr2[4].button("🔧 불량 공정 이관", key=f"oqc_send_defect_{_i}",
                                          use_container_width=True, help="불량 공정으로 이관하여 수리/교체 처리"):
@@ -4889,7 +4902,16 @@ elif curr_l == "OQC 라인":
     st.markdown("<div class='section-title'>📊 OQC 분석 차트</div>", unsafe_allow_html=True)
 
     db_oqc_chart = db_oqc_all.copy()  # 전체 반 기준
-    oqc_chart_df = db_oqc_chart[db_oqc_chart['상태'].isin(['OQC대기','OQC중','출하승인','부적합(OQC)'])]
+    # 부적합 판정 후 불량 처리 중으로 이관된 항목을 부적합(OQC)로 정규화하여 포함
+    _chart_transferred = db_oqc_chart[
+        (db_oqc_chart['상태'] == '불량 처리 중') &
+        (db_oqc_chart['수리'].str.contains('OQC 부적합 판정', na=False))
+    ].copy()
+    _chart_transferred['상태'] = '부적합(OQC)'
+    oqc_chart_df = pd.concat([
+        db_oqc_chart[db_oqc_chart['상태'].isin(['OQC대기','OQC중','출하승인','부적합(OQC)'])],
+        _chart_transferred
+    ]).drop_duplicates(subset=['시리얼'])
 
     if not oqc_chart_df.empty:
         import plotly.graph_objects as go
@@ -4973,12 +4995,21 @@ elif curr_l == "OQC 라인":
             else:
                 st.info("OQC 처리 이력 데이터 없음")
 
-        # ② 부적합 사유별 건수 (증상 컬럼 기준)
+        # ② 부적합 사유별 건수 (수리/증상 컬럼에서 사유 추출)
         with cc2:
             fail_df = oqc_chart_df[oqc_chart_df['상태']=='부적합(OQC)'].copy()
             if not fail_df.empty:
-                reason_cnt = (fail_df['증상'].fillna('미기재')
-                               .value_counts().reset_index())
+                def _extract_reason(r):
+                    수리 = str(r.get('수리',''))
+                    증상 = str(r.get('증상',''))
+                    if 'OQC 부적합 판정' in 수리 and '사유: ' in 수리:
+                        return 수리.split('사유: ', 1)[-1].strip()
+                    if '부적합사유:' in 증상:
+                        return 증상.split('부적합사유:', 1)[-1].strip().rstrip(')')
+                    return 증상 if 증상 not in ('', 'nan') else '미기재'
+                fail_df['_사유'] = fail_df.apply(_extract_reason, axis=1)
+                reason_cnt = (fail_df['_사유'].fillna('미기재')
+                               .replace('', '미기재').value_counts().reset_index())
                 reason_cnt.columns = ['사유','건수']
                 fig2 = go.Figure(go.Bar(
                     x=reason_cnt['건수'], y=reason_cnt['사유'],
