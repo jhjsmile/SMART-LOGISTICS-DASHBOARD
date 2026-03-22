@@ -5510,6 +5510,71 @@ elif curr_l == "수리 현황 리포트":
     else:
         st.info("기록된 이슈 내역이 없습니다.")
 
+    # ── 부적합 판정 이력 ──────────────────────────────────────────
+    st.divider()
+    with st.expander("🚫 부적합 판정 이력 (OQC)", expanded=_xp("repair_nonconf"), key="_xp_repair_nonconf"):
+        _nc_audit_raw = load_audit_log()
+        if not _nc_audit_raw.empty:
+            # 부적합(OQC) 관련 레코드 필터: 이후상태 또는 비고 기준
+            _nc_mask = (
+                (_nc_audit_raw['이후상태'] == '부적합(OQC)') |
+                (_nc_audit_raw['비고'].astype(str).str.contains('OQC 부적합', na=False))
+            )
+            _nc_df = _nc_audit_raw[_nc_mask].copy()
+
+            # 비고에서 부적합 사유 파싱
+            def _extract_nc_reason(bigo):
+                s = str(bigo)
+                if '사유:' in s:
+                    return s.split('사유:')[-1].strip()
+                return s or '-'
+            _nc_df['부적합 사유'] = _nc_df['비고'].apply(_extract_nc_reason)
+
+            # 필터 UI
+            _nf1, _nf2, _nf3 = st.columns([1.5, 2, 2])
+            _nc_ban    = _nf1.selectbox("반 필터",      ["전체"] + PRODUCTION_GROUPS, key="nc_ban")
+            _nc_sn     = _nf2.text_input("S/N 검색",   placeholder="시리얼 일부 입력", key="nc_sn")
+            _nc_reason_opts = ["전체"] + sorted(_nc_df['부적합 사유'].dropna().unique().tolist())
+            _nc_reason = _nf3.selectbox("부적합 사유",  _nc_reason_opts, key="nc_reason")
+
+            # 필터 적용
+            _nc_view = _nc_df.copy()
+            if _nc_ban != "전체":
+                _nc_view = _nc_view[_nc_view['반'] == _nc_ban]
+            if _nc_sn.strip():
+                _nc_view = _nc_view[_nc_view['시리얼'].str.contains(_nc_sn.strip(), case=False, na=False)]
+            if _nc_reason != "전체":
+                _nc_view = _nc_view[_nc_view['부적합 사유'] == _nc_reason]
+
+            # KPI
+            nk1, nk2, nk3 = st.columns(3)
+            nk1.metric("전체 부적합 건수", f"{len(_nc_df):,} 건")
+            nk2.metric("조회 결과",        f"{len(_nc_view):,} 건")
+            _top_reason = _nc_df['부적합 사유'].value_counts().idxmax() if not _nc_df.empty else "-"
+            nk3.metric("최다 발생 사유",   _top_reason)
+
+            if not _nc_view.empty:
+                _cc1, _cc2 = st.columns(2)
+                with _cc1:
+                    _reason_cnt = _nc_view.groupby('부적합 사유').size().reset_index(name='건수')
+                    st.plotly_chart(
+                        px.bar(_reason_cnt, x='부적합 사유', y='건수', title="부적합 사유별 현황"),
+                        use_container_width=True)
+                with _cc2:
+                    _model_cnt = _nc_view.groupby('모델').size().reset_index(name='건수')
+                    st.plotly_chart(
+                        px.pie(_model_cnt, values='건수', names='모델', hole=0.4, title="모델별 부적합 비중"),
+                        use_container_width=True)
+
+                # 테이블
+                _nc_display = _nc_view[['시간', '시리얼', '모델', '반', '작업자', '부적합 사유']].reset_index(drop=True)
+                _nc_display.columns = ['시간', '시리얼', '모델', '반', '작업자', '부적합 사유']
+                st.dataframe(_nc_display, use_container_width=True, hide_index=True)
+            else:
+                st.info("조건에 맞는 부적합 판정 이력이 없습니다.")
+        else:
+            st.info("부적합 판정 이력이 없습니다.")
+
     # ── 감사 로그 조회 ────────────────────────────────────────────
     st.divider()
     with st.expander("🔍 감사 로그 (상태 변경 이력)", expanded=_xp("repair_audit"), key="_xp_repair_audit"):
@@ -5517,7 +5582,7 @@ elif curr_l == "수리 현황 리포트":
         af1, af2, af3, af4 = st.columns([1.5, 1.5, 2, 1])
         a_ban    = af1.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="audit_ban")
         a_state  = af2.selectbox("이후 상태", ["전체", "검사대기", "검사중", "포장대기", "포장중",
-                                               "완료", "불량 처리 중", "수리 완료(재투입)"], key="audit_state")
+                                               "완료", "불량 처리 중", "수리 완료(재투입)", "부적합(OQC)"], key="audit_state")
         a_sn     = af3.text_input("S/N 검색", placeholder="시리얼 일부 입력", key="audit_sn")
         if af4.button("🔄 새로고침", key="audit_refresh", use_container_width=True):
             _clear_audit_cache(); st.rerun()
@@ -5530,11 +5595,12 @@ elif curr_l == "수리 현황 리포트":
             if a_sn.strip():       audit_df = audit_df[audit_df['시리얼'].str.contains(a_sn.strip(), case=False, na=False)]
 
             # 요약 KPI
-            k1, k2, k3, k4 = st.columns(4)
+            k1, k2, k3, k4, k5 = st.columns(5)
             k1.metric("전체 기록",   f"{len(audit_df):,} 건")
             k2.metric("완료 처리",   f"{len(audit_df[audit_df['이후상태']=='완료']):,} 건")
             k3.metric("불량 발생",   f"{len(audit_df[audit_df['이후상태']=='불량 처리 중']):,} 건")
             k4.metric("수리 완료",   f"{len(audit_df[audit_df['이후상태']=='수리 완료(재투입)']):,} 건")
+            k5.metric("부적합(OQC)", f"{len(audit_df[audit_df['이후상태']=='부적합(OQC)']):,} 건")
 
             st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
