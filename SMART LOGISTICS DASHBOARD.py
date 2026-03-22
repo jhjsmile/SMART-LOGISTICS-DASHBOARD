@@ -4931,11 +4931,12 @@ elif curr_l == "OQC 라인":
         _fail_nc['부적합 사유'] = _fail_nc.apply(_extract_reason_nc, axis=1)
 
         # ── 부적합 판정 이력 (OQC) — audit_log 기준 ──────────────────
-        # 이후상태 == '부적합(OQC)' 이벤트만 카운트 (판정 시점 기준)
-        # 동일 S/N이 수리 후 재검사에서 또 부적합이면 별도 이벤트로 집계
+        # OQC 부적합 판정 시 audit_log에 이후상태='불량 처리 중', 비고='OQC 부적합 - 사유: ...' 로 기록됨
+        # '이관' 이벤트(비고='OQC 부적합 이관 - 사유: ...')는 판정 이벤트가 아니므로 제외
+        # → 비고가 정확히 'OQC 부적합 - 사유:' 로 시작하는 행만 추출
         _nc_audit_all = load_audit_log()
         _fail_audit = _nc_audit_all[
-            _nc_audit_all['이후상태'] == '부적합(OQC)'
+            _nc_audit_all['비고'].astype(str).str.startswith('OQC 부적합 - 사유:')
         ].copy()
 
         # 비고에서 사유 파싱: "OQC 부적합 - 사유: {reason}" 형식
