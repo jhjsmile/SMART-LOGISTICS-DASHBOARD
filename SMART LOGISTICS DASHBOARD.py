@@ -5038,30 +5038,49 @@ elif curr_l == "OQC 라인":
                 for _s in ['OQC대기','OQC중','출하승인','부적합(OQC)']:
                     fig1.add_trace(go.Bar(
                         name=_s, x=_all_dates['날짜'], y=_all_dates[_s],
-                        marker_color=_CLR[_s], opacity=0.75, yaxis='y'
+                        marker_color=_CLR[_s], opacity=0.85, yaxis='y'
                     ))
                 # 누적 라인 (오른쪽 y축)
                 fig1.add_trace(go.Scatter(
                     name='누적 전체', x=_all_dates['날짜'], y=_all_dates['누적_전체'],
-                    mode='lines+markers', line=dict(color='#2c3e50', width=2),
-                    marker=dict(size=4), yaxis='y2'
+                    mode='lines', line=dict(color='#34495e', width=2),
+                    yaxis='y2'
                 ))
                 fig1.add_trace(go.Scatter(
                     name='누적 부적합', x=_all_dates['날짜'], y=_all_dates['누적_부적합'],
-                    mode='lines+markers', line=dict(color='#c0392b', width=2, dash='dot'),
-                    marker=dict(size=4), yaxis='y2'
+                    mode='lines', line=dict(color='#c0392b', width=1.5, dash='dot'),
+                    yaxis='y2'
                 ))
+                # x축 날짜 중 실제 데이터 있는 날만 틱으로 표시
+                _tick_dates = _all_dates[_all_dates['전체'] > 0]['날짜'].tolist()
                 fig1.update_layout(
-                    title="일별 OQC 처리 현황 & 누적 추이 (최근 30일)",
-                    template='plotly_white', height=420,
+                    title=dict(text="일별 OQC 처리 현황 & 누적 추이 (최근 30일)",
+                               font=dict(size=13), x=0),
+                    template='plotly_white', height=380,
                     barmode='stack',
-                    margin=dict(t=45, b=120, l=10, r=50),
-                    legend=dict(orientation='h', yanchor='top', y=-0.32,
-                                xanchor='center', x=0.5, font=dict(size=10)),
-                    yaxis =dict(title='일별 건수', side='left'),
-                    yaxis2=dict(title='누적 건수', side='right',
-                                overlaying='y', showgrid=False),
-                    xaxis =dict(tickangle=-45, tickfont=dict(size=9))
+                    margin=dict(t=40, b=70, l=45, r=55),
+                    legend=dict(
+                        orientation='h', yanchor='top', y=-0.2,
+                        xanchor='center', x=0.5, font=dict(size=10),
+                        bgcolor='rgba(255,255,255,0.9)',
+                        bordercolor='#e0e0e0', borderwidth=1,
+                        traceorder='normal'
+                    ),
+                    yaxis=dict(
+                        title='건수', titlefont=dict(size=11), side='left',
+                        gridcolor='#f0f0f0', zeroline=False
+                    ),
+                    yaxis2=dict(
+                        title='누적', titlefont=dict(size=11), side='right',
+                        overlaying='y', showgrid=False, zeroline=False
+                    ),
+                    xaxis=dict(
+                        tickvals=_tick_dates,
+                        ticktext=[d[5:] for d in _tick_dates],  # MM-DD 형식
+                        tickangle=-30, tickfont=dict(size=9),
+                        showgrid=False
+                    ),
+                    plot_bgcolor='white'
                 )
                 st.plotly_chart(fig1, use_container_width=True)
             else:
@@ -5073,17 +5092,27 @@ elif curr_l == "OQC 라인":
                 reason_cnt = (_fail_nc['부적합 사유'].fillna('미기재')
                                .replace('', '미기재').value_counts().reset_index())
                 reason_cnt.columns = ['사유', '건수']
+                _max_len = reason_cnt['사유'].str.len().max() if not reason_cnt.empty else 10
+                _left_margin = min(max(int(_max_len * 7.5), 160), 280)
                 fig2 = go.Figure(go.Bar(
                     x=reason_cnt['건수'], y=reason_cnt['사유'],
                     orientation='h',
-                    marker_color='#e8706a',
-                    text=reason_cnt['건수'], textposition='outside'
+                    marker=dict(color='#e8706a', line=dict(color='#c0392b', width=0.5)),
+                    text=reason_cnt['건수'], textposition='outside',
+                    textfont=dict(size=12, color='#333'),
+                    hovertemplate='%{y}<br>%{x}건<extra></extra>'
                 ))
                 fig2.update_layout(
-                    title="부적합 사유별 건수",
-                    template='plotly_white', height=280,
-                    margin=dict(t=40, b=20, l=10, r=10),
-                    yaxis=dict(autorange='reversed')
+                    title=dict(text="부적합 사유별 건수", font=dict(size=13), x=0),
+                    template='plotly_white', height=320,
+                    margin=dict(t=40, b=30, l=_left_margin, r=45),
+                    xaxis=dict(
+                        range=[0, reason_cnt['건수'].max() * 1.3],
+                        showgrid=True, gridcolor='#f0f0f0',
+                        zeroline=False, showticklabels=False
+                    ),
+                    yaxis=dict(autorange='reversed', tickfont=dict(size=11)),
+                    plot_bgcolor='white'
                 )
                 st.plotly_chart(fig2, use_container_width=True)
             else:
@@ -5099,21 +5128,47 @@ elif curr_l == "OQC 라인":
                     if len(x) > 0 else 0
                 ).reset_index()
                 monthly.columns = ['월','합격률(%)']
-                fig3 = go.Figure(go.Scatter(
-                    x=monthly['월'], y=monthly['합격률(%)'],
+                _y_min = max(0, monthly['합격률(%)'].min() - 10) if not monthly.empty else 0
+                # 월 레이블: "2026-03" → "26년 3월" 형식
+                def _fmt_month(m):
+                    try:
+                        parts = m.split('-')
+                        return f"{parts[0][2:]}년 {int(parts[1])}월"
+                    except:
+                        return m
+                monthly['월_표시'] = monthly['월'].apply(_fmt_month)
+                fig3 = go.Figure()
+                fig3.add_trace(go.Scatter(
+                    x=monthly['월_표시'], y=monthly['합격률(%)'],
                     mode='lines+markers+text',
-                    line=dict(color='#4da875', width=2),
-                    marker=dict(size=8),
+                    line=dict(color='#4da875', width=2.5),
+                    marker=dict(size=9, color='#4da875',
+                                line=dict(color='white', width=2)),
                     text=monthly['합격률(%)'].apply(lambda v: f"{v}%"),
-                    textposition='top center', textfont=dict(size=10)
+                    textposition='top center',
+                    textfont=dict(size=11, color='#2d6a4f'),
+                    hovertemplate='%{x}<br>합격률: %{y}%<extra></extra>'
                 ))
-                fig3.add_hline(y=100, line_dash="dash", line_color="#e8908a",
-                               annotation_text="목표 100%", annotation_font_size=9)
+                fig3.add_hline(
+                    y=100, line_dash="dash", line_color="#e57373", line_width=1.2,
+                    annotation_text="목표 100%",
+                    annotation_position="top right",
+                    annotation_font=dict(size=9, color="#e57373")
+                )
                 fig3.update_layout(
-                    title="월별 합격률 추이",
-                    template='plotly_white', height=280,
-                    margin=dict(t=40,b=20,l=10,r=10),
-                    yaxis=dict(range=[0,110], title="%")
+                    title=dict(text="월별 합격률 추이", font=dict(size=13), x=0),
+                    template='plotly_white', height=320,
+                    margin=dict(t=40, b=30, l=45, r=20),
+                    xaxis=dict(
+                        type='category', showgrid=False,
+                        tickfont=dict(size=10)
+                    ),
+                    yaxis=dict(
+                        range=[_y_min, 108],
+                        title='%', titlefont=dict(size=11),
+                        gridcolor='#f0f0f0', zeroline=False
+                    ),
+                    plot_bgcolor='white'
                 )
                 st.plotly_chart(fig3, use_container_width=True)
             else:
