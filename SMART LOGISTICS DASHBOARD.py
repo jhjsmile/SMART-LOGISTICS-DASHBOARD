@@ -4896,34 +4896,59 @@ elif curr_l == "OQC 라인":
 
         cc1, cc2, cc3 = st.columns(3)
 
-        # ① 반별 OQC 결과 현황 (누적 막대)
+        # ① 일별 OQC 처리 건수 누적 추이 (출하승인 vs 부적합)
         with cc1:
-            rows = []
-            for ban in PRODUCTION_GROUPS:
-                bdf = oqc_chart_df[oqc_chart_df['반'] == ban]
-                rows.append({
-                    '반': ban,
-                    '출하승인': len(bdf[bdf['상태']=='출하승인']),
-                    '부적합':   len(bdf[bdf['상태']=='부적합(OQC)']),
-                    'OQC중':    len(bdf[bdf['상태']=='OQC중']),
-                    'OQC대기':  len(bdf[bdf['상태']=='OQC대기']),
-                })
             import pandas as _pd2
-            ban_df = _pd2.DataFrame(rows)
-            fig1 = go.Figure()
-            CLR_MAP = {'출하승인':'#4da875','부적합':'#e8706a','OQC중':'#7eb8e8','OQC대기':'#f0c878'}
-            for col in ['출하승인','부적합','OQC중','OQC대기']:
-                fig1.add_trace(go.Bar(name=col, x=ban_df['반'], y=ban_df[col],
-                    marker_color=CLR_MAP[col]))
-            fig1.update_layout(
-                title="반별 OQC 결과", barmode='stack',
-                template='plotly_white', height=400,
-                margin=dict(t=40,b=120,l=10,r=10),
-                legend=dict(orientation='h', yanchor='top', y=-0.4,
-                            xanchor='center', x=0.5, font=dict(size=10))
-            )
-            fig1.update_xaxes(showticklabels=True, automargin=False)
-            st.plotly_chart(fig1, use_container_width=True)
+            done_df = oqc_chart_df[oqc_chart_df['상태'].isin(['출하승인','부적합(OQC)'])].copy()
+            if not done_df.empty and '시간' in done_df.columns:
+                done_df['날짜'] = done_df['시간'].str[:10]
+                # 최근 30일 필터
+                from datetime import date as _date, timedelta as _td
+                _cutoff = (date.today() - _td(days=29)).isoformat()
+                done_df = done_df[done_df['날짜'] >= _cutoff]
+                # 날짜 × 결과 피벗
+                _daily = done_df.groupby(['날짜','상태']).size().reset_index(name='건수')
+                _all_dates = _pd2.DataFrame({'날짜': _pd2.date_range(_cutoff, date.today()).strftime('%Y-%m-%d')})
+                for _s in ['출하승인','부적합(OQC)']:
+                    _sub = _daily[_daily['상태']==_s][['날짜','건수']].rename(columns={'건수':_s})
+                    _all_dates = _all_dates.merge(_sub, on='날짜', how='left')
+                _all_dates = _all_dates.fillna(0)
+                # 누적합
+                _all_dates['누적_출하승인'] = _all_dates['출하승인'].cumsum()
+                _all_dates['누적_부적합']   = _all_dates['부적합(OQC)'].cumsum()
+                fig1 = go.Figure()
+                fig1.add_trace(go.Bar(
+                    name='일별 출하승인', x=_all_dates['날짜'], y=_all_dates['출하승인'],
+                    marker_color='#a8dbbe', opacity=0.6, yaxis='y'
+                ))
+                fig1.add_trace(go.Bar(
+                    name='일별 부적합', x=_all_dates['날짜'], y=_all_dates['부적합(OQC)'],
+                    marker_color='#f0a8a4', opacity=0.6, yaxis='y'
+                ))
+                fig1.add_trace(go.Scatter(
+                    name='누적 출하승인', x=_all_dates['날짜'], y=_all_dates['누적_출하승인'],
+                    mode='lines+markers', line=dict(color='#2e8b57', width=2),
+                    marker=dict(size=5), yaxis='y2'
+                ))
+                fig1.add_trace(go.Scatter(
+                    name='누적 부적합', x=_all_dates['날짜'], y=_all_dates['누적_부적합'],
+                    mode='lines+markers', line=dict(color='#c0392b', width=2, dash='dot'),
+                    marker=dict(size=5), yaxis='y2'
+                ))
+                fig1.update_layout(
+                    title="일별 OQC 처리 건수 & 누적 추이 (최근 30일)",
+                    template='plotly_white', height=400,
+                    barmode='group',
+                    margin=dict(t=45,b=120,l=10,r=50),
+                    legend=dict(orientation='h', yanchor='top', y=-0.35,
+                                xanchor='center', x=0.5, font=dict(size=10)),
+                    yaxis=dict(title='일별 건수', side='left'),
+                    yaxis2=dict(title='누적 건수', side='right', overlaying='y', showgrid=False),
+                    xaxis=dict(tickangle=-45, tickfont=dict(size=9))
+                )
+                st.plotly_chart(fig1, use_container_width=True)
+            else:
+                st.info("OQC 처리 이력 데이터 없음")
 
         # ② 부적합 사유별 건수 (증상 컬럼 기준)
         with cc2:
