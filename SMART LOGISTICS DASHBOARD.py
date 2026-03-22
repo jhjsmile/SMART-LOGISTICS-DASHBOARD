@@ -53,7 +53,8 @@ from modules.database import (
     _clear_master_cache, _clear_audit_cache, _clear_all_cache,
     _clear_help_request_cache, _clear_access_request_cache,
     clear_cache_for_tables,
-    load_realtime_ledger, load_production_history, insert_row, update_row,
+    load_realtime_ledger, load_production_history, archive_old_completed,
+    insert_row, update_row,
     delete_all_rows, delete_production_row_by_sn,
     load_app_setting, save_app_setting,
     submit_help_request, load_help_requests,
@@ -178,6 +179,13 @@ if _rt_changed:
         st.session_state.production_db = load_realtime_ledger()
     if "production_schedule" in _rt_changed and st.session_state.get("login_status"):
         st.session_state.schedule_db = load_schedule()
+
+# ── 일별 아카이브: 완료 후 30일 이상 된 레코드를 production_history로 이동 ──
+# 로그인한 세션에서 하루 1번만 실행 (UI 차단 없음 — 실패해도 무시)
+if (st.session_state.get("login_status")
+        and st.session_state.get("_archive_date") != str(date.today())):
+    archive_old_completed(days=30)
+    st.session_state["_archive_date"] = str(date.today())
 
 PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
 CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower", "schedule_manager"]

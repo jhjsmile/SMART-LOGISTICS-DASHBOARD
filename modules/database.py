@@ -131,10 +131,10 @@ def clear_cache_for_tables(tables: set) -> None:
 # 생산 이력
 # =================================================================
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=120)
 def load_realtime_ledger() -> pd.DataFrame:
     """실시간 현황 전용: 오늘 생성 제품 + 이전 날짜 생성이지만 아직 미완료인 WIP 제품.
-    1일 1,500건 규모에서도 안전하게 동작하도록 쿼리를 분리하고 limit을 명시합니다."""
+    TTL=120s — Realtime 구독이 변경 감지 시 캐시를 즉시 무효화하므로 체감 지연 없음."""
     _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','작업자']
     today_str = date.today().strftime('%Y-%m-%d')
     sb = get_supabase()
@@ -146,14 +146,14 @@ def load_realtime_ledger() -> pd.DataFrame:
             return q.order("시간", desc=False).execute()
 
     try:
-        # ① 오늘 생성된 전체 제품 (완료 포함) — 하루 최대 2,000건 여유
+        # ① 오늘 생성된 전체 제품 (완료 포함) — 3반 풀가동 하루 최대 3,000건 여유
         res_today = _query(
-            sb.table("production").select("*").gte("시간", today_str).limit(2000)
+            sb.table("production").select("*").gte("시간", today_str).limit(3000)
         )
         # ② 어제 이전 생성됐으나 아직 미완료(WIP) 제품
         res_wip = _query(
             sb.table("production").select("*")
-              .lt("시간", today_str).neq("상태", "완료").limit(500)
+              .lt("시간", today_str).neq("상태", "완료").limit(1000)
         )
         rows = (res_today.data or []) + (res_wip.data or [])
         if rows:
@@ -167,37 +167,88 @@ def load_realtime_ledger() -> pd.DataFrame:
         return pd.DataFrame(columns=_EMPTY_COLS)
 
 
-@st.cache_data(ttl=60)
-def load_production_history(date_from: str, date_to: str, limit: int = 2000) -> pd.DataFrame:
-    """이력/리포트 조회 전용: 날짜 범위를 지정해 Supabase에서 필터링 후 반환.
-    limit 기본값 2,000건 — 30일치(45,000건)를 모두 받지 않고 DB 레벨에서 잘라냅니다."""
+@st.cache_data(ttl=120)
+def load_production_history(date_from: str, date_to: str, limit: int = 5000) -> pd.DataFrame:
+    """이력/리포트 조회 전용.
+    - 최근 30일 이내 데이터: production 테이블 조회
+    - 30일 이전 데이터    : production_history 테이블 조회 (Option B 아카이브)
+    - 범위가 양쪽 걸치면  : 두 테이블 합산 후 정렬·중복 제거
+    """
     _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','작업자']
+    cutoff = (date.today() - timedelta(days=30)).strftime('%Y-%m-%d')
     sb = get_supabase()
-    try:
+    rows = []
+
+    def _fetch(table: str, from_d: str, to_d: str) -> list:
         try:
-            res = (sb.table("production").select("*")
-                     .gte("시간", date_from)
-                     .lte("시간", date_to + " 23:59:59")
-                     .is_("deleted_at", "null")
-                     .order("시간", desc=True)
-                     .limit(limit)
-                     .execute())
+            return (sb.table(table).select("*")
+                      .gte("시간", from_d)
+                      .lte("시간", to_d + " 23:59:59")
+                      .is_("deleted_at", "null")
+                      .order("시간", desc=True)
+                      .limit(limit)
+                      .execute().data or [])
         except Exception:
-            res = (sb.table("production").select("*")
-                     .gte("시간", date_from)
-                     .lte("시간", date_to + " 23:59:59")
-                     .order("시간", desc=True)
-                     .limit(limit)
-                     .execute())
-        if res.data:
-            df = pd.DataFrame(res.data)
+            try:
+                return (sb.table(table).select("*")
+                          .gte("시간", from_d)
+                          .lte("시간", to_d + " 23:59:59")
+                          .order("시간", desc=True)
+                          .limit(limit)
+                          .execute().data or [])
+            except Exception:
+                return []
+
+    try:
+        # 최근 30일 이내 구간이 조회 범위에 포함되면 production 조회
+        if date_to >= cutoff:
+            eff_from = cutoff if date_from < cutoff else date_from
+            rows += _fetch("production", eff_from, date_to)
+
+        # 30일 이전 구간이 조회 범위에 포함되면 production_history 조회
+        if date_from < cutoff:
+            rows += _fetch("production_history", date_from, cutoff)
+
+        if rows:
+            df = pd.DataFrame(rows)
             df = df.drop(columns=[c for c in ['id','deleted_at','deleted_by'] if c in df.columns])
+            df = df.drop_duplicates(subset=['시리얼','시간'])
+            df = df.sort_values('시간', ascending=False).head(limit)
             return df.fillna("")
         return pd.DataFrame(columns=_EMPTY_COLS)
     except Exception as e:
         if st.session_state.get('login_status', False):
             st.warning(f"이력 로드 실패: {e}")
         return pd.DataFrame(columns=_EMPTY_COLS)
+
+
+def archive_old_completed(days: int = 30) -> int:
+    """완료 후 N일 이상 지난 production 레코드를 production_history로 이동.
+    production_history 테이블이 없으면 조용히 0 반환 (기존 동작 유지).
+    반환값: 이동된 건수
+    """
+    cutoff = (date.today() - timedelta(days=days)).strftime('%Y-%m-%d')
+    sb = get_supabase()
+    try:
+        old = (sb.table("production")
+                 .select("*")
+                 .eq("상태", "완료")
+                 .lt("시간", cutoff)
+                 .is_("deleted_at", "null")
+                 .limit(500)
+                 .execute())
+        if not old.data:
+            return 0
+        # production_history에 upsert (시리얼 기준 중복 방지)
+        sb.table("production_history").upsert(old.data, on_conflict="시리얼").execute()
+        # production에서 hard delete
+        for row in old.data:
+            sb.table("production").delete().eq("시리얼", row["시리얼"]).execute()
+        # 캐시 무효화
+        load_production_history.clear()
+        return len(old.data)
+    except Exception:
+        return 0  # production_history 테이블 미생성 환경에서도 앱 정상 동작
 
 
 def insert_row(row: dict) -> bool:
