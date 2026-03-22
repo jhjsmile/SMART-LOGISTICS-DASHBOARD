@@ -5067,12 +5067,12 @@ elif curr_l == "OQC 라인":
                         traceorder='normal'
                     ),
                     yaxis=dict(
-                        title='건수', titlefont=dict(size=11), side='left',
-                        gridcolor='#f0f0f0', zeroline=False
+                        title=dict(text='건수', font=dict(size=11)),
+                        side='left', gridcolor='#f0f0f0', zeroline=False
                     ),
                     yaxis2=dict(
-                        title='누적', titlefont=dict(size=11), side='right',
-                        overlaying='y', showgrid=False, zeroline=False
+                        title=dict(text='누적', font=dict(size=11)),
+                        side='right', overlaying='y', showgrid=False, zeroline=False
                     ),
                     xaxis=dict(
                         tickvals=_tick_dates,
@@ -5165,7 +5165,7 @@ elif curr_l == "OQC 라인":
                     ),
                     yaxis=dict(
                         range=[_y_min, 108],
-                        title='%', titlefont=dict(size=11),
+                        title=dict(text='%', font=dict(size=11)),
                         gridcolor='#f0f0f0', zeroline=False
                     ),
                     plot_bgcolor='white'
