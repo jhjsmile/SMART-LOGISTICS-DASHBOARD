@@ -5004,7 +5004,7 @@ elif curr_l == "OQC 라인":
         ks4.metric("✅ 출하승인 누적",    f"{_oqc_pass_tot}건")
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        cc1, cc2, cc3 = st.columns(3)
+        cc1, cc3 = st.columns(2)
 
         # ① 일별 OQC 전체 현황 (전체 수량·진행 중·부적합 누적 포함)
         with cc1:
@@ -5058,9 +5058,9 @@ elif curr_l == "OQC 라인":
                                font=dict(size=13), x=0),
                     template='plotly_white', height=380,
                     barmode='stack',
-                    margin=dict(t=40, b=70, l=45, r=55),
+                    margin=dict(t=40, b=100, l=45, r=55),
                     legend=dict(
-                        orientation='h', yanchor='top', y=-0.2,
+                        orientation='h', yanchor='top', y=-0.25,
                         xanchor='center', x=0.5, font=dict(size=10),
                         bgcolor='rgba(255,255,255,0.9)',
                         bordercolor='#e0e0e0', borderwidth=1,
@@ -5085,38 +5085,6 @@ elif curr_l == "OQC 라인":
                 st.plotly_chart(fig1, use_container_width=True)
             else:
                 st.info("OQC 처리 이력 데이터 없음")
-
-        # ② 부적합 사유별 건수 (_fail_nc 재사용 — 위 부적합 판정 이력과 동일한 데이터)
-        with cc2:
-            if not _fail_nc.empty:
-                reason_cnt = (_fail_nc['부적합 사유'].fillna('미기재')
-                               .replace('', '미기재').value_counts().reset_index())
-                reason_cnt.columns = ['사유', '건수']
-                _max_len = reason_cnt['사유'].str.len().max() if not reason_cnt.empty else 10
-                _left_margin = min(max(int(_max_len * 7.5), 160), 280)
-                fig2 = go.Figure(go.Bar(
-                    x=reason_cnt['건수'], y=reason_cnt['사유'],
-                    orientation='h',
-                    marker=dict(color='#e8706a', line=dict(color='#c0392b', width=0.5)),
-                    text=reason_cnt['건수'], textposition='outside',
-                    textfont=dict(size=12, color='#333'),
-                    hovertemplate='%{y}<br>%{x}건<extra></extra>'
-                ))
-                fig2.update_layout(
-                    title=dict(text="부적합 사유별 건수", font=dict(size=13), x=0),
-                    template='plotly_white', height=320,
-                    margin=dict(t=40, b=30, l=_left_margin, r=45),
-                    xaxis=dict(
-                        range=[0, reason_cnt['건수'].max() * 1.3],
-                        showgrid=True, gridcolor='#f0f0f0',
-                        zeroline=False, showticklabels=False
-                    ),
-                    yaxis=dict(autorange='reversed', tickfont=dict(size=11)),
-                    plot_bgcolor='white'
-                )
-                st.plotly_chart(fig2, use_container_width=True)
-            else:
-                st.info("부적합 데이터 없음")
 
         # ③ 합격률 추이 (월별)
         with cc3:
