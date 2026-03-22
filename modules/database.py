@@ -158,7 +158,6 @@ def load_realtime_ledger() -> pd.DataFrame:
         rows = (res_today.data or []) + (res_wip.data or [])
         if rows:
             df = pd.DataFrame(rows)
-            df = df.drop_duplicates(subset=['시리얼'], keep='last')
             df = df.drop(columns=[c for c in ['id','deleted_at','deleted_by'] if c in df.columns])
             return df.fillna("")
         return pd.DataFrame(columns=_EMPTY_COLS)
