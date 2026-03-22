@@ -53,7 +53,7 @@ from modules.database import (
     _clear_master_cache, _clear_audit_cache, _clear_all_cache,
     _clear_help_request_cache, _clear_access_request_cache,
     clear_cache_for_tables,
-    load_realtime_ledger, insert_row, update_row,
+    load_realtime_ledger, load_production_history, insert_row, update_row,
     delete_all_rows, delete_production_row_by_sn,
     load_app_setting, save_app_setting,
     submit_help_request, load_help_requests,
@@ -3053,12 +3053,12 @@ elif curr_l == "생산 현황 리포트":
             value=(date.today() - timedelta(days=30), date.today()),
             key="prod_rpt_date_range"
         )
-    df_rpt = st.session_state.production_db.copy()
+    if isinstance(_rpt_range, (list, tuple)) and len(_rpt_range) == 2:
+        df_rpt = load_production_history(str(_rpt_range[0]), str(_rpt_range[1]))
+    else:
+        df_rpt = load_production_history(str(date.today()), str(date.today()))
     if v_group != "전체":
         df_rpt = df_rpt[df_rpt['반'] == v_group]
-    if isinstance(_rpt_range, (list, tuple)) and len(_rpt_range) == 2:
-        df_rpt = df_rpt[df_rpt['시간'].astype(str).str[:10].between(
-            str(_rpt_range[0]), str(_rpt_range[1]))]
 
     if not df_rpt.empty:
         # ── KPI ──────────────────────────────────────────────────────
@@ -3312,9 +3312,11 @@ elif curr_l == "검사 라인":
             key="qc_hist_date_range"
         )
         _qc_state_f = _qc_h2.selectbox("상태 필터", ["전체", "검사대기", "검사중", "불량 처리 중"], key="qc_hist_state")
-        hist = db_qc[db_qc['라인'] == '검사 라인'].copy()
         if isinstance(_qc_drange, (list, tuple)) and len(_qc_drange) == 2:
-            hist = hist[hist['시간'].astype(str).str[:10].between(str(_qc_drange[0]), str(_qc_drange[1]))]
+            hist = load_production_history(str(_qc_drange[0]), str(_qc_drange[1]))
+        else:
+            hist = load_production_history(str(date.today()), str(date.today()))
+        hist = hist[hist['라인'] == '검사 라인']
         if _qc_state_f != "전체":
             hist = hist[hist['상태'] == _qc_state_f]
         hist = hist.sort_values('시간', ascending=False)
@@ -3407,9 +3409,11 @@ elif curr_l == "포장 라인":
             key="pk_hist_date_range"
         )
         _pk_model_f = _pk_h2.selectbox("모델 필터", ["전체"] + sorted(db_pk['모델'].dropna().unique().tolist()), key="pk_hist_model")
-        hist = db_pk[db_pk['상태'] == '완료'].copy()
         if isinstance(_pk_drange, (list, tuple)) and len(_pk_drange) == 2:
-            hist = hist[hist['시간'].astype(str).str[:10].between(str(_pk_drange[0]), str(_pk_drange[1]))]
+            hist = load_production_history(str(_pk_drange[0]), str(_pk_drange[1]))
+        else:
+            hist = load_production_history(str(date.today()), str(date.today()))
+        hist = hist[(hist['상태'] == '완료') & (hist['라인'] == '포장 라인')]
         if _pk_model_f != "전체":
             hist = hist[hist['모델'] == _pk_model_f]
         hist = hist.sort_values('시간', ascending=False)
@@ -3770,8 +3774,9 @@ elif curr_l == "생산 지표 관리":
         months_list.append(f"{_yr3}-{_mo3:02d}")
     months_list = sorted(set(months_list))[-6:]
 
-    # 반별 월별 실적 집계 (6개월 데이터 필요 → 직접 로드)
-    db_raw = load_realtime_ledger(months=6)
+    # 반별 월별 실적 집계 (6개월 데이터 → load_production_history로 DB 레벨 범위 지정)
+    _six_ago = (date.today().replace(day=1) - timedelta(days=5*28)).strftime('%Y-%m-%d')
+    db_raw = load_production_history(_six_ago, str(date.today()), limit=10000)
     chart_rows = []
     for ban in PRODUCTION_GROUPS:
         for mo in months_list:
@@ -5599,26 +5604,30 @@ elif curr_l == "불량 공정":
 # ── 수리 현황 리포트 ─────────────────────────────────────────────
 elif curr_l == "수리 현황 리포트":
     st.markdown("<h2 class='centered-title'>📈 품질 분석 및 수리 이력 리포트</h2>", unsafe_allow_html=True)
-    hist_df = st.session_state.production_db
+
+    # ── 날짜 / 반 / 상태 필터 (데이터 로드 전에 먼저 표시) ──────────
+    _rp_f1, _rp_f2, _rp_f3 = st.columns([3, 1.2, 1.5])
+    _rp_drange = _rp_f1.date_input(
+        "조회 기간",
+        value=(date.today() - timedelta(days=30), date.today()),
+        key="repair_rpt_date_range"
+    )
+    _rp_ban   = _rp_f2.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="repair_rpt_ban")
+    _rp_state = _rp_f3.selectbox("상태 필터", ["전체", "불량 처리 중", "수리 완료(재투입)", "부적합(OQC)"], key="repair_rpt_state")
+
+    if isinstance(_rp_drange, (list, tuple)) and len(_rp_drange) == 2:
+        hist_df = load_production_history(str(_rp_drange[0]), str(_rp_drange[1]))
+    else:
+        hist_df = load_production_history(str(date.today()), str(date.today()))
+
     _repair_col = hist_df['수리'].astype(str).str.strip()
     hist_df = hist_df[(_repair_col != "") & (_repair_col != "OQC합격")]
+    if _rp_ban != "전체":
+        hist_df = hist_df[hist_df['반'] == _rp_ban]
+    if _rp_state != "전체":
+        hist_df = hist_df[hist_df['상태'] == _rp_state]
 
     if not hist_df.empty:
-        # ── 날짜 / 반 / 상태 필터 ─────────────────────────────────
-        _rp_f1, _rp_f2, _rp_f3 = st.columns([3, 1.2, 1.5])
-        _rp_drange = _rp_f1.date_input(
-            "조회 기간",
-            value=(date.today() - timedelta(days=30), date.today()),
-            key="repair_rpt_date_range"
-        )
-        _rp_ban   = _rp_f2.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="repair_rpt_ban")
-        _rp_state = _rp_f3.selectbox("상태 필터", ["전체", "불량 처리 중", "수리 완료(재투입)", "부적합(OQC)"], key="repair_rpt_state")
-        if isinstance(_rp_drange, (list, tuple)) and len(_rp_drange) == 2:
-            hist_df = hist_df[hist_df['시간'].astype(str).str[:10].between(str(_rp_drange[0]), str(_rp_drange[1]))]
-        if _rp_ban != "전체":
-            hist_df = hist_df[hist_df['반'] == _rp_ban]
-        if _rp_state != "전체":
-            hist_df = hist_df[hist_df['상태'] == _rp_state]
 
         st.caption(f"조회 결과: {len(hist_df)}건")
         c_l, c_r = st.columns([1.8, 1.2])
