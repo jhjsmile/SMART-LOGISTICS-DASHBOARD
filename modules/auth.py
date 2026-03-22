@@ -113,4 +113,4 @@ def check_perm(page_key: str, action: str = "read") -> bool:
     for key, actions in levels.items():
         if page_key.startswith(key + "::"):
             return action in actions
-    return True
+    return False  # 명시적으로 허용된 페이지·동작이 아니면 거부

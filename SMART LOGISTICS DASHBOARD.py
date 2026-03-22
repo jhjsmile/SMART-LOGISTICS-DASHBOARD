@@ -234,7 +234,7 @@ calendar.setfirstweekday(6)  # 일요일 시작
 # ── 상태값 상수 ─────────────────────────────────────────────────
 WIP_STATES    = ['조립중', '수리 완료(재투입)']
 DONE_STATES   = ['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료']
-ACTIVE_STATES = ['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)']
+ACTIVE_STATES = ['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)','불량 처리 중']
 
 # ── 상태 스타일 (모듈 레벨 상수) ───────────────────────────────
 STATUS_STYLE = {
@@ -3518,9 +3518,8 @@ elif curr_l == "생산 지표 관리":
 
     total_in   = len(db_f) if not db_f.empty else 0
     total_done = len(db_f[(db_f['라인']=='포장 라인') & (db_f['상태']=='완료')]) if not db_f.empty else 0
-    WIP_ALL = ['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)']
-    total_wip  = len(db_f[db_f['상태'].isin(WIP_ALL)]) if not db_f.empty else 0
-    total_ng   = len(db_f[db_f['상태'].str.contains('불량', na=False)]) if not db_f.empty else 0
+    total_wip  = len(db_f[db_f['상태'].isin(ACTIVE_STATES)]) if not db_f.empty else 0
+    total_ng   = len(db_f[db_f['상태'].str.contains('불량|부적합', na=False)]) if not db_f.empty else 0
     plan_qty   = _qty(sch_f)
     achieve_pct = round(total_done / plan_qty * 100, 1) if plan_qty > 0 else 0
     defect_pct  = round(total_ng / total_in * 100, 1) if total_in > 0 else 0
@@ -3562,8 +3561,8 @@ elif curr_l == "생산 지표 관리":
             bsch = sch_f[sch_f['반']==ban] if not sch_f.empty else pd.DataFrame()
             b_plan = _qty(bsch)
             b_done = len(bdb[(bdb['라인']=='포장 라인')&(bdb['상태']=='완료')]) if not bdb.empty else 0
-            b_wip  = len(bdb[bdb['상태'].isin(WIP_ALL)]) if not bdb.empty else 0
-            b_ng   = len(bdb[bdb['상태'].str.contains('불량',na=False)]) if not bdb.empty else 0
+            b_wip  = len(bdb[bdb['상태'].isin(ACTIVE_STATES)]) if not bdb.empty else 0
+            b_ng   = len(bdb[bdb['상태'].str.contains('불량|부적합',na=False)]) if not bdb.empty else 0
             b_pct  = round(b_done / b_plan * 100, 1) if b_plan > 0 else 0
             clr    = BAN_COLORS_D.get(ban, "#888")
             bar_w  = min(int(b_pct), 100)
@@ -3642,7 +3641,7 @@ elif curr_l == "생산 지표 관리":
         if not db_f.empty:
             ng_df = db_f.groupby('모델').agg(
                 투입=('시리얼','count'),
-                불량=('상태', lambda x: x.str.contains('불량',na=False).sum())
+                불량=('상태', lambda x: x.str.contains('불량|부적합',na=False).sum())
             ).reset_index()
             ng_df['불량률'] = (ng_df['불량'] / ng_df['투입'] * 100).round(1)
             ng_df = ng_df[ng_df['불량'] > 0].sort_values('불량률', ascending=False)
@@ -3669,8 +3668,7 @@ elif curr_l == "생산 지표 관리":
     with rt_col:
         rt_df = st.session_state.production_db.copy()
         if ban_filter != "전체": rt_df = rt_df[rt_df['반'] == ban_filter]
-        WIP_STATES = ['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)','불량 처리 중']
-        rt_wip = rt_df[rt_df['상태'].isin(WIP_STATES)].sort_values('시간', ascending=False) if not rt_df.empty else pd.DataFrame()
+        rt_wip = rt_df[rt_df['상태'].isin(ACTIVE_STATES)].sort_values('시간', ascending=False) if not rt_df.empty else pd.DataFrame()
 
         with st.expander(f"⚡ 실시간 진행 중 ({len(rt_wip)}건)", expanded=_xp("idx_wip"), key="_xp_idx_wip"):
             if not rt_wip.empty:
