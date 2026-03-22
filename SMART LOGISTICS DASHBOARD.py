@@ -4917,6 +4917,62 @@ elif curr_l == "OQC 라인":
         import plotly.graph_objects as go
         import pandas as _pd2
 
+        # ── 부적합 사유 추출 (부적합 판정 이력 + 차트 ② 공통 사용) ────
+        def _extract_reason_nc(r):
+            수리 = str(r.get('수리', ''))
+            증상 = str(r.get('증상', ''))
+            if 'OQC 부적합 판정' in 수리 and '사유: ' in 수리:
+                return 수리.split('사유: ', 1)[-1].strip()
+            if '부적합사유:' in 증상:
+                return 증상.split('부적합사유:', 1)[-1].strip().rstrip(')')
+            return 증상 if 증상 not in ('', 'nan') else '미기재'
+
+        _fail_nc = oqc_chart_df[oqc_chart_df['상태'] == '부적합(OQC)'].copy()
+        _fail_nc['부적합 사유'] = _fail_nc.apply(_extract_reason_nc, axis=1)
+
+        # ── 부적합 판정 이력 (OQC) ────────────────────────────────────
+        with st.expander(f"🚫 부적합 판정 이력 (OQC)  ·  {len(_fail_nc)}건",
+                         expanded=_xp("oqc_nonconf"), key="_xp_oqc_nonconf"):
+            if not _fail_nc.empty:
+                _nf1, _nf2, _nf3 = st.columns([1.5, 2, 2])
+                _nc_ban    = _nf1.selectbox("반 필터",     ["전체"] + PRODUCTION_GROUPS, key="oqc_nc_ban")
+                _nc_sn     = _nf2.text_input("S/N 검색",  placeholder="시리얼 일부 입력", key="oqc_nc_sn")
+                _nc_reason_opts = ["전체"] + sorted(_fail_nc['부적합 사유'].dropna().unique().tolist())
+                _nc_reason = _nf3.selectbox("부적합 사유", _nc_reason_opts, key="oqc_nc_reason")
+
+                _nc_view = _fail_nc.copy()
+                if _nc_ban != "전체":
+                    _nc_view = _nc_view[_nc_view['반'] == _nc_ban]
+                if _nc_sn.strip():
+                    _nc_view = _nc_view[_nc_view['시리얼'].str.contains(_nc_sn.strip(), case=False, na=False)]
+                if _nc_reason != "전체":
+                    _nc_view = _nc_view[_nc_view['부적합 사유'] == _nc_reason]
+
+                nk1, nk2, nk3 = st.columns(3)
+                nk1.metric("전체 부적합 건수", f"{len(_fail_nc):,} 건")
+                nk2.metric("조회 결과",        f"{len(_nc_view):,} 건")
+                _top_nc = _fail_nc['부적합 사유'].value_counts().idxmax()
+                nk3.metric("최다 발생 사유",   _top_nc)
+
+                if not _nc_view.empty:
+                    _cca, _ccb = st.columns(2)
+                    with _cca:
+                        _r_cnt = _nc_view.groupby('부적합 사유').size().reset_index(name='건수')
+                        st.plotly_chart(px.bar(_r_cnt, x='부적합 사유', y='건수',
+                                               title="부적합 사유별 현황"), use_container_width=True)
+                    with _ccb:
+                        _m_cnt = _nc_view.groupby('모델').size().reset_index(name='건수')
+                        st.plotly_chart(px.pie(_m_cnt, values='건수', names='모델', hole=0.4,
+                                               title="모델별 부적합 비중"), use_container_width=True)
+                    _nc_disp = _nc_view[['시간', '시리얼', '모델', '반', '작업자', '부적합 사유']].reset_index(drop=True)
+                    st.dataframe(_nc_disp, use_container_width=True, hide_index=True)
+                else:
+                    st.info("조건에 맞는 부적합 판정 이력이 없습니다.")
+            else:
+                st.info("부적합 판정 이력이 없습니다.")
+
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
         # ── 요약 KPI 3종 (전체 / 진행 중 / 누적 부적합) ──────────────
         _oqc_total   = len(oqc_chart_df)
         _oqc_active  = len(oqc_chart_df[oqc_chart_df['상태'].isin(['OQC대기','OQC중'])])
@@ -4995,22 +5051,12 @@ elif curr_l == "OQC 라인":
             else:
                 st.info("OQC 처리 이력 데이터 없음")
 
-        # ② 부적합 사유별 건수 (수리/증상 컬럼에서 사유 추출)
+        # ② 부적합 사유별 건수 (_fail_nc 재사용 — 위 부적합 판정 이력과 동일한 데이터)
         with cc2:
-            fail_df = oqc_chart_df[oqc_chart_df['상태']=='부적합(OQC)'].copy()
-            if not fail_df.empty:
-                def _extract_reason(r):
-                    수리 = str(r.get('수리',''))
-                    증상 = str(r.get('증상',''))
-                    if 'OQC 부적합 판정' in 수리 and '사유: ' in 수리:
-                        return 수리.split('사유: ', 1)[-1].strip()
-                    if '부적합사유:' in 증상:
-                        return 증상.split('부적합사유:', 1)[-1].strip().rstrip(')')
-                    return 증상 if 증상 not in ('', 'nan') else '미기재'
-                fail_df['_사유'] = fail_df.apply(_extract_reason, axis=1)
-                reason_cnt = (fail_df['_사유'].fillna('미기재')
+            if not _fail_nc.empty:
+                reason_cnt = (_fail_nc['부적합 사유'].fillna('미기재')
                                .replace('', '미기재').value_counts().reset_index())
-                reason_cnt.columns = ['사유','건수']
+                reason_cnt.columns = ['사유', '건수']
                 fig2 = go.Figure(go.Bar(
                     x=reason_cnt['건수'], y=reason_cnt['사유'],
                     orientation='h',
@@ -5020,7 +5066,7 @@ elif curr_l == "OQC 라인":
                 fig2.update_layout(
                     title="부적합 사유별 건수",
                     template='plotly_white', height=280,
-                    margin=dict(t=40,b=20,l=10,r=10),
+                    margin=dict(t=40, b=20, l=10, r=10),
                     yaxis=dict(autorange='reversed')
                 )
                 st.plotly_chart(fig2, use_container_width=True)
@@ -5509,71 +5555,6 @@ elif curr_l == "수리 현황 리포트":
         st.dataframe(hist_page_df, use_container_width=True, hide_index=True)
     else:
         st.info("기록된 이슈 내역이 없습니다.")
-
-    # ── 부적합 판정 이력 ──────────────────────────────────────────
-    st.divider()
-    with st.expander("🚫 부적합 판정 이력 (OQC)", expanded=_xp("repair_nonconf"), key="_xp_repair_nonconf"):
-        _nc_audit_raw = load_audit_log()
-        if not _nc_audit_raw.empty:
-            # 부적합(OQC) 관련 레코드 필터: 이후상태 또는 비고 기준
-            _nc_mask = (
-                (_nc_audit_raw['이후상태'] == '부적합(OQC)') |
-                (_nc_audit_raw['비고'].astype(str).str.contains('OQC 부적합', na=False))
-            )
-            _nc_df = _nc_audit_raw[_nc_mask].copy()
-
-            # 비고에서 부적합 사유 파싱
-            def _extract_nc_reason(bigo):
-                s = str(bigo)
-                if '사유:' in s:
-                    return s.split('사유:')[-1].strip()
-                return s or '-'
-            _nc_df['부적합 사유'] = _nc_df['비고'].apply(_extract_nc_reason)
-
-            # 필터 UI
-            _nf1, _nf2, _nf3 = st.columns([1.5, 2, 2])
-            _nc_ban    = _nf1.selectbox("반 필터",      ["전체"] + PRODUCTION_GROUPS, key="nc_ban")
-            _nc_sn     = _nf2.text_input("S/N 검색",   placeholder="시리얼 일부 입력", key="nc_sn")
-            _nc_reason_opts = ["전체"] + sorted(_nc_df['부적합 사유'].dropna().unique().tolist())
-            _nc_reason = _nf3.selectbox("부적합 사유",  _nc_reason_opts, key="nc_reason")
-
-            # 필터 적용
-            _nc_view = _nc_df.copy()
-            if _nc_ban != "전체":
-                _nc_view = _nc_view[_nc_view['반'] == _nc_ban]
-            if _nc_sn.strip():
-                _nc_view = _nc_view[_nc_view['시리얼'].str.contains(_nc_sn.strip(), case=False, na=False)]
-            if _nc_reason != "전체":
-                _nc_view = _nc_view[_nc_view['부적합 사유'] == _nc_reason]
-
-            # KPI
-            nk1, nk2, nk3 = st.columns(3)
-            nk1.metric("전체 부적합 건수", f"{len(_nc_df):,} 건")
-            nk2.metric("조회 결과",        f"{len(_nc_view):,} 건")
-            _top_reason = _nc_df['부적합 사유'].value_counts().idxmax() if not _nc_df.empty else "-"
-            nk3.metric("최다 발생 사유",   _top_reason)
-
-            if not _nc_view.empty:
-                _cc1, _cc2 = st.columns(2)
-                with _cc1:
-                    _reason_cnt = _nc_view.groupby('부적합 사유').size().reset_index(name='건수')
-                    st.plotly_chart(
-                        px.bar(_reason_cnt, x='부적합 사유', y='건수', title="부적합 사유별 현황"),
-                        use_container_width=True)
-                with _cc2:
-                    _model_cnt = _nc_view.groupby('모델').size().reset_index(name='건수')
-                    st.plotly_chart(
-                        px.pie(_model_cnt, values='건수', names='모델', hole=0.4, title="모델별 부적합 비중"),
-                        use_container_width=True)
-
-                # 테이블
-                _nc_display = _nc_view[['시간', '시리얼', '모델', '반', '작업자', '부적합 사유']].reset_index(drop=True)
-                _nc_display.columns = ['시간', '시리얼', '모델', '반', '작업자', '부적합 사유']
-                st.dataframe(_nc_display, use_container_width=True, hide_index=True)
-            else:
-                st.info("조건에 맞는 부적합 판정 이력이 없습니다.")
-        else:
-            st.info("부적합 판정 이력이 없습니다.")
 
     # ── 감사 로그 조회 ────────────────────────────────────────────
     st.divider()
