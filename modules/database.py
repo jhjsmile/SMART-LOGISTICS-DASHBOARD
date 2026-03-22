@@ -132,25 +132,62 @@ def clear_cache_for_tables(tables: set) -> None:
 # =================================================================
 
 @st.cache_data(ttl=30)
-def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
-    """최근 N개월 데이터만 로드 (기본 3개월, 성능 최적화)"""
+def load_realtime_ledger() -> pd.DataFrame:
+    """실시간 현황 전용: 오늘 생성 제품 + 이전 날짜 생성이지만 아직 미완료인 WIP 제품.
+    1일 1,500건 규모에서도 안전하게 동작하도록 쿼리를 분리하고 limit을 명시합니다."""
     _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','작업자']
-    try:
-        sb = get_supabase()
-        cutoff = (date.today().replace(day=1) -
-                  timedelta(days=(months-1)*28)).strftime('%Y-%m-%d')
+    today_str = date.today().strftime('%Y-%m-%d')
+    sb = get_supabase()
+
+    def _query(q):
         try:
-            res = (sb.table("production")
-                     .select("*")
-                     .gte("시간", cutoff)
+            return q.is_("deleted_at", "null").order("시간", desc=False).execute()
+        except Exception:
+            return q.order("시간", desc=False).execute()
+
+    try:
+        # ① 오늘 생성된 전체 제품 (완료 포함) — 하루 최대 2,000건 여유
+        res_today = _query(
+            sb.table("production").select("*").gte("시간", today_str).limit(2000)
+        )
+        # ② 어제 이전 생성됐으나 아직 미완료(WIP) 제품
+        res_wip = _query(
+            sb.table("production").select("*")
+              .lt("시간", today_str).neq("상태", "완료").limit(500)
+        )
+        rows = (res_today.data or []) + (res_wip.data or [])
+        if rows:
+            df = pd.DataFrame(rows)
+            df = df.drop(columns=[c for c in ['id','deleted_at','deleted_by'] if c in df.columns])
+            return df.fillna("")
+        return pd.DataFrame(columns=_EMPTY_COLS)
+    except Exception as e:
+        if st.session_state.get('login_status', False):
+            st.warning(f"데이터 로드 실패: {e}")
+        return pd.DataFrame(columns=_EMPTY_COLS)
+
+
+@st.cache_data(ttl=60)
+def load_production_history(date_from: str, date_to: str, limit: int = 2000) -> pd.DataFrame:
+    """이력/리포트 조회 전용: 날짜 범위를 지정해 Supabase에서 필터링 후 반환.
+    limit 기본값 2,000건 — 30일치(45,000건)를 모두 받지 않고 DB 레벨에서 잘라냅니다."""
+    _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','작업자']
+    sb = get_supabase()
+    try:
+        try:
+            res = (sb.table("production").select("*")
+                     .gte("시간", date_from)
+                     .lte("시간", date_to + " 23:59:59")
                      .is_("deleted_at", "null")
-                     .order("시간", desc=False)
+                     .order("시간", desc=True)
+                     .limit(limit)
                      .execute())
         except Exception:
-            res = (sb.table("production")
-                     .select("*")
-                     .gte("시간", cutoff)
-                     .order("시간", desc=False)
+            res = (sb.table("production").select("*")
+                     .gte("시간", date_from)
+                     .lte("시간", date_to + " 23:59:59")
+                     .order("시간", desc=True)
+                     .limit(limit)
                      .execute())
         if res.data:
             df = pd.DataFrame(res.data)
@@ -159,7 +196,7 @@ def load_realtime_ledger(months: int = 3) -> pd.DataFrame:
         return pd.DataFrame(columns=_EMPTY_COLS)
     except Exception as e:
         if st.session_state.get('login_status', False):
-            st.warning(f"데이터 로드 실패: {e}")
+            st.warning(f"이력 로드 실패: {e}")
         return pd.DataFrame(columns=_EMPTY_COLS)
 
 
