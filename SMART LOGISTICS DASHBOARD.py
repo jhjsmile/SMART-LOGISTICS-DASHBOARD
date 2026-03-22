@@ -20,6 +20,7 @@
 
 import re
 import os
+import html as html_mod
 import threading
 import requests
 import streamlit as st
@@ -74,6 +75,7 @@ from modules.database import (
     delete_production_plan_row, delete_all_production_plan,
     insert_plan_change_log, load_plan_change_log,
     delete_all_plan_change_log, delete_plan_change_log_row,
+    check_login_lockout, record_login_failure, clear_login_attempts,
 )
 
 
@@ -1068,7 +1070,7 @@ def show_inline_day_panel():
 
         ph1, ph2 = st.columns([8, 1])
         ph1.markdown(
-            f"### 📆 {selected_date} &nbsp;<span style='font-size:0.85rem;color:#8a7f72;font-weight:normal;'>총 {len(day_data)}건</span>",
+            f"### 📆 {html_mod.escape(str(selected_date))} &nbsp;<span style='font-size:0.85rem;color:#8a7f72;font-weight:normal;'>총 {len(day_data)}건</span>",
             unsafe_allow_html=True
         )
         if ph2.button("✖ 닫기", key="inline_view_close"):
@@ -1083,10 +1085,11 @@ def show_inline_day_panel():
                 if ban_rows.empty:
                     continue
                 ban_color = BAN_COLORS.get(ban, "#7a6f65")
+                _ban_esc = html_mod.escape(str(ban))
                 st.markdown(
                     f"<div style='background:{ban_color}12; border-left:4px solid {ban_color}; "
                     f"padding:7px 14px; border-radius:5px; margin:12px 0 4px 0;'>"
-                    f"<span style='color:{ban_color}; font-weight:bold; font-size:0.92rem;'>🏭 {ban}</span>"
+                    f"<span style='color:{ban_color}; font-weight:bold; font-size:0.92rem;'>🏭 {_ban_esc}</span>"
                     f"<span style='color:#8a7f72; font-size:0.8rem; margin-left:8px;'>{len(ban_rows)}건</span>"
                     f"</div>", unsafe_allow_html=True
                 )
@@ -1306,18 +1309,14 @@ if not st.session_state.login_status:
                 in_id = st.text_input("아이디(ID)")
                 in_pw = st.text_input("비밀번호(PW)", type="password")
                 if st.form_submit_button("인증 시작", use_container_width=True):
-                    # ── 로그인 시도 제한 (Brute-force 방어) ──
-                    _now_ts = datetime.now(KST).timestamp()
-                    _attempt_key = f"login_attempts_{in_id}"
-                    _lockout_key = f"login_lockout_{in_id}"
-                    _lockout_until = st.session_state.get(_lockout_key, 0)
-                    if _now_ts < _lockout_until:
-                        _remain = int(_lockout_until - _now_ts)
-                        st.error(f"⛔ 로그인 잠금 중입니다. {_remain}초 후 다시 시도하세요.")
+                    # ── 로그인 시도 제한 (Brute-force 방어 — 서버사이드 프로세스 공유) ──
+                    _is_locked, _remain_sec = check_login_lockout(in_id)
+                    if _is_locked:
+                        st.error(f"⛔ 로그인 잠금 중입니다. {_remain_sec}초 후 다시 시도하세요.")
                         st.stop()
                     user_info = st.session_state.user_db.get(in_id)
                     if user_info and verify_pw(in_pw, user_info["pw_hash"]):
-                        st.session_state[_attempt_key] = 0
+                        clear_login_attempts(in_id)
                         if _BCRYPT_AVAILABLE and not user_info["pw_hash"].startswith("$2"):
                             new_hash = hash_pw(in_pw)
                             st.session_state.user_db[in_id]["pw_hash"] = new_hash
@@ -1342,11 +1341,9 @@ if not st.session_state.login_status:
                         st.session_state.login_status  = True
                         st.rerun()
                     else:
-                        _attempts = st.session_state.get(_attempt_key, 0) + 1
-                        st.session_state[_attempt_key] = _attempts
+                        _attempts = record_login_failure(in_id, MAX_LOGIN_ATTEMPTS, LOGIN_LOCKOUT_SECONDS)
                         _remain_attempts = MAX_LOGIN_ATTEMPTS - _attempts
                         if _attempts >= MAX_LOGIN_ATTEMPTS:
-                            st.session_state[_lockout_key] = _now_ts + LOGIN_LOCKOUT_SECONDS
                             st.error(f"⛔ 로그인 {MAX_LOGIN_ATTEMPTS}회 실패로 {LOGIN_LOCKOUT_SECONDS//60}분 동안 잠금됩니다.")
                         else:
                             st.error(f"로그인 정보가 올바르지 않습니다. (남은 시도: {_remain_attempts}회)")
@@ -1390,6 +1387,10 @@ if not st.session_state.login_status:
                 if submitted:
                     if not all([rq_name.strip(), rq_id.strip(), rq_pw, rq_reason.strip()]):
                         st.error("이름·아이디·비밀번호·신청 사유는 필수 입력 항목입니다.")
+                    elif len(rq_pw) < 8:
+                        st.error("비밀번호는 최소 8자 이상이어야 합니다.")
+                    elif not re.search(r'[A-Za-z]', rq_pw) or not re.search(r'[0-9]', rq_pw):
+                        st.error("비밀번호는 영문자와 숫자를 각각 1자 이상 포함해야 합니다.")
                     elif rq_pw != rq_pw2:
                         st.error("비밀번호가 일치하지 않습니다.")
                     elif rq_id.strip() in st.session_state.user_db:

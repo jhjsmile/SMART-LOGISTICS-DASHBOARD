@@ -6,6 +6,7 @@ Supabase DB 함수 모듈
 """
 
 import re
+import threading
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timezone, timedelta, date
@@ -18,6 +19,40 @@ _KST              = timezone(timedelta(hours=9))
 _PRODUCTION_GROUPS = ["제조1반", "제조2반", "제조3반"]
 _DEFAULT_PAGE_SIZE = 100
 _MAX_AUDIT_LOG_ROWS = 200
+
+# =================================================================
+# 서버사이드 로그인 잠금 (프로세스 공유 — session_state 우회 방지)
+# =================================================================
+# 구조: {"username": {"count": int, "lockout_until": float}}
+_LOGIN_ATTEMPTS: dict = {}
+_LOGIN_LOCK = threading.Lock()
+
+
+def check_login_lockout(username: str) -> tuple:
+    """잠금 여부 반환. (is_locked: bool, remaining_seconds: int)"""
+    with _LOGIN_LOCK:
+        info = _LOGIN_ATTEMPTS.get(username, {})
+        lockout_until = info.get("lockout_until", 0.0)
+        now = datetime.now(_KST).timestamp()
+        if lockout_until > now:
+            return True, int(lockout_until - now)
+        return False, 0
+
+
+def record_login_failure(username: str, max_attempts: int, lockout_seconds: int) -> int:
+    """실패 횟수 기록. 초과 시 잠금 설정. 현재 시도 횟수 반환."""
+    with _LOGIN_LOCK:
+        info = _LOGIN_ATTEMPTS.setdefault(username, {"count": 0, "lockout_until": 0.0})
+        info["count"] += 1
+        if info["count"] >= max_attempts:
+            info["lockout_until"] = datetime.now(_KST).timestamp() + lockout_seconds
+        return info["count"]
+
+
+def clear_login_attempts(username: str) -> None:
+    """로그인 성공 시 잠금 카운터 초기화."""
+    with _LOGIN_LOCK:
+        _LOGIN_ATTEMPTS.pop(username, None)
 
 
 # =================================================================

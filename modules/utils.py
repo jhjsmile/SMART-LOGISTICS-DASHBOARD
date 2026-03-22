@@ -130,14 +130,14 @@ def _get_tg_creds():
     token, chat = "", ""
     for _key in ("TELEGRAM_BOT_TOKEN",):
         try: token = str(st.secrets[_key]).strip(); break
-        except Exception: pass
+        except (KeyError, AttributeError): pass
         try: token = str(st.secrets["theme"][_key]).strip(); break
-        except Exception: pass
+        except (KeyError, AttributeError): pass
     for _key in ("TELEGRAM_CHAT_ID",):
         try: chat = str(st.secrets[_key]).strip(); break
-        except Exception: pass
+        except (KeyError, AttributeError): pass
         try: chat = str(st.secrets["theme"][_key]).strip(); break
-        except Exception: pass
+        except (KeyError, AttributeError): pass
     return token, chat
 
 
