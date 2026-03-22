@@ -3044,10 +3044,21 @@ elif curr_l in ["검사 라인", "포장 라인"]:
 elif curr_l == "생산 현황 리포트":
     st.markdown("<h2 class='centered-title'>📊 생산 현황 리포트</h2>", unsafe_allow_html=True)
 
-    v_group = st.radio("조회 범위", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="prod_report_grp")
+    _rpt_top1, _rpt_top2 = st.columns([2, 3])
+    with _rpt_top1:
+        v_group = st.radio("조회 범위", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="prod_report_grp")
+    with _rpt_top2:
+        _rpt_range = st.date_input(
+            "조회 기간",
+            value=(date.today() - timedelta(days=30), date.today()),
+            key="prod_rpt_date_range"
+        )
     df_rpt = st.session_state.production_db.copy()
     if v_group != "전체":
         df_rpt = df_rpt[df_rpt['반'] == v_group]
+    if isinstance(_rpt_range, (list, tuple)) and len(_rpt_range) == 2:
+        df_rpt = df_rpt[df_rpt['시간'].astype(str).str[:10].between(
+            str(_rpt_range[0]), str(_rpt_range[1]))]
 
     if not df_rpt.empty:
         # ── KPI ──────────────────────────────────────────────────────
@@ -3293,8 +3304,21 @@ elif curr_l == "검사 라인":
     st.divider()
 
     _qc_hist_total = len(db_qc[db_qc['라인'] == '검사 라인'])
-    with st.expander(f"📋 최근 검사 이력  ·  전체 {_qc_hist_total}건 (최근 20건 표시)", expanded=_xp("qc_hist"), key="_xp_qc_hist"):
-        hist = db_qc[db_qc['라인'] == '검사 라인'].sort_values('시간', ascending=False).head(20)
+    with st.expander(f"📋 검사 이력  ·  전체 {_qc_hist_total}건", expanded=_xp("qc_hist"), key="_xp_qc_hist"):
+        _qc_h1, _qc_h2 = st.columns([3, 1])
+        _qc_drange = _qc_h1.date_input(
+            "조회 기간",
+            value=(date.today() - timedelta(days=30), date.today()),
+            key="qc_hist_date_range"
+        )
+        _qc_state_f = _qc_h2.selectbox("상태 필터", ["전체", "검사대기", "검사중", "불량 처리 중"], key="qc_hist_state")
+        hist = db_qc[db_qc['라인'] == '검사 라인'].copy()
+        if isinstance(_qc_drange, (list, tuple)) and len(_qc_drange) == 2:
+            hist = hist[hist['시간'].astype(str).str[:10].between(str(_qc_drange[0]), str(_qc_drange[1]))]
+        if _qc_state_f != "전체":
+            hist = hist[hist['상태'] == _qc_state_f]
+        hist = hist.sort_values('시간', ascending=False)
+        st.caption(f"조회 결과: {len(hist)}건")
         if not hist.empty:
             st.dataframe(hist[['시간', '모델', '시리얼', '상태', '증상', '작업자']].reset_index(drop=True),
                          use_container_width=True, hide_index=True)
@@ -3375,8 +3399,21 @@ elif curr_l == "포장 라인":
     st.divider()
 
     _pk_done_total = len(db_pk[db_pk['상태'] == '완료'])
-    with st.expander(f"📋 최근 완료 이력  ·  전체 {_pk_done_total}건 (최근 20건 표시)", expanded=_xp("pk_hist"), key="_xp_pk_hist"):
-        hist = db_pk[db_pk['상태'] == '완료'].sort_values('시간', ascending=False).head(20)
+    with st.expander(f"📋 완료 이력  ·  전체 {_pk_done_total}건", expanded=_xp("pk_hist"), key="_xp_pk_hist"):
+        _pk_h1, _pk_h2 = st.columns([3, 1])
+        _pk_drange = _pk_h1.date_input(
+            "조회 기간",
+            value=(date.today() - timedelta(days=30), date.today()),
+            key="pk_hist_date_range"
+        )
+        _pk_model_f = _pk_h2.selectbox("모델 필터", ["전체"] + sorted(db_pk['모델'].dropna().unique().tolist()), key="pk_hist_model")
+        hist = db_pk[db_pk['상태'] == '완료'].copy()
+        if isinstance(_pk_drange, (list, tuple)) and len(_pk_drange) == 2:
+            hist = hist[hist['시간'].astype(str).str[:10].between(str(_pk_drange[0]), str(_pk_drange[1]))]
+        if _pk_model_f != "전체":
+            hist = hist[hist['모델'] == _pk_model_f]
+        hist = hist.sort_values('시간', ascending=False)
+        st.caption(f"조회 결과: {len(hist)}건")
         if not hist.empty:
             st.dataframe(hist[['시간', '모델', '시리얼', '작업자']].reset_index(drop=True),
                          use_container_width=True, hide_index=True)
@@ -4951,6 +4988,11 @@ elif curr_l == "OQC 라인":
         with st.expander(f"🚫 부적합 판정 이력 (OQC)  ·  {len(_fail_audit)}건",
                          expanded=_xp("oqc_nonconf"), key="_xp_oqc_nonconf"):
             if not _fail_audit.empty:
+                _nf_date = st.date_input(
+                    "조회 기간",
+                    value=(date.today() - timedelta(days=30), date.today()),
+                    key="oqc_nc_date_range"
+                )
                 _nf1, _nf2, _nf3 = st.columns([1.5, 2, 2])
                 _nc_ban    = _nf1.selectbox("반 필터",     ["전체"] + PRODUCTION_GROUPS, key="oqc_nc_ban")
                 _nc_sn     = _nf2.text_input("S/N 검색",  placeholder="시리얼 일부 입력", key="oqc_nc_sn")
@@ -4958,6 +5000,8 @@ elif curr_l == "OQC 라인":
                 _nc_reason = _nf3.selectbox("부적합 사유", _nc_reason_opts, key="oqc_nc_reason")
 
                 _nc_view = _fail_audit.copy()
+                if isinstance(_nf_date, (list, tuple)) and len(_nf_date) == 2:
+                    _nc_view = _nc_view[_nc_view['시간'].astype(str).str[:10].between(str(_nf_date[0]), str(_nf_date[1]))]
                 if _nc_ban != "전체":
                     _nc_view = _nc_view[_nc_view['반'] == _nc_ban]
                 if _nc_sn.strip():
@@ -5560,6 +5604,23 @@ elif curr_l == "수리 현황 리포트":
     hist_df = hist_df[(_repair_col != "") & (_repair_col != "OQC합격")]
 
     if not hist_df.empty:
+        # ── 날짜 / 반 / 상태 필터 ─────────────────────────────────
+        _rp_f1, _rp_f2, _rp_f3 = st.columns([3, 1.2, 1.5])
+        _rp_drange = _rp_f1.date_input(
+            "조회 기간",
+            value=(date.today() - timedelta(days=30), date.today()),
+            key="repair_rpt_date_range"
+        )
+        _rp_ban   = _rp_f2.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="repair_rpt_ban")
+        _rp_state = _rp_f3.selectbox("상태 필터", ["전체", "불량 처리 중", "수리 완료(재투입)", "부적합(OQC)"], key="repair_rpt_state")
+        if isinstance(_rp_drange, (list, tuple)) and len(_rp_drange) == 2:
+            hist_df = hist_df[hist_df['시간'].astype(str).str[:10].between(str(_rp_drange[0]), str(_rp_drange[1]))]
+        if _rp_ban != "전체":
+            hist_df = hist_df[hist_df['반'] == _rp_ban]
+        if _rp_state != "전체":
+            hist_df = hist_df[hist_df['상태'] == _rp_state]
+
+        st.caption(f"조회 결과: {len(hist_df)}건")
         c_l, c_r = st.columns([1.8, 1.2])
         with c_l:
             _line_order = ['조립 라인', '검사 라인', 'OQC 라인']
