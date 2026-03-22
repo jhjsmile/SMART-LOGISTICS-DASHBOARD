@@ -4930,17 +4930,32 @@ elif curr_l == "OQC 라인":
         _fail_nc = oqc_chart_df[oqc_chart_df['상태'] == '부적합(OQC)'].copy()
         _fail_nc['부적합 사유'] = _fail_nc.apply(_extract_reason_nc, axis=1)
 
-        # ── 부적합 판정 이력 (OQC) ────────────────────────────────────
-        with st.expander(f"🚫 부적합 판정 이력 (OQC)  ·  {len(_fail_nc)}건",
+        # ── 부적합 판정 이력 (OQC) — audit_log 기준 ──────────────────
+        # 이후상태 == '부적합(OQC)' 이벤트만 카운트 (판정 시점 기준)
+        # 동일 S/N이 수리 후 재검사에서 또 부적합이면 별도 이벤트로 집계
+        _nc_audit_all = load_audit_log()
+        _fail_audit = _nc_audit_all[
+            _nc_audit_all['이후상태'] == '부적합(OQC)'
+        ].copy()
+
+        # 비고에서 사유 파싱: "OQC 부적합 - 사유: {reason}" 형식
+        def _extract_audit_reason(bigo):
+            s = str(bigo)
+            if '사유:' in s:
+                return s.split('사유:')[-1].strip()
+            return s if s not in ('', 'nan') else '미기재'
+        _fail_audit['부적합 사유'] = _fail_audit['비고'].apply(_extract_audit_reason)
+
+        with st.expander(f"🚫 부적합 판정 이력 (OQC)  ·  {len(_fail_audit)}건",
                          expanded=_xp("oqc_nonconf"), key="_xp_oqc_nonconf"):
-            if not _fail_nc.empty:
+            if not _fail_audit.empty:
                 _nf1, _nf2, _nf3 = st.columns([1.5, 2, 2])
                 _nc_ban    = _nf1.selectbox("반 필터",     ["전체"] + PRODUCTION_GROUPS, key="oqc_nc_ban")
                 _nc_sn     = _nf2.text_input("S/N 검색",  placeholder="시리얼 일부 입력", key="oqc_nc_sn")
-                _nc_reason_opts = ["전체"] + sorted(_fail_nc['부적합 사유'].dropna().unique().tolist())
+                _nc_reason_opts = ["전체"] + sorted(_fail_audit['부적합 사유'].dropna().unique().tolist())
                 _nc_reason = _nf3.selectbox("부적합 사유", _nc_reason_opts, key="oqc_nc_reason")
 
-                _nc_view = _fail_nc.copy()
+                _nc_view = _fail_audit.copy()
                 if _nc_ban != "전체":
                     _nc_view = _nc_view[_nc_view['반'] == _nc_ban]
                 if _nc_sn.strip():
@@ -4949,9 +4964,9 @@ elif curr_l == "OQC 라인":
                     _nc_view = _nc_view[_nc_view['부적합 사유'] == _nc_reason]
 
                 nk1, nk2, nk3 = st.columns(3)
-                nk1.metric("전체 부적합 건수", f"{len(_fail_nc):,} 건")
+                nk1.metric("전체 부적합 판정", f"{len(_fail_audit):,} 건")
                 nk2.metric("조회 결과",        f"{len(_nc_view):,} 건")
-                _top_nc = _fail_nc['부적합 사유'].value_counts().idxmax()
+                _top_nc = _fail_audit['부적합 사유'].value_counts().idxmax()
                 nk3.metric("최다 발생 사유",   _top_nc)
 
                 if not _nc_view.empty:
