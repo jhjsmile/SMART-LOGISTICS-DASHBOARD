@@ -4703,7 +4703,7 @@ elif curr_l == "OQC 라인":
                         if _oi_int in oqc_wait_list.index:
                             _orow = oqc_wait_list.loc[_oi_int]
                             _upd = {'상태': '출하승인', '시간': get_now_kst_str(),
-                                    '증상': 'OQC합격', '수리': 'OQC합격'}
+                                    '수리': 'OQC합격'}
                             update_row(_orow['시리얼'], _upd)
                             insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
                                 이전상태='OQC중', 이후상태='출하승인', 작업자=st.session_state.user_id)
@@ -4780,7 +4780,7 @@ elif curr_l == "OQC 라인":
                                          use_container_width=True)
                     if btn1:
                         _upd = {'상태': '출하승인', '시간': get_now_kst_str(),
-                                '증상': 'OQC합격', '수리': 'OQC합격'}
+                                '수리': 'OQC합격'}
                         update_row(row['시리얼'], _upd)
                         insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                             이전상태='OQC중', 이후상태='출하승인', 작업자=st.session_state.user_id)
