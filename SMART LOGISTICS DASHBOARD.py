@@ -2363,8 +2363,7 @@ elif curr_l == "조립 라인":
                     st.session_state[_asm_tog_key] = not st.session_state.get(_asm_tog_key, False)
                 with r[5]:
                     if is_actionable:
-                        b1, b2 = st.columns(2)
-                        if b1.button("✅", key=f"ok_{idx}", use_container_width=True, help="완료"):
+                        if st.button("✅ 완료", key=f"ok_{idx}", use_container_width=True, help="검사대기로 이동"):
                             _upd = {'상태':'검사대기','시간':get_now_kst_str()}
                             update_row(row['시리얼'], _upd)
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
@@ -2375,11 +2374,11 @@ elif curr_l == "조립 라인":
                             _rerun("asm_hist")
                         _ng_open_key = f"_ng_open_asm_{idx}"
                         if not st.session_state.get(_ng_open_key):
-                            if b2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량 원인 입력"):
+                            if st.button("🚫 불량", key=f"ng_{idx}", use_container_width=True, help="불량 원인 입력"):
                                 st.session_state[_ng_open_key] = True
                                 _rerun("asm_hist")
                         else:
-                            b2.button("🚫", key=f"ng_{idx}", use_container_width=True, disabled=True)
+                            st.button("🚫 불량", key=f"ng_{idx}", use_container_width=True, disabled=True)
                     else:
                         s = row['상태']
                         if "불량" in str(s):
@@ -2899,8 +2898,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 with r[5]:
                     if is_act:
                         btn_lbl = "검사 합격" if curr_l == "검사 라인" else "포장 완료"
-                        c1, c2 = st.columns(2)
-                        if c1.button("✅", key=f"ok_{idx}", use_container_width=True, help=btn_lbl):
+                        if st.button("✅", key=f"ok_{idx}", use_container_width=True, help=btn_lbl):
                             _ok_s  = 'OQC대기' if curr_l == '검사 라인' else '완료'
                             _prv_s = '검사중'  if curr_l == '검사 라인' else '포장중'
                             _upd = {'상태':_ok_s,'시간':get_now_kst_str()}
@@ -2913,11 +2911,11 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             _rerun("chk_hist")
                         _hist_ng_open_key = f"_ng_open_hist_{idx}"
                         if not st.session_state.get(_hist_ng_open_key):
-                            if c2.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량 원인 입력"):
+                            if st.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량 원인 입력"):
                                 st.session_state[_hist_ng_open_key] = True
                                 _rerun("chk_hist")
                         else:
-                            c2.button("🚫", key=f"ng_{idx}", use_container_width=True, disabled=True)
+                            st.button("🚫", key=f"ng_{idx}", use_container_width=True, disabled=True)
                     else:
                         s2 = row['상태']
                         if "불량" in str(s2):
