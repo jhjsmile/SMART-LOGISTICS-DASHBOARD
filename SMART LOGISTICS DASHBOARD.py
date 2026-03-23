@@ -1118,8 +1118,8 @@ def show_inline_day_panel():
                 # 성능: iterrows → to_dict('records') (_esc는 루프 밖에서 정의)
                 for r in ban_rows.sort_values('카테고리').to_dict('records'):
                     row_id  = r.get('id', None)
-                    cat_v   = str(r.get('카테고리', '기타'))
-                    cat_color = SCHEDULE_COLORS.get(cat_v, "#888")
+                    cat_v   = _esc(r.get('카테고리', '기타'))
+                    cat_color = SCHEDULE_COLORS.get(str(r.get('카테고리', '기타')), "#888")
                     model_v = _esc(r.get('모델명', ''))
                     pn_v    = _esc(r.get('pn', ''))
                     ship_v  = _esc(r.get('출하계획', ''))
@@ -1539,10 +1539,15 @@ if _is_admin:
     with st.sidebar.expander(_help_exp_label, expanded=(_help_cnt > 0)):
         if not _help_open.empty:
             for _hr in _help_open.to_dict('records'):
+                _hr_req  = html_mod.escape(str(_hr.get('requester', '')))
+                _hr_role = html_mod.escape(str(_hr.get('role', '')))
+                _hr_page = html_mod.escape(str(_hr.get('page', '')))
+                _hr_msg  = html_mod.escape(str(_hr.get('message', '')))
+                _hr_time = html_mod.escape(str(_hr.get('created_at', ''))[:16])
                 st.markdown(
-                    f"**{_hr.get('requester','')}** ({_hr.get('role','')})"
-                    f"  \n📍 {_hr.get('page','')}  \n💬 {_hr.get('message','')}"
-                    f"  \n<small style='color:#aaa;'>{str(_hr.get('created_at',''))[:16]}</small>",
+                    f"**{_hr_req}** ({_hr_role})"
+                    f"  \n📍 {_hr_page}  \n💬 {_hr_msg}"
+                    f"  \n<small style='color:#aaa;'>{_hr_time}</small>",
                     unsafe_allow_html=True
                 )
                 _hr_id = _hr.get('id')
@@ -2130,6 +2135,7 @@ elif curr_l == "조립 라인":
             for sr in today_sch.to_dict('records'):
                 cat   = str(sr.get('카테고리', '기타'))
                 color = SCHEDULE_COLORS.get(cat, "#888")
+                cat_esc = html_mod.escape(cat)
                 model = str(sr.get('모델명', ''))
                 pn    = str(sr.get('pn', ''))
                 qty   = sr.get('조립수', 0)
@@ -2140,7 +2146,7 @@ elif curr_l == "조립 라인":
                 ship  = str(sr.get('출하계획', ''))
                 note  = str(sr.get('특이사항', ''))
                 rc = st.columns([1.2, 2.8, 1.5, 0.8, 1.8, 2.5])
-                rc[0].markdown(f"<span style='background:{color}22;color:{color};border-left:3px solid {color};padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:bold;'>{cat}</span>", unsafe_allow_html=True)
+                rc[0].markdown(f"<span style='background:{color}22;color:{color};border-left:3px solid {color};padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:bold;'>{cat_esc}</span>", unsafe_allow_html=True)
                 rc[1].write(model)
                 rc[2].caption(pn if pn and pn != 'nan' else "-")
                 rc[3].write(f"**{qty:,}**")
@@ -2380,11 +2386,13 @@ elif curr_l == "조립 라인":
                         r[6].button("🚫", key=f"ng_{idx}", use_container_width=True, disabled=True)
                 else:
                     s = row['상태']
+                    s_esc = html_mod.escape(str(s))
                     if "불량" in str(s):
-                        r[5].markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s}</div>", unsafe_allow_html=True)
+                        r[5].markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s_esc}</div>", unsafe_allow_html=True)
                     else:
                         bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
-                        r[5].markdown(f"<div style='background:{bg};color:{tc};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.75rem;'>{ic} {s}</div>", unsafe_allow_html=True)
+                        ic_esc = html_mod.escape(str(ic))
+                        r[5].markdown(f"<div style='background:{bg};color:{tc};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.75rem;'>{ic_esc} {s_esc}</div>", unsafe_allow_html=True)
                 # ── 불량 원인 선택 패널 (개별 🚫 클릭 후) ──
                 _ng_open_key = f"_ng_open_asm_{idx}"
                 if st.session_state.get(_ng_open_key):
@@ -2916,11 +2924,13 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         r[6].button("🚫", key=f"ng_{idx}", use_container_width=True, disabled=True)
                 else:
                     s2 = row['상태']
+                    s2_esc = html_mod.escape(str(s2))
                     if "불량" in str(s2):
-                        r[5].markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s2}</div>", unsafe_allow_html=True)
+                        r[5].markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s2_esc}</div>", unsafe_allow_html=True)
                     else:
                         bg2,tc2,bc2,ic2 = STATUS_STYLE2.get(s2, ('#f5f2ec','#5a5048','#c8b89a','•'))
-                        r[5].markdown(f"<div style='background:{bg2};color:{tc2};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc2};font-size:0.75rem;'>{ic2} {s2}</div>", unsafe_allow_html=True)
+                        ic2_esc = html_mod.escape(str(ic2))
+                        r[5].markdown(f"<div style='background:{bg2};color:{tc2};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc2};font-size:0.75rem;'>{ic2_esc} {s2_esc}</div>", unsafe_allow_html=True)
                 # ── 불량 원인 선택 패널 (개별 🚫 클릭 후) ──
                 _hist_ng_open_key = f"_ng_open_hist_{idx}"
                 if st.session_state.get(_hist_ng_open_key):
@@ -3992,7 +4002,8 @@ elif curr_l == "생산 지표 관리":
                 tr[5].markdown(f"<span style='color:{clr};font-weight:bold;font-size:0.85rem;'>{증감:+,}</span>", unsafe_allow_html=True)
                 reason_v = str(row.get('변경사유',''))
                 rbg = REASON_COLOR.get(reason_v, "#f5f2ec")
-                tr[6].markdown(f"<span style='background:{rbg};padding:1px 6px;border-radius:4px;font-size:0.72rem;'>{reason_v}</span>", unsafe_allow_html=True)
+                reason_esc = html_mod.escape(reason_v)
+                tr[6].markdown(f"<span style='background:{rbg};padding:1px 6px;border-radius:4px;font-size:0.72rem;'>{reason_esc}</span>", unsafe_allow_html=True)
                 tr[7].caption(row.get('사유상세',''))
                 tr[8].caption(row.get('작업자',''))
         else:
@@ -5866,10 +5877,12 @@ elif curr_l == "수리 현황 리포트":
                 tr[1].markdown(f"`{row.get('시리얼','')}`")
                 tr[2].write(row.get('모델',''))
                 tr[3].write(row.get('반',''))
-                prev_clr = STATE_CLR.get(row.get('이전상태',''), '#f5f2ec')
-                tr[4].markdown(f"<span style='background:{prev_clr};padding:1px 6px;border-radius:4px;font-size:0.75rem;'>{row.get('이전상태','')}</span>", unsafe_allow_html=True)
-                next_clr = STATE_CLR.get(row.get('이후상태',''), '#f5f2ec')
-                tr[5].markdown(f"<span style='background:{next_clr};padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:bold;'>{row.get('이후상태','')}</span>", unsafe_allow_html=True)
+                prev_s   = row.get('이전상태','')
+                prev_clr = STATE_CLR.get(prev_s, '#f5f2ec')
+                tr[4].markdown(f"<span style='background:{prev_clr};padding:1px 6px;border-radius:4px;font-size:0.75rem;'>{html_mod.escape(str(prev_s))}</span>", unsafe_allow_html=True)
+                next_s   = row.get('이후상태','')
+                next_clr = STATE_CLR.get(next_s, '#f5f2ec')
+                tr[5].markdown(f"<span style='background:{next_clr};padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:bold;'>{html_mod.escape(str(next_s))}</span>", unsafe_allow_html=True)
                 tr[6].caption(row.get('작업자',''))
                 tr[7].caption(row.get('비고',''))
         else:

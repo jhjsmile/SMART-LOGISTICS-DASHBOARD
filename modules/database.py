@@ -301,7 +301,7 @@ def delete_all_rows() -> bool:
     try:
         sb = get_supabase()
         backup_time = get_now_kst_str()
-        all_data = sb.table("production").select("*").execute()
+        all_data = sb.table("production").select("*").is_("deleted_at", "null").execute()
         if all_data.data:
             backup_records = [{
                 **record,
