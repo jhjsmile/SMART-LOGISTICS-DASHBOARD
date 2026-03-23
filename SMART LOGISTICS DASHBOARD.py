@@ -3561,6 +3561,10 @@ elif curr_l == "생산 지표 관리":
     else:
         sch_f = sch_all
 
+    # 계획 수량은 조립계획 기준만 사용
+    # (조립계획 → 포장계획 → 출하계획은 같은 제품이 단계를 거치는 것이므로 중복 합산 금지)
+    sch_f_asm = sch_f[sch_f['카테고리'] == '조립계획'] if not sch_f.empty else sch_f
+
     def _qty(df, col='조립수'):
         if df.empty: return 0
         return int(df[col].apply(lambda x: int(float(x)) if str(x) not in ('','nan') else 0).sum())
@@ -3569,7 +3573,7 @@ elif curr_l == "생산 지표 관리":
     total_done = len(db_f[(db_f['라인']=='포장 라인') & (db_f['상태']=='완료')]) if not db_f.empty else 0
     total_wip  = len(db_f[db_f['상태'].isin(ACTIVE_STATES)]) if not db_f.empty else 0
     total_ng   = len(db_f[db_f['상태'].str.contains('불량|부적합', na=False)]) if not db_f.empty else 0
-    plan_qty   = _qty(sch_f[sch_f['카테고리'] == '조립계획']) if not sch_f.empty else 0
+    plan_qty   = _qty(sch_f_asm)
     achieve_pct = round(total_done / plan_qty * 100, 1) if plan_qty > 0 else 0
     defect_pct  = round(total_ng / total_in * 100, 1) if total_in > 0 else 0
 
@@ -3607,7 +3611,7 @@ elif curr_l == "생산 지표 관리":
         bc = st.columns(3)
         for bi, ban in enumerate(PRODUCTION_GROUPS):
             bdb  = db_f[db_f['반']==ban] if not db_f.empty else pd.DataFrame()
-            bsch = sch_f[sch_f['반']==ban] if not sch_f.empty else pd.DataFrame()
+            bsch = sch_f_asm[sch_f_asm['반']==ban] if not sch_f_asm.empty else pd.DataFrame()
             b_plan = _qty(bsch)
             b_done = len(bdb[(bdb['라인']=='포장 라인')&(bdb['상태']=='완료')]) if not bdb.empty else 0
             b_wip  = len(bdb[bdb['상태'].isin(ACTIVE_STATES)]) if not bdb.empty else 0
