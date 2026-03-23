@@ -246,16 +246,16 @@ ACTIVE_STATES = ['조립중','검사대기','검사중','OQC대기','OQC중','�
 
 # ── 상태 스타일 (모듈 레벨 상수) ───────────────────────────────
 STATUS_STYLE = {
-    '검사대기': ('#fff8e1','#e65c00','#f5a623',''),
+    '검사대기': ('#fff8e1','#f4922a','#f5a623',''),
     '검사중':   ('#e3f2fd','#1565c0','#1976d2',''),
     '포장대기': ('#f3e5f5','#6a1b9a','#8e24aa',''),
-    '포장중':   ('#fff3e0','#bf4e00','#e65c00',''),
+    '포장중':   ('#fff3e0','#e07a18','#f4922a',''),
     '완료':     ('#e8f5e9','#1b5e20','#388e3c',''),
     'OQC대기':  ('#fff8e1','#f57f17','#ffa000',''),
     'OQC중':    ('#e8f4fd','#0d47a1','#1565c0',''),
     '출하승인': ('#e0f2f1','#004d40','#00796b',''),
     '조립중':   ('#eceff1','#37474f','#546e7a',''),
-    '수리 완료(재투입)': ('#fff3e0','#e65100','#ef6c00',''),
+    '수리 완료(재투입)': ('#fff3e0','#e07a18','#f4a040',''),
     '불량 처리 중': ('#ffebee','#b71c1c','#c62828',''),
     '교체됨':      ('#e8eaf6','#283593','#3949ab',''),
 }
@@ -338,7 +338,7 @@ st.markdown("""
     }
     .stTextInput input:focus,
     .stTextArea textarea:focus {
-        border-color: #e65c00 !important;
+        border-color: #f4922a !important;
         box-shadow: 0 0 0 2px rgba(230,92,0,0.20) !important;
     }
     /* selectbox, multiselect 너비 제한 */
@@ -416,12 +416,12 @@ st.markdown("""
     /* Primary → 산업 오렌지 */
     .stButton > button[kind="primary"],
     div[data-testid="stFormSubmitButton"] > button[kind="primary"] {
-        background-color: #e65c00 !important;
-        border: 1px solid #bf4e00 !important;
+        background-color: #f4922a !important;
+        border: 1px solid #e07a18 !important;
         color: #fff !important;
     }
     .stButton > button[kind="primary"]:hover {
-        background-color: #bf4e00 !important;
+        background-color: #e07a18 !important;
     }
     /* ── 최신 Streamlit 버튼 선택자 강제 적용 ── */
     button[data-testid="baseButton-secondary"],
@@ -440,15 +440,15 @@ st.markdown("""
     }
     button[data-testid="baseButton-primary"],
     button[data-testid="baseButton-primaryFormSubmit"] {
-        background-color: #e65c00 !important;
-        border: 1px solid #bf4e00 !important;
+        background-color: #f4922a !important;
+        border: 1px solid #e07a18 !important;
         color: #ffffff !important;
         font-weight: 700 !important;
         border-radius: 4px !important;
     }
     button[data-testid="baseButton-primary"]:hover,
     button[data-testid="baseButton-primaryFormSubmit"]:hover {
-        background-color: #bf4e00 !important;
+        background-color: #e07a18 !important;
         color: #ffffff !important;
     }
     /* 모든 버튼 텍스트 색 강제 (최후 방어) */
@@ -488,7 +488,7 @@ st.markdown("""
     .stTabs [aria-selected="true"] {
         background-color: #ffffff !important;
         color: #1a242c !important;
-        border-bottom: 3px solid #e65c00 !important;
+        border-bottom: 3px solid #f4922a !important;
         border-radius: 4px 4px 0 0;
     }
 
@@ -502,7 +502,7 @@ st.markdown("""
         background-color: #cfd8dc; color: #1a242c;
         padding: 14px 20px; border-radius: 4px;
         font-weight: 800; margin: 8px 0 20px 0;
-        border-left: 6px solid #e65c00;
+        border-left: 6px solid #f4922a;
         letter-spacing: 0.04em;
         text-transform: uppercase;
         box-shadow: 0 2px 4px rgba(0,0,0,0.12);
@@ -549,7 +549,7 @@ st.markdown("""
         text-transform: uppercase; letter-spacing: 0.06em;
     }
     .stat-value {
-        font-size: clamp(1.4rem, 2vw, 2.4rem); color: #e65c00;
+        font-size: clamp(1.4rem, 2vw, 2.4rem); color: #f4922a;
         font-weight: 800; line-height: 1; white-space: nowrap;
     }
 
@@ -562,7 +562,7 @@ st.markdown("""
     }
     .cal-day-wrap:hover {
         box-shadow: 0 4px 12px rgba(230,92,0,0.25);
-        border-color: #e65c00 !important;
+        border-color: #f4922a !important;
     }
     .cal-cell {
         background: #f5f6f7;
@@ -577,12 +577,12 @@ st.markdown("""
     .cal-cell:hover {
         transform: scale(1.04);
         box-shadow: 0 6px 18px rgba(230,92,0,0.20);
-        border-color: #e65c00 !important;
+        border-color: #f4922a !important;
         z-index: 999; position: relative;
     }
     .cal-cell.today {
         background: #fff3e0;
-        border: 2px solid #e65c00 !important;
+        border: 2px solid #f4922a !important;
     }
     .cal-day-num {
         font-weight: bold; color: #1a242c;
@@ -615,11 +615,11 @@ st.markdown("""
     .cal-day-btn > div > button:hover,
     .cal-day-btn button:hover {
         background-color: #fff3e0 !important;
-        color: #e65c00 !important;
+        color: #f4922a !important;
     }
     .cal-today-btn > div > button,
     .cal-today-btn button {
-        color: #e65c00 !important;
+        color: #f4922a !important;
         font-weight: 900 !important;
     }
 
@@ -3513,7 +3513,7 @@ elif curr_l == "생산 지표 관리":
 .kpi-green  { color:#2e7d32; }
 .kpi-red    { color:#c62828; }
 .kpi-blue   { color:#1565c0; }
-.kpi-amber  { color:#e65c00; }
+.kpi-amber  { color:#f4922a; }
 .ban-card   { border-radius:4px; padding:10px 14px 8px 14px; margin-bottom:2px; }
 .ban-name   { font-size:0.72rem; font-weight:700; letter-spacing:0.5px;
               text-transform:uppercase; margin-bottom:4px; }
