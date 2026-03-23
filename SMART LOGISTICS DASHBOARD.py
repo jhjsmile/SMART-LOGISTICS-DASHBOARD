@@ -3467,6 +3467,40 @@ elif curr_l == "포장 라인":
 
     st.divider()
 
+    # ── 라벨 시리얼 누락 항목 ────────────────────────────────────────
+    _pk_no_label = db_pk[
+        (db_pk['상태'] == '완료') &
+        (db_pk['라벨시리얼'].isna() | (db_pk['라벨시리얼'].astype(str).str.strip() == ''))
+    ].sort_values('시간', ascending=False)
+
+    if not _pk_no_label.empty:
+        _nl_count = len(_pk_no_label)
+        with st.expander(f" 라벨 시리얼 누락  ·  {_nl_count}건", expanded=True, key="_xp_pk_nolabel"):
+            hh = st.columns([1.5, 1.5, 2, 2.5, 1.5])
+            for col, txt in zip(hh, ["시간", "모델", "제품 시리얼", "라벨 S/N 입력", "저장"]):
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+            for idx, row in enumerate(_pk_no_label.to_dict('records')):
+                rr = st.columns([1.5, 1.5, 2, 2.5, 1.5])
+                rr[0].caption(str(row.get('시간', ''))[:16])
+                rr[1].write(row.get('모델', ''))
+                rr[2].markdown(f"`{row.get('시리얼', '')}`")
+                _add_label_key = f"pk_add_label_{row['시리얼']}"
+                add_label_sn = rr[3].text_input(
+                    "라벨 S/N",
+                    placeholder="바코드 스캔 또는 직접 입력",
+                    key=_add_label_key,
+                    label_visibility="collapsed",
+                )
+                if rr[4].button(" 저장", key=f"pk_label_save_{idx}", use_container_width=True,
+                                disabled=not bool(add_label_sn.strip())):
+                    update_row(row['시리얼'], {'라벨시리얼': add_label_sn.strip()})
+                    insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                        이전상태='완료', 이후상태='완료', 작업자=st.session_state.user_id,
+                        비고=f"라벨시리얼 추가: {add_label_sn.strip()}")
+                    _prod_update(row['시리얼'], {'라벨시리얼': add_label_sn.strip()})
+                    st.rerun()
+        st.divider()
+
     _pk_done_total = len(db_pk[db_pk['상태'] == '완료'])
     with st.expander(f" 완료 이력  ·  전체 {_pk_done_total}건", expanded=_xp("pk_hist"), key="_xp_pk_hist"):
         _pk_h1, _pk_h2 = st.columns([3, 1])
