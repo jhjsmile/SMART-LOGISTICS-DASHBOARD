@@ -6859,6 +6859,20 @@ elif curr_l == "마스터 관리":
         with st.container(border=True):
             st.caption("실수로 잘못 처리된 제품의 상태를 되돌리거나 직접 변경합니다.")
             _all_states = ['조립중', '검사대기', '검사중', 'OQC대기', 'OQC중', '출하승인', '포장대기', '포장중', '완료', '불량 처리 중', '수리 완료(재투입)']
+            # 상태 → 라인 자동 매핑 (상태 변경 시 라인 컬럼도 일치시켜 각 라인 페이지에 정상 노출)
+            _STATE_TO_LINE = {
+                '조립중':           '조립 라인',
+                '검사대기':         '조립 라인',   # QC가 픽업하기 전까지 조립 라인에 대기
+                '검사중':           '검사 라인',
+                'OQC대기':          '검사 라인',   # OQC가 픽업하기 전까지 검사 라인에 대기
+                'OQC중':            'OQC 라인',
+                '출하승인':         'OQC 라인',    # 포장이 픽업하기 전까지 OQC 라인에 대기
+                '포장대기':         'OQC 라인',
+                '포장중':           '포장 라인',
+                '완료':             '포장 라인',
+                '불량 처리 중':     '불량 공정',
+                '수리 완료(재투입)':'불량 공정',
+            }
 
             # form으로 감싸서 키입력마다 전체 재렌더 방지
             with st.form("rollback_search_form"):
@@ -6877,21 +6891,25 @@ elif curr_l == "마스터 관리":
                 _rb_match = _rb_df[_rb_df['시리얼'] == _cached_sn] if not _rb_df.empty else pd.DataFrame()
                 if not _rb_match.empty:
                     _rb_row = _rb_match.iloc[0]
-                    st.info(f"현재 상태: **{_rb_row['상태']}** | 모델: {_rb_row.get('모델','')} | 반: {_rb_row.get('반','')}")
+                    _rb_cur_line = _rb_row.get('라인', '')
+                    st.info(f"현재 상태: **{_rb_row['상태']}** | 현재 라인: **{_rb_cur_line}** | 모델: {_rb_row.get('모델','')} | 반: {_rb_row.get('반','')}")
                     _rb_col1, _rb_col2 = st.columns([2, 1])
                     _rb_target = _rb_col1.selectbox("변경할 상태", _all_states, key="rollback_target")
+                    _rb_new_line = _STATE_TO_LINE.get(_rb_target, _rb_cur_line)
+                    _rb_col1.caption(f"라인 자동 변경: **{_rb_cur_line}** → **{_rb_new_line}**" if _rb_new_line != _rb_cur_line else f"라인 유지: {_rb_cur_line}")
                     if _rb_col2.button("✅ 상태 변경 실행", key="rollback_exec", type="primary", use_container_width=True):
                         _prev_s = _rb_row['상태']
-                        _upd = {'상태': _rb_target, '시간': get_now_kst_str()}
+                        _upd = {'상태': _rb_target, '라인': _rb_new_line, '시간': get_now_kst_str()}
                         if update_row(_cached_sn, _upd):
                             insert_audit_log(
                                 시리얼=_cached_sn, 모델=_rb_row.get('모델',''), 반=_rb_row.get('반',''),
                                 이전상태=_prev_s, 이후상태=_rb_target,
-                                작업자=st.session_state.user_id, 비고="관리자 수동 상태 변경"
+                                작업자=st.session_state.user_id,
+                                비고=f"관리자 수동 상태 변경 (라인: {_rb_cur_line}→{_rb_new_line})"
                             )
                             _prod_update(_cached_sn, _upd)
                             st.session_state.pop("_rb_sn_cache", None)
-                            st.toast(f"✅ [{_cached_sn}] {_prev_s} → {_rb_target} 변경 완료")
+                            st.toast(f"✅ [{_cached_sn}] {_prev_s} → {_rb_target} / 라인: {_rb_cur_line} → {_rb_new_line}")
                             st.rerun()
                         else:
                             st.error("변경 실패. 시리얼 번호를 확인해주세요.")
