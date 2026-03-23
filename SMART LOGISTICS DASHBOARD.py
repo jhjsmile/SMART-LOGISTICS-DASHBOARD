@@ -3692,15 +3692,24 @@ elif curr_l == "생산 지표 관리":
     with ng_col:
         st.markdown("<div class='db-section' style='background:#c0392b;'>📉 모델별 불량 분석</div>", unsafe_allow_html=True)
         if not db_f.empty:
-            ng_df = db_f.groupby('모델').agg(
+            # 불량 판단 기준:
+            #  ① 현재 상태가 불량/부적합 이거나
+            #  ② 수리 컬럼이 채워진 경우 (수리 이력 = 불량이 있었던 제품)
+            _ng_mask = (
+                db_f['상태'].str.contains('불량|부적합', na=False) |
+                (db_f['수리'].astype(str).str.strip() != '')
+            )
+            _ng_df_src = db_f.copy()
+            _ng_df_src['_has_ng'] = _ng_mask
+            ng_df = _ng_df_src.groupby('모델').agg(
                 투입=('시리얼','count'),
-                불량=('상태', lambda x: x.str.contains('불량|부적합',na=False).sum())
+                불량=('_has_ng', 'sum')
             ).reset_index()
+            ng_df['불량'] = ng_df['불량'].astype(int)
             ng_df['불량률'] = (ng_df['불량'] / ng_df['투입'] * 100).round(1)
             ng_df = ng_df[ng_df['불량'] > 0].sort_values('불량률', ascending=False)
             if not ng_df.empty:
                 max_pct = ng_df['불량률'].max() or 1
-                # 성능: iterrows → to_dict('records') (read-only HTML 빌딩에 10-100배 빠름)
                 ng_html = ""
                 for row in ng_df.to_dict('records'):
                     bar_w = int(row['불량률'] / max_pct * 100)
