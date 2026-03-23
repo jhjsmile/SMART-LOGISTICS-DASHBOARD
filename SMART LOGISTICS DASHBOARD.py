@@ -2789,15 +2789,15 @@ elif curr_l in ["검사 라인", "포장 라인"]:
 
             f_df_view = f_df
             if _sn_search_qp.strip():
-                _actionable = f_df[f_df['상태'].isin(["검사중","포장중","수리 완료(재투입)"])]
-                _search_result = _actionable[_actionable['시리얼'].str.contains(
+                _search_result = f_df[f_df['시리얼'].str.contains(
                     _sn_search_qp.strip(), case=False, na=False)]
                 if _search_result.empty:
-                    hs1.warning(f"**'{_sn_search_qp.strip()}'** — 처리 가능한 시리얼이 없습니다.")
+                    hs1.warning(f"**'{_sn_search_qp.strip()}'** — 해당 시리얼이 없습니다.")
                 else:
                     f_df_view = _search_result
+                    # 자동 체크는 처리 가능 상태(actionable)인 항목만 적용
                     _hcb_ver_now = st.session_state[_hsrch_cnt]
-                    for _hi in f_df_view.index:
+                    for _hi in _search_result[_search_result['상태'].isin(["검사중","포장중","수리 완료(재투입)"])].index:
                         st.session_state[_hck_key][str(_hi)] = True
                         st.session_state[f"hck_{curr_g}_{curr_l}_{_hi}_{_hcb_ver_now}"] = True
 
@@ -2875,10 +2875,13 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 idx = row['index']
                 is_act = row['상태'] in ["검사중","포장중","수리 완료(재투입)"]
                 r = st.columns([0.4, 1.8, 1.8, 1.3, 1.6, 2.2])
-                _hck = r[0].checkbox("", key=f"hck_{curr_g}_{curr_l}_{idx}_{_hcb_ver}",
-                    value=st.session_state[_hck_key].get(str(idx), False),
-                    disabled=not is_act, label_visibility="collapsed")
-                st.session_state[_hck_key][str(idx)] = _hck
+                if is_act:
+                    _hck = r[0].checkbox("", key=f"hck_{curr_g}_{curr_l}_{idx}_{_hcb_ver}",
+                        value=st.session_state[_hck_key].get(str(idx), False),
+                        label_visibility="collapsed")
+                    st.session_state[_hck_key][str(idx)] = _hck
+                else:
+                    _hck = False
                 r[1].caption(str(row['시간'])[:16])
                 r[2].caption(row['모델'])
                 r[3].caption(row['품목코드'])
