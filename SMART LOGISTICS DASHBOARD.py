@@ -2985,6 +2985,29 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 hmc2.caption(f"`{_hm.get('자재시리얼', '')}`")
                         else:
                             st.caption("등록된 자재 시리얼 없음")
+                        # ── 라벨 시리얼 (완료 항목) ──
+                        if row.get('상태') == '완료':
+                            st.divider()
+                            _cur_lsn = str(row.get('라벨시리얼', '') or '')
+                            _lsn_edit_key = f"hist_lsn_{row['시리얼']}"
+                            _lc1, _lc2 = st.columns([4, 1.5])
+                            _lc1.markdown("<p style='font-size:0.78rem;font-weight:700;color:#5a4f45;margin:0 0 4px 0;'> 라벨 S/N</p>", unsafe_allow_html=True)
+                            _new_lsn = _lc1.text_input(
+                                "라벨 S/N",
+                                value=_cur_lsn,
+                                placeholder="라벨 시리얼 입력",
+                                key=_lsn_edit_key,
+                                label_visibility="collapsed",
+                            )
+                            if _lc2.button(" 저장", key=f"hist_lsn_save_{row['시리얼']}",
+                                           use_container_width=True, type="primary",
+                                           disabled=not bool(_new_lsn.strip())):
+                                update_row(row['시리얼'], {'라벨시리얼': _new_lsn.strip()})
+                                insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                                    이전상태='완료', 이후상태='완료', 작업자=st.session_state.user_id,
+                                    비고=f"라벨시리얼 수정: {_new_lsn.strip()}")
+                                _prod_update(row['시리얼'], {'라벨시리얼': _new_lsn.strip()})
+                                st.rerun()
         else:
             st.info("해당 공정 내역이 없습니다.")
 
