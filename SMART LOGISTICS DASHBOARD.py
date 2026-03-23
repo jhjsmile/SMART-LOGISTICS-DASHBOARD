@@ -2284,7 +2284,8 @@ elif curr_l == "조립 라인":
                     st.session_state[_asm_chk_key][str(_si)] = True
                     st.session_state[f"asm_cb_{curr_g}_{_si}_{_asm_cb_ver_now}"] = True
             else:
-                f_df_view = db_g
+                # 검색어 없을 때는 조립 라인 항목만 표시
+                f_df_view = f_df
 
             checked_idxs = [k for k,v in st.session_state[_asm_chk_key].items() if v]
             if checked_idxs:
