@@ -924,7 +924,7 @@ def show_inline_day_panel():
                 st.session_state.cal_action = None; _rerun(_dp_xp_key)
 
             if not can_edit:
-                st.info(f"카테고리: {r.get('카테고리','')} / 모델명: {r.get('모델명','')} / 조립수: {r.get('조립수',0)}대")
+                st.info(f"카테고리: {r.get('카테고리','')} / 모델명: {r.get('모델명','')} / 처리수: {r.get('조립수',0)}대")
                 return
 
             save_done_key = f"edit_saved_{sch_id}"
@@ -939,7 +939,7 @@ def show_inline_day_panel():
                 ff1, ff2 = st.columns(2)
                 try: _qty_val = int(float(r.get('조립수', 0))) if str(r.get('조립수', '')).strip() not in ('', 'nan', 'None') else 0
                 except (ValueError, TypeError): _qty_val = 0
-                qty   = ff1.number_input("조립수", min_value=0, step=1, value=_qty_val)
+                qty   = ff1.number_input("처리수", min_value=0, step=1, value=_qty_val)
                 ship  = ff2.text_input("출하계획", value=str(r.get('출하계획', '')))
                 note  = st.text_input("특이사항", value=str(r.get('특이사항', '')))
                 etc   = st.text_input("기타")
@@ -1029,7 +1029,7 @@ def show_inline_day_panel():
                                        help="목록에서 선택하거나 아래에 직접 입력")
                 pn_txt = fa2.text_input("P/N 직접 입력", placeholder="목록에 없으면 여기 입력")
 
-                qty_str = st.text_input("조립수", value="0", placeholder="숫자 입력")
+                qty_str = st.text_input("처리수", value="0", placeholder="숫자 입력")
                 note    = st.text_input("특이사항")
                 etc     = st.text_input("기타")
 
@@ -1108,7 +1108,7 @@ def show_inline_day_panel():
                     f"</div>", unsafe_allow_html=True
                 )
                 col_w = [1.8, 2.8, 1.5, 1.2, 1.8, 0.9] if can_edit else [1.8, 2.8, 1.5, 1.2, 2.2]
-                hdrs  = ["카테고리", "모델명", "P/N", "조립수", "출하계획"] + (["관리"] if can_edit else [])
+                hdrs  = ["카테고리", "모델명", "P/N", "처리수", "출하계획"] + (["관리"] if can_edit else [])
                 hcols = st.columns(col_w)
                 for hc, hl in zip(hcols, hdrs):
                     hc.markdown(
@@ -2124,7 +2124,7 @@ elif curr_l == "조립 라인":
             st.info("오늘 등록된 작업 일정이 없습니다.")
         else:
             th = st.columns([1.2, 2.8, 1.5, 0.8, 1.8, 2.5])
-            for col, txt in zip(th, ["유형", "모델명", "P/N", "조립수", "출하계획", "특이사항"]):
+            for col, txt in zip(th, ["유형", "모델명", "P/N", "처리수", "출하계획", "특이사항"]):
                 col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:2px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
             # 성능: iterrows → to_dict('records')
             for sr in today_sch.to_dict('records'):
@@ -2158,7 +2158,7 @@ elif curr_l == "조립 라인":
         if not month_sch.empty:
             show_cols = ['날짜','카테고리','모델명','pn','조립수','출하계획','특이사항']
             show_cols = [c for c in show_cols if c in month_sch.columns]
-            st.dataframe(month_sch[show_cols].sort_values('날짜'), use_container_width=True, hide_index=True)
+            st.dataframe(month_sch[show_cols].sort_values('날짜').rename(columns={'조립수': '처리수'}), use_container_width=True, hide_index=True)
         else:
             st.info("이번 달 등록된 일정이 없습니다.")
 
@@ -4080,14 +4080,14 @@ elif curr_l == "생산 지표 관리":
 
                         # 2행 안내
                         _ws.merge_cells("A2:H2")
-                        _ws["A2"].value = "⚠  날짜: YYYY-MM-DD  |  카테고리: 드롭다운 선택  |  조립수: 숫자만  |  5행부터 입력 (4행 예시는 자동 스킵)"
+                        _ws["A2"].value = "⚠  날짜: YYYY-MM-DD  |  카테고리: 드롭다운 선택  |  처리수: 숫자만  |  5행부터 입력 (4행 예시는 자동 스킵)"
                         _ws["A2"].font  = _Font(name="맑은 고딕", size=9, color="2A2420")
                         _ws["A2"].fill  = _fl("FFF3CD")
                         _ws["A2"].alignment = _la()
                         _ws.row_dimensions[2].height = 18
 
                         # 3행 헤더 (반 컬럼 없음 - 시트명이 곧 반)
-                        _headers = ["날짜 *", "카테고리 *", "P/N", "모델명 *", "조립수", "출하계획", "특이사항", "비고"]
+                        _headers = ["날짜 *", "카테고리 *", "P/N", "모델명 *", "처리수", "출하계획", "특이사항", "비고"]
                         for _ci, _h in enumerate(_headers, 1):
                             _c = _ws.cell(3, _ci)
                             _c.value = _h
@@ -4143,14 +4143,14 @@ elif curr_l == "생산 지표 관리":
                         ["카테고리","드롭다운: 조립계획 / 포장계획 / 출하계획 / 특이사항 / 기타"],
                         ["P/N","품목코드 (예: TMP6133002) — 선택"],
                         ["모델명","필수 — 조립 라인 모델 목록에 자동 등록됨"],
-                        ["조립수","숫자만. 0 또는 빈칸이면 해당 행 스킵"],
+                        ["처리수","숫자만. 0 또는 빈칸이면 해당 행 스킵"],
                         ["출하계획","자유 텍스트 입력 — 예: 3/15 30 / 3월15일 30대 / 3/15 등 형식 무관, 선택 입력"],
                         ["특이사항","메모 자유 입력 — 선택"],
                         [],
                         ["⚠ 주의사항"],
                         ["1. 각 시트에 해당 반 데이터만 입력 (반 혼용 불가)"],
                         ["2. 4행 예시 행은 업로드 시 자동 스킵"],
-                        ["3. 조립수 0 또는 빈칸 → 해당 행 스킵"],
+                        ["3. 처리수 0 또는 빈칸 → 해당 행 스킵"],
                         ["4. 모델명 등록 시 해당 반 조립 라인에 자동 반영"],
                         ["5. 여러 반을 한 번에 → 각 시트 채워서 업로드"],
                     ]
@@ -4190,7 +4190,7 @@ elif curr_l == "생산 지표 관리":
     <p style='color:#2a2420;'>
     <b>① PMS 반별 시트 양식</b> (위 버튼으로 다운로드) ⭐추천<br>
     &nbsp;&nbsp;• 시트명: <b>제조1반 / 제조2반 / 제조3반</b> — 시트명이 곧 반 정보<br>
-    &nbsp;&nbsp;• 컬럼: 날짜 / 카테고리 / P/N / 모델명 / 조립수 / 출하계획 / 특이사항<br>
+    &nbsp;&nbsp;• 컬럼: 날짜 / 카테고리 / P/N / 모델명 / 처리수 / 출하계획 / 특이사항<br>
     &nbsp;&nbsp;• 여러 반을 한 파일에 각 시트별로 입력 후 한 번에 업로드 가능<br><br>
     <b>② PMS 단일 시트 양식</b><br>
     &nbsp;&nbsp;• 시트명: <b>생산계획_업로드</b> / 컬럼에 반 포함<br><br>
@@ -4320,7 +4320,7 @@ elif curr_l == "생산 지표 관리":
                 if parsed:
                     # 미리보기
                     import pandas as _pd
-                    preview_df = _pd.DataFrame(parsed)[['날짜','카테고리','pn','모델명','조립수','출하계획']]
+                    preview_df = _pd.DataFrame(parsed)[['날짜','카테고리','pn','모델명','조립수','출하계획']].rename(columns={'조립수': '처리수'})
                     st.markdown(f"<p style='color:#2a2420;'>✅ <b>{len(parsed)}건</b> 파싱 완료 — 미리보기:</p>", unsafe_allow_html=True)
                     st.dataframe(preview_df, use_container_width=True, hide_index=True, height=300)
 
@@ -4450,7 +4450,7 @@ elif curr_l == "생산 지표 관리":
             sch_pn_txt = sf2.text_input("P/N 직접 입력", placeholder="목록에 없으면 여기 입력")
 
             sc4, sc5 = st.columns(2)
-            sch_qty_str = sc4.text_input("조립수", value="0", placeholder="숫자 입력")
+            sch_qty_str = sc4.text_input("처리수", value="0", placeholder="숫자 입력")
             sch_note    = sc5.text_input("특이사항")
 
             if st.form_submit_button("📅 일정 등록", use_container_width=True, type="primary"):
@@ -6619,7 +6619,7 @@ elif curr_l == "마스터 관리":
             if not sdf.empty:
                 with st.expander(f"📋 개별 삭제 목록 ({len(sdf)}건)", expanded=False):
                     sh = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
-                    for c, t in zip(sh, ["날짜","반","카테고리","모델명","조립수","출하계획","삭제"]):
+                    for c, t in zip(sh, ["날짜","반","카테고리","모델명","처리수","출하계획","삭제"]):
                         c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
                     for row in sdf.sort_values('날짜', ascending=False).to_dict('records'):
                         sr = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
@@ -7254,13 +7254,13 @@ elif curr_l == "관리자 매뉴얼":
         <b>일정 등록 방법</b>
         <ul style='margin:4px 0 10px;padding-left:1.4em;'>
           <li>메인 현황판 하단 달력에서 <b>날짜 클릭</b> → 일정 입력 팝업</li>
-          <li>입력 항목: 날짜·유형·모델명·P/N·조립수량·출하계획·특이사항</li>
+          <li>입력 항목: 날짜·유형·모델명·P/N·처리수량·출하계획·특이사항</li>
           <li>유형별 색상: 🔵 조립계획 / 🟢 포장계획 / 🟡 출하계획</li>
         </ul>
         <b>엑셀 일괄 업로드</b>
         <ul style='margin:4px 0 10px;padding-left:1.4em;'>
           <li>생산 지표 관리 → <b>일정 관리</b> 탭 → 엑셀 업로드</li>
-          <li>지원 형식: .xlsx (헤더: 날짜·유형·모델·P/N·조립수·출하·특이사항)</li>
+          <li>지원 형식: .xlsx (헤더: 날짜·유형·모델·P/N·처리수·출하·특이사항)</li>
         </ul>
         <b>편집·삭제 권한</b>
         <ul style='margin:4px 0 0;padding-left:1.4em;'>
