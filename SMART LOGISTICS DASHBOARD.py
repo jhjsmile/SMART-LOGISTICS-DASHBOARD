@@ -3569,7 +3569,7 @@ elif curr_l == "생산 지표 관리":
     total_done = len(db_f[(db_f['라인']=='포장 라인') & (db_f['상태']=='완료')]) if not db_f.empty else 0
     total_wip  = len(db_f[db_f['상태'].isin(ACTIVE_STATES)]) if not db_f.empty else 0
     total_ng   = len(db_f[db_f['상태'].str.contains('불량|부적합', na=False)]) if not db_f.empty else 0
-    plan_qty   = _qty(sch_f)
+    plan_qty   = _qty(sch_f[sch_f['카테고리'] == '조립계획']) if not sch_f.empty else 0
     achieve_pct = round(total_done / plan_qty * 100, 1) if plan_qty > 0 else 0
     defect_pct  = round(total_ng / total_in * 100, 1) if total_in > 0 else 0
 
