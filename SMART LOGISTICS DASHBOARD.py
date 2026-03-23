@@ -2334,9 +2334,9 @@ elif curr_l == "조립 라인":
                         _rerun("asm_hist")
 
             # STATUS_STYLE: 모듈 상수 사용 (상단 정의 참조)
-            h = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 2.0])
-            for col, txt in zip(h, ["☑","기록 시간","모델","품목","시리얼","현장 제어"]):
-                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;'>{txt}</p>", unsafe_allow_html=True)
+            h = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 1.1, 1.1])
+            for col, txt in zip(h, ["☑","기록 시간","모델","품목","시리얼","✅","🚫"]):
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;text-align:center;'>{txt}</p>", unsafe_allow_html=True)
 
             _asm_cb_ver = st.session_state[_asm_search_cnt]  # 스캔 시 변경 → 체크박스 강제 재렌더
             # 자재 시리얼 일괄 조회 (N+1 방지)
@@ -2345,7 +2345,7 @@ elif curr_l == "조립 라인":
             for row in f_df_view.sort_values('시간', ascending=False).reset_index().to_dict('records'):
                 idx = row['index']
                 is_actionable = row['상태'] in ["조립중", "수리 완료(재투입)"]
-                r = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 2.0])
+                r = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 1.1, 1.1])
                 if is_actionable:
                     _ck = r[0].checkbox("", key=f"asm_cb_{curr_g}_{idx}_{_asm_cb_ver}",
                         value=st.session_state[_asm_chk_key].get(str(idx), False),
@@ -2361,31 +2361,30 @@ elif curr_l == "조립 라인":
                 if r[4].button(f"{row['시리얼']}{_asm_mat_badge}", key=f"sntog_asm_{idx}_{_asm_cb_ver}",
                                use_container_width=True, help="클릭하여 자재 시리얼 조회"):
                     st.session_state[_asm_tog_key] = not st.session_state.get(_asm_tog_key, False)
-                with r[5]:
-                    if is_actionable:
-                        if st.button("✅ 완료", key=f"ok_{idx}", use_container_width=True, help="검사대기로 이동"):
-                            _upd = {'상태':'검사대기','시간':get_now_kst_str()}
-                            update_row(row['시리얼'], _upd)
-                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
-                                이전상태=row['상태'], 이후상태='검사대기', 작업자=st.session_state.user_id)
-                            st.session_state[_asm_chk_key].pop(str(idx), None)
-                            st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
-                            _prod_update(row['시리얼'], _upd)
+                if is_actionable:
+                    if r[5].button("✅", key=f"ok_{idx}", use_container_width=True, help="검사대기로 이동"):
+                        _upd = {'상태':'검사대기','시간':get_now_kst_str()}
+                        update_row(row['시리얼'], _upd)
+                        insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                            이전상태=row['상태'], 이후상태='검사대기', 작업자=st.session_state.user_id)
+                        st.session_state[_asm_chk_key].pop(str(idx), None)
+                        st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
+                        _prod_update(row['시리얼'], _upd)
+                        _rerun("asm_hist")
+                    _ng_open_key = f"_ng_open_asm_{idx}"
+                    if not st.session_state.get(_ng_open_key):
+                        if r[6].button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량 원인 입력"):
+                            st.session_state[_ng_open_key] = True
                             _rerun("asm_hist")
-                        _ng_open_key = f"_ng_open_asm_{idx}"
-                        if not st.session_state.get(_ng_open_key):
-                            if st.button("🚫 불량", key=f"ng_{idx}", use_container_width=True, help="불량 원인 입력"):
-                                st.session_state[_ng_open_key] = True
-                                _rerun("asm_hist")
-                        else:
-                            st.button("🚫 불량", key=f"ng_{idx}", use_container_width=True, disabled=True)
                     else:
-                        s = row['상태']
-                        if "불량" in str(s):
-                            st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s}</div>", unsafe_allow_html=True)
-                        else:
-                            bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
-                            st.markdown(f"<div style='background:{bg};color:{tc};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.75rem;'>{ic} {s}</div>", unsafe_allow_html=True)
+                        r[6].button("🚫", key=f"ng_{idx}", use_container_width=True, disabled=True)
+                else:
+                    s = row['상태']
+                    if "불량" in str(s):
+                        r[5].markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s}</div>", unsafe_allow_html=True)
+                    else:
+                        bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
+                        r[5].markdown(f"<div style='background:{bg};color:{tc};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.75rem;'>{ic} {s}</div>", unsafe_allow_html=True)
                 # ── 불량 원인 선택 패널 (개별 🚫 클릭 후) ──
                 _ng_open_key = f"_ng_open_asm_{idx}"
                 if st.session_state.get(_ng_open_key):
@@ -2866,9 +2865,9 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             # Bug fix: STATUS_STYLE2는 전역 STATUS_STYLE과 중복 — 전역 상수 재사용
             STATUS_STYLE2 = STATUS_STYLE
 
-            h = st.columns([0.4, 1.8, 1.8, 1.3, 1.6, 2.2])
-            for col, txt in zip(h, ["☑","기록 시간","모델","품목","시리얼","제어"]):
-                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;'>{txt}</p>",
+            h = st.columns([0.4, 1.8, 1.8, 1.3, 1.6, 1.1, 1.1])
+            for col, txt in zip(h, ["☑","기록 시간","모델","품목","시리얼","✅","🚫"]):
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;text-align:center;'>{txt}</p>",
                              unsafe_allow_html=True)
 
             _hcb_ver = st.session_state[_hsrch_cnt]
@@ -2878,7 +2877,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             for row in f_df_view.sort_values('시간', ascending=False).reset_index().to_dict('records'):
                 idx = row['index']
                 is_act = row['상태'] in ["검사중","포장중","수리 완료(재투입)"]
-                r = st.columns([0.4, 1.8, 1.8, 1.3, 1.6, 2.2])
+                r = st.columns([0.4, 1.8, 1.8, 1.3, 1.6, 1.1, 1.1])
                 if is_act:
                     _hck = r[0].checkbox("", key=f"hck_{curr_g}_{curr_l}_{idx}_{_hcb_ver}",
                         value=st.session_state[_hck_key].get(str(idx), False),
@@ -2895,34 +2894,33 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 if r[4].button(f"{row['시리얼']}{_hist_mat_badge}", key=f"sntog_hist_{idx}_{_hcb_ver}",
                                use_container_width=True, help="클릭하여 자재 시리얼 조회"):
                     st.session_state[_hist_tog_key] = not st.session_state.get(_hist_tog_key, False)
-                with r[5]:
-                    if is_act:
-                        btn_lbl = "검사 합격" if curr_l == "검사 라인" else "포장 완료"
-                        if st.button("✅", key=f"ok_{idx}", use_container_width=True, help=btn_lbl):
-                            _ok_s  = 'OQC대기' if curr_l == '검사 라인' else '완료'
-                            _prv_s = '검사중'  if curr_l == '검사 라인' else '포장중'
-                            _upd = {'상태':_ok_s,'시간':get_now_kst_str()}
-                            update_row(row['시리얼'], _upd)
-                            insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
-                                이전상태=row['상태'], 이후상태=_ok_s, 작업자=st.session_state.user_id)
-                            st.session_state[_hck_key].pop(str(idx), None)
-                            st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
-                            _prod_update(row['시리얼'], _upd)
+                if is_act:
+                    btn_lbl = "검사 합격" if curr_l == "검사 라인" else "포장 완료"
+                    if r[5].button("✅", key=f"ok_{idx}", use_container_width=True, help=btn_lbl):
+                        _ok_s  = 'OQC대기' if curr_l == '검사 라인' else '완료'
+                        _prv_s = '검사중'  if curr_l == '검사 라인' else '포장중'
+                        _upd = {'상태':_ok_s,'시간':get_now_kst_str()}
+                        update_row(row['시리얼'], _upd)
+                        insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
+                            이전상태=row['상태'], 이후상태=_ok_s, 작업자=st.session_state.user_id)
+                        st.session_state[_hck_key].pop(str(idx), None)
+                        st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
+                        _prod_update(row['시리얼'], _upd)
+                        _rerun("chk_hist")
+                    _hist_ng_open_key = f"_ng_open_hist_{idx}"
+                    if not st.session_state.get(_hist_ng_open_key):
+                        if r[6].button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량 원인 입력"):
+                            st.session_state[_hist_ng_open_key] = True
                             _rerun("chk_hist")
-                        _hist_ng_open_key = f"_ng_open_hist_{idx}"
-                        if not st.session_state.get(_hist_ng_open_key):
-                            if st.button("🚫", key=f"ng_{idx}", use_container_width=True, help="불량 원인 입력"):
-                                st.session_state[_hist_ng_open_key] = True
-                                _rerun("chk_hist")
-                        else:
-                            st.button("🚫", key=f"ng_{idx}", use_container_width=True, disabled=True)
                     else:
-                        s2 = row['상태']
-                        if "불량" in str(s2):
-                            st.markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s2}</div>", unsafe_allow_html=True)
-                        else:
-                            bg2,tc2,bc2,ic2 = STATUS_STYLE2.get(s2, ('#f5f2ec','#5a5048','#c8b89a','•'))
-                            st.markdown(f"<div style='background:{bg2};color:{tc2};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc2};font-size:0.75rem;'>{ic2} {s2}</div>", unsafe_allow_html=True)
+                        r[6].button("🚫", key=f"ng_{idx}", use_container_width=True, disabled=True)
+                else:
+                    s2 = row['상태']
+                    if "불량" in str(s2):
+                        r[5].markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s2}</div>", unsafe_allow_html=True)
+                    else:
+                        bg2,tc2,bc2,ic2 = STATUS_STYLE2.get(s2, ('#f5f2ec','#5a5048','#c8b89a','•'))
+                        r[5].markdown(f"<div style='background:{bg2};color:{tc2};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc2};font-size:0.75rem;'>{ic2} {s2}</div>", unsafe_allow_html=True)
                 # ── 불량 원인 선택 패널 (개별 🚫 클릭 후) ──
                 _hist_ng_open_key = f"_ng_open_hist_{idx}"
                 if st.session_state.get(_hist_ng_open_key):
