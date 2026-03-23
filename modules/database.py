@@ -135,7 +135,7 @@ def clear_cache_for_tables(tables: set) -> None:
 def load_realtime_ledger() -> pd.DataFrame:
     """실시간 현황 전용: 오늘 생성 제품 + 이전 날짜 생성이지만 아직 미완료인 WIP 제품.
     TTL=120s — Realtime 구독이 변경 감지 시 캐시를 즉시 무효화하므로 체감 지연 없음."""
-    _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','작업자']
+    _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','OQC판정','작업자']
     today_str = date.today().strftime('%Y-%m-%d')
     sb = get_supabase()
 
@@ -174,7 +174,7 @@ def load_production_history(date_from: str, date_to: str, limit: int = 5000) -> 
     - 30일 이전 데이터    : production_history 테이블 조회 (Option B 아카이브)
     - 범위가 양쪽 걸치면  : 두 테이블 합산 후 정렬·중복 제거
     """
-    _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','작업자']
+    _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','OQC판정','작업자']
     cutoff = (date.today() - timedelta(days=30)).strftime('%Y-%m-%d')
     sb = get_supabase()
     rows = []
