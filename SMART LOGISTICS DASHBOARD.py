@@ -53,7 +53,8 @@ from modules.database import (
     _clear_master_cache, _clear_audit_cache, _clear_all_cache,
     _clear_help_request_cache, _clear_access_request_cache,
     clear_cache_for_tables,
-    load_realtime_ledger, load_production_history, insert_row, update_row,
+    load_realtime_ledger, load_production_history, archive_old_completed,
+    insert_row, update_row,
     delete_all_rows, delete_production_row_by_sn,
     load_app_setting, save_app_setting,
     submit_help_request, load_help_requests,
@@ -178,6 +179,13 @@ if _rt_changed:
         st.session_state.production_db = load_realtime_ledger()
     if "production_schedule" in _rt_changed and st.session_state.get("login_status"):
         st.session_state.schedule_db = load_schedule()
+
+# ── 일별 아카이브: 완료 후 30일 이상 된 레코드를 production_history로 이동 ──
+# 로그인한 세션에서 하루 1번만 실행 (UI 차단 없음 — 실패해도 무시)
+if (st.session_state.get("login_status")
+        and st.session_state.get("_archive_date") != str(date.today())):
+    archive_old_completed(days=30)
+    st.session_state["_archive_date"] = str(date.today())
 
 PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
 CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower", "schedule_manager"]
@@ -2276,6 +2284,10 @@ elif curr_l == "조립 라인":
                 ba1, ba2, ba3, ba4 = st.columns([2, 1.5, 1, 1])
                 ba1.markdown(f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(checked_idxs)}개 선택됨</span>", unsafe_allow_html=True)
                 _bulk_ng_cause = ba2.selectbox("불량 원인", _ASM_DEFECT_CAUSES, key=f"bulk_ng_cause_{curr_g}", label_visibility="collapsed")
+                if _bulk_ng_cause == "기타 (직접 입력)":
+                    _bulk_ng_cause_final = st.text_input("직접 입력", key=f"bulk_ng_cause_txt_{curr_g}", placeholder="불량 원인 직접 입력")
+                else:
+                    _bulk_ng_cause_final = _bulk_ng_cause
                 if ba3.button("✅ 일괄 완료", key=f"bulk_ok_{curr_g}", type="primary", use_container_width=True,
                              disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
                     _bulk = []
@@ -2294,7 +2306,7 @@ elif curr_l == "조립 라인":
                     _rerun("asm_hist")
                 if ba4.button("🚫 일괄 불량", key=f"bulk_ng_{curr_g}", use_container_width=True,
                              disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
-                    if _bulk_ng_cause in ["(선택)", ""]:
+                    if _bulk_ng_cause_final in ["(선택)", ""]:
                         st.warning("⚠️ 불량 원인을 먼저 선택해주세요.")
                     else:
                         _bulk = []
@@ -2303,7 +2315,7 @@ elif curr_l == "조립 라인":
                             if ci_int in f_df.index:
                                 _r = f_df.loc[ci_int]
                                 _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                    '증상': f'불량입고출처: 조립 라인 | 불량원인: {_bulk_ng_cause}'}
+                                    '증상': f'불량입고출처: 조립 라인 | 불량원인: {_bulk_ng_cause_final}'}
                                 update_row(_r['시리얼'], _upd)
                                 insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                     이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
@@ -2371,12 +2383,16 @@ elif curr_l == "조립 라인":
                         st.caption(f"🚫 불량 원인 입력 — `{row['시리얼']}`")
                         _nc1, _nc2, _nc3 = st.columns([2.5, 1, 1])
                         _cause_ng = _nc1.selectbox("불량 원인", _ASM_DEFECT_CAUSES, key=f"_ng_cause_asm_{idx}", label_visibility="collapsed")
+                        if _cause_ng == "기타 (직접 입력)":
+                            _cause_ng_final = st.text_input("직접 입력", key=f"_ng_cause_asm_txt_{idx}", placeholder="불량 원인 직접 입력")
+                        else:
+                            _cause_ng_final = _cause_ng
                         if _nc2.button("확정", key=f"_ng_confirm_asm_{idx}", type="primary", use_container_width=True):
-                            if _cause_ng in ["(선택)", ""]:
+                            if _cause_ng_final in ["(선택)", ""]:
                                 st.warning("⚠️ 불량 원인을 선택해주세요.")
                             else:
                                 _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                    '증상': f'불량입고출처: 조립 라인 | 불량원인: {_cause_ng}'}
+                                    '증상': f'불량입고출처: 조립 라인 | 불량원인: {_cause_ng_final}'}
                                 update_row(row['시리얼'], _upd)
                                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                     이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
@@ -2786,6 +2802,10 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 hba1.markdown(f"<span style='color:#2E75B6;font-weight:700;'>✓ {len(_h_checked)}개 선택됨</span>",
                               unsafe_allow_html=True)
                 _hist_bulk_ng_cause = hba2.selectbox("불량 원인", DEFECT_CAUSES, key=f"hist_bulk_ng_cause_{curr_g}_{curr_l}", label_visibility="collapsed")
+                if _hist_bulk_ng_cause == "기타 (직접 입력)":
+                    _hist_bulk_ng_cause_final = st.text_input("직접 입력", key=f"hist_bulk_ng_cause_txt_{curr_g}_{curr_l}", placeholder="불량 원인 직접 입력")
+                else:
+                    _hist_bulk_ng_cause_final = _hist_bulk_ng_cause
                 if hba3.button(f"✅ 일괄 {btn_lbl}", key=f"hist_bulk_ok_{curr_g}_{curr_l}",
                                type="primary", use_container_width=True,
                                disabled=not check_perm(f"{curr_l}::{curr_g}", "write")):
@@ -2808,7 +2828,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     _rerun("chk_hist")
                 if hba4.button("🚫 일괄 불량", key=f"hist_bulk_ng_{curr_g}_{curr_l}",
                                use_container_width=True):
-                    if _hist_bulk_ng_cause in ["(선택)", ""]:
+                    if _hist_bulk_ng_cause_final in ["(선택)", ""]:
                         st.warning("⚠️ 불량 원인을 먼저 선택해주세요.")
                     else:
                         _bulk = []
@@ -2818,7 +2838,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 _r = f_df.loc[ci_int]
                                 if _r['상태'] in ["검사중","포장중","수리 완료(재투입)"]:
                                     _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                        '증상': f'불량입고출처: {curr_l} | 불량원인: {_hist_bulk_ng_cause}'}
+                                        '증상': f'불량입고출처: {curr_l} | 불량원인: {_hist_bulk_ng_cause_final}'}
                                     update_row(_r['시리얼'], _upd)
                                     insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
                                         이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
@@ -2898,12 +2918,16 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         st.caption(f"🚫 불량 원인 입력 — `{row['시리얼']}`")
                         _hnc1, _hnc2, _hnc3 = st.columns([2.5, 1, 1])
                         _hist_cause_ng = _hnc1.selectbox("불량 원인", DEFECT_CAUSES, key=f"_ng_cause_hist_{idx}", label_visibility="collapsed")
+                        if _hist_cause_ng == "기타 (직접 입력)":
+                            _hist_cause_ng_final = st.text_input("직접 입력", key=f"_ng_cause_hist_txt_{idx}", placeholder="불량 원인 직접 입력")
+                        else:
+                            _hist_cause_ng_final = _hist_cause_ng
                         if _hnc2.button("확정", key=f"_ng_confirm_hist_{idx}", type="primary", use_container_width=True):
-                            if _hist_cause_ng in ["(선택)", ""]:
+                            if _hist_cause_ng_final in ["(선택)", ""]:
                                 st.warning("⚠️ 불량 원인을 선택해주세요.")
                             else:
                                 _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
-                                    '증상': f'불량입고출처: {curr_l} | 불량원인: {_hist_cause_ng}'}
+                                    '증상': f'불량입고출처: {curr_l} | 불량원인: {_hist_cause_ng_final}'}
                                 update_row(row['시리얼'], _upd)
                                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                                     이전상태=row['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
