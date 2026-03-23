@@ -3587,11 +3587,13 @@ elif curr_l == "생산 지표 관리":
     st.markdown("<div class='db-section' style='background:#4a4540;'>▪ 핵심 지표</div>", unsafe_allow_html=True)
     k = st.columns(5)
     kpi_data = [
-        ("계획", f"{plan_qty:,}", "대", "#2471a3"),
-        ("생산 완료", f"{total_done:,}", "대", "#1e8449"),
-        ("달성률", f"{achieve_pct}", "%", "#1e8449" if achieve_pct >= 100 else "#d68910" if achieve_pct >= 70 else "#c0392b"),
-        ("진행 중", f"{total_wip:,}", "대", "#2471a3"),
-        ("불량률", f"{defect_pct}", "%", "#c0392b" if defect_pct > 3 else "#d68910" if defect_pct > 0 else "#1e8449"),
+        ("계획",    f"{plan_qty:,}", "대", "#5b6abf"),   # 인디고 — 고정 목표
+        ("생산 완료", f"{total_done:,}", "대", "#1e8449"),  # 초록
+        ("달성률",  f"{achieve_pct}", "%",
+            "#1e8449" if achieve_pct >= 100 else "#d68910" if achieve_pct >= 70 else "#c0392b"),
+        ("진행 중", f"{total_wip:,}", "대", "#0891b2"),   # 청록 — 계획(인디고)과 구분
+        ("불량률",  f"{defect_pct}", "%",
+            "#c0392b" if defect_pct > 3 else "#d68910" if defect_pct > 0 else "#6b7280"),  # 0%=회색(달성률 초록과 구분)
     ]
     for col, (lbl, val, unit, color) in zip(k, kpi_data):
         _sub = f"{date_from} ~ {plan_date_to}" if lbl == "계획" else f"{date_from} ~ {date_to_d}"
