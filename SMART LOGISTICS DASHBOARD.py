@@ -1034,31 +1034,37 @@ def show_inline_day_panel():
                 etc     = st.text_input("기타")
 
                 if st.form_submit_button("✅ 등록", use_container_width=True, type="primary"):
-                    try:
-                        qty = max(0, int(qty_str.strip() or "0"))
-                    except ValueError:
-                        qty = 0
-                    # 직접 입력 우선, 없으면 드롭박스 선택값
-                    model = model_txt.strip() or model_sel
-                    pn    = pn_txt.strip()    or pn_sel
-                    if model.strip() or note.strip():
-                        note_combined = " / ".join(filter(None, [note.strip(), etc.strip()]))
-                        if insert_schedule({
-                            '날짜': selected_date, '반': ban,
-                            '카테고리': cat, 'pn': pn, '모델명': model,
-                            '조립수': qty, '출하계획': '',
-                            '특이사항': note_combined, '작성자': st.session_state.user_id
-                        }):
-                            _clear_schedule_cache()
-                            st.session_state.schedule_db = load_schedule()
-                            st.session_state.cal_action       = "view_day"
-                            st.session_state.cal_action_data  = selected_date
-                            st.session_state["_sch_add_toast"] = f"✅ [{ban}] {selected_date} 일정 등록 완료"
-                            _rerun(_dp_xp_key)
-                        # 실패 시: insert_schedule() 내부에서 st.error() 호출됨
-                        # rerun 없이 폼 유지 → 에러 메시지가 폼 안에 표시됨
+                    if st.session_state.get("_sch_add_saving"):
+                        st.warning("저장 중입니다. 잠시 기다려주세요.")
                     else:
-                        st.warning("모델명 또는 특이사항을 입력해주세요.")
+                        try:
+                            qty = max(0, int(qty_str.strip() or "0"))
+                        except ValueError:
+                            qty = 0
+                        # 직접 입력 우선, 없으면 드롭박스 선택값
+                        model = model_txt.strip() or model_sel
+                        pn    = pn_txt.strip()    or pn_sel
+                        if model.strip() or note.strip():
+                            note_combined = " / ".join(filter(None, [note.strip(), etc.strip()]))
+                            st.session_state["_sch_add_saving"] = True
+                            with st.spinner("💾 일정 등록 중..."):
+                                result = insert_schedule({
+                                    '날짜': selected_date, '반': ban,
+                                    '카테고리': cat, 'pn': pn, '모델명': model,
+                                    '조립수': qty, '출하계획': '',
+                                    '특이사항': note_combined, '작성자': st.session_state.user_id
+                                })
+                            st.session_state.pop("_sch_add_saving", None)
+                            if result:
+                                _clear_schedule_cache()
+                                st.session_state.schedule_db = load_schedule()
+                                st.session_state.cal_action       = "view_day"
+                                st.session_state.cal_action_data  = selected_date
+                                st.session_state["_sch_add_toast"] = f"✅ [{ban}] {selected_date} 일정 등록 완료"
+                                _rerun(_dp_xp_key)
+                            # 실패 시: insert_schedule() 내부에서 st.error() 호출됨
+                        else:
+                            st.warning("모델명 또는 특이사항을 입력해주세요.")
             return
 
         # ── 일정 목록 보기 (view_day) ─────────────────────────
