@@ -161,6 +161,8 @@ def load_realtime_ledger() -> pd.DataFrame:
         if rows:
             df = pd.DataFrame(rows)
             df = df.drop(columns=[c for c in ['id','deleted_at','deleted_by'] if c in df.columns])
+            # 시리얼 중복 제거: 같은 시리얼이 두 쿼리에 모두 포함된 엣지케이스 방어
+            df = df.drop_duplicates(subset=['시리얼'], keep='last')
             return df.fillna("")
         return pd.DataFrame(columns=_EMPTY_COLS)
     except Exception as e:
@@ -465,6 +467,25 @@ def load_audit_log(limit: int = _MAX_AUDIT_LOG_ROWS) -> pd.DataFrame:
         return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
     except Exception:
         return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+
+
+@st.cache_data(ttl=60)
+def load_audit_log_by_date(date_from: str, date_to: str) -> pd.DataFrame:
+    """날짜 범위 기반 감사 로그 조회 — 수리 현황 리포트 누적 집계용."""
+    _EMPTY = pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+    try:
+        res = (get_supabase().table("audit_log")
+               .select("*")
+               .gte("시간", date_from)
+               .lte("시간", date_to + " 23:59:59")
+               .order("시간", desc=False)
+               .limit(10000)
+               .execute())
+        if res.data:
+            return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
+        return _EMPTY
+    except Exception:
+        return _EMPTY
 
 
 @st.cache_data(ttl=30)
