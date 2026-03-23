@@ -458,6 +458,22 @@ def load_audit_log(limit: int = _MAX_AUDIT_LOG_ROWS) -> pd.DataFrame:
         return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
 
 
+@st.cache_data(ttl=30)
+def load_oqc_fail_audit_log() -> pd.DataFrame:
+    """OQC 부적합 판정 이벤트만 서버 필터로 조회 (행 수 제한 없음)."""
+    try:
+        res = (get_supabase().table("audit_log")
+               .select("*")
+               .like("비고", "OQC 부적합 - 사유:%")
+               .order("시간", desc=True)
+               .execute())
+        if res.data:
+            return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
+        return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+    except Exception:
+        return pd.DataFrame(columns=['시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+
+
 def delete_all_audit_log() -> bool:
     try:
         get_supabase().table("audit_log").delete().gte("id", 0).execute()

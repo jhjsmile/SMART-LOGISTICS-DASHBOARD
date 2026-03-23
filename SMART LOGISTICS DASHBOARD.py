@@ -59,7 +59,7 @@ from modules.database import (
     load_app_setting, save_app_setting,
     submit_help_request, load_help_requests,
     submit_access_request, load_access_requests, review_access_request,
-    insert_audit_log, load_audit_log,
+    insert_audit_log, load_audit_log, load_oqc_fail_audit_log,
     delete_all_audit_log, delete_audit_log_row,
     insert_material_serials, load_material_serials,
     load_material_serials_bulk, search_material_by_sn,
@@ -4829,10 +4829,13 @@ elif curr_l == "OQC 라인":
     st.divider()
 
     # ── OQC 결과 이력 ─────────────────────────────────────────────
-    # 부적합 판정 후 불량 처리 중으로 이관된 항목도 포함 (수리 컬럼 기준)
+    # 부적합 판정 후 불량 처리 중으로 이관된 항목도 포함
+    # 구 방식: 수리 컬럼에 'OQC 부적합 판정' / 신규 방식: OQC판정 컬럼에 'OQC 부적합'
     _oqc_fail_transferred = db_oqc[
-        (db_oqc['상태'] == '불량 처리 중') &
-        (db_oqc['수리'].str.contains('OQC 부적합 판정', na=False))
+        (db_oqc['상태'] == '불량 처리 중') & (
+            db_oqc['수리'].str.contains('OQC 부적합 판정', na=False) |
+            db_oqc['OQC판정'].str.contains('OQC 부적합', na=False)
+        )
     ]
     oqc_done = pd.concat([
         db_oqc[db_oqc['상태'].isin(['출하승인', '부적합(OQC)'])],
@@ -4974,10 +4977,13 @@ elif curr_l == "OQC 라인":
     st.markdown("<div class='section-title'>📊 OQC 분석 차트</div>", unsafe_allow_html=True)
 
     db_oqc_chart = db_oqc_all.copy()  # 전체 반 기준
-    # 부적합 판정 후 불량 처리 중으로 이관된 항목을 부적합(OQC)로 정규화하여 포함
+    # 부적합 판정 후 불량 처리 중인 항목을 부적합(OQC)로 정규화하여 포함
+    # 구 방식: 수리 컬럼에 'OQC 부적합 판정' / 신규 방식: OQC판정 컬럼에 'OQC 부적합'
     _chart_transferred = db_oqc_chart[
-        (db_oqc_chart['상태'] == '불량 처리 중') &
-        (db_oqc_chart['수리'].str.contains('OQC 부적합 판정', na=False))
+        (db_oqc_chart['상태'] == '불량 처리 중') & (
+            db_oqc_chart['수리'].str.contains('OQC 부적합 판정', na=False) |
+            db_oqc_chart['OQC판정'].str.contains('OQC 부적합', na=False)
+        )
     ].copy()
     _chart_transferred['상태'] = '부적합(OQC)'
     oqc_chart_df = pd.concat([
@@ -5007,13 +5013,8 @@ elif curr_l == "OQC 라인":
         _fail_nc['부적합 사유'] = _fail_nc.apply(_extract_reason_nc, axis=1)
 
         # ── 부적합 판정 이력 (OQC) — audit_log 기준 ──────────────────
-        # OQC 부적합 판정 시 audit_log에 이후상태='불량 처리 중', 비고='OQC 부적합 - 사유: ...' 로 기록됨
-        # '이관' 이벤트(비고='OQC 부적합 이관 - 사유: ...')는 판정 이벤트가 아니므로 제외
-        # → 비고가 정확히 'OQC 부적합 - 사유:' 로 시작하는 행만 추출
-        _nc_audit_all = load_audit_log()
-        _fail_audit = _nc_audit_all[
-            _nc_audit_all['비고'].astype(str).str.startswith('OQC 부적합 - 사유:')
-        ].copy()
+        # 서버 필터로 'OQC 부적합 - 사유:' 비고만 조회 (행 수 제한 없음)
+        _fail_audit = load_oqc_fail_audit_log().copy()
 
         # 비고에서 사유 파싱: "OQC 부적합 - 사유: {reason}" 형식
         def _extract_audit_reason(bigo):
