@@ -2261,7 +2261,7 @@ elif curr_l == "조립 라인":
                     sc3.metric("🏗️ 작업중", wip)
                     sc4.metric("🚨 불량", defect, delta=None if defect == 0 else f"{defect}건", delta_color="inverse")
 
-        with st.expander(f"📋 {curr_g} 생산 이력  ·  {len(f_df)}건", expanded=_xp("asm_hist"), key="_xp_asm_hist"):
+        with st.expander(f"📋 {curr_g} 생산 이력  ·  {len(db_g)}건", expanded=_xp("asm_hist"), key="_xp_asm_hist"):
             _asm_chk_key = f"asm_checked_{curr_g}"
             if _asm_chk_key not in st.session_state:
                 st.session_state[_asm_chk_key] = {}
@@ -2273,17 +2273,18 @@ elif curr_l == "조립 라인":
             sc1, sc2 = st.columns([2, 2])
             sn_search = sc1.text_input("🔍 시리얼 검색", placeholder="S/N 스캔 또는 입력...", key=_asm_search_key)
             if sn_search.strip():
-                f_df_view = f_df[f_df['시리얼'].str.contains(sn_search.strip(), case=False, na=False)]
+                # 반 전체(db_g)에서 검색 — 이미 다른 라인으로 이동한 시리얼도 조회 가능
+                f_df_view = db_g[db_g['시리얼'].str.contains(sn_search.strip(), case=False, na=False)]
                 if f_df_view.empty:
                     st.warning(f"🔍 **'{sn_search.strip()}'** 에 해당하는 시리얼이 없습니다.")
-                # 매칭 항목 자동 체크: 위젯 키 직접 설정으로 rerun 없이 적용
+                # 자동 체크는 조립 라인의 처리 가능 상태(actionable)만 적용
                 _asm_cb_ver_now = st.session_state[_asm_search_cnt]
                 _wip_mask = f_df_view['상태'].isin(["조립중", "수리 완료(재투입)"])
                 for _si in f_df_view.index[_wip_mask]:
                     st.session_state[_asm_chk_key][str(_si)] = True
                     st.session_state[f"asm_cb_{curr_g}_{_si}_{_asm_cb_ver_now}"] = True
             else:
-                f_df_view = f_df
+                f_df_view = db_g
 
             checked_idxs = [k for k,v in st.session_state[_asm_chk_key].items() if v]
             if checked_idxs:
@@ -2344,10 +2345,13 @@ elif curr_l == "조립 라인":
                 idx = row['index']
                 is_actionable = row['상태'] in ["조립중", "수리 완료(재투입)"]
                 r = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 2.0])
-                _ck = r[0].checkbox("", key=f"asm_cb_{curr_g}_{idx}_{_asm_cb_ver}",
-                    value=st.session_state[_asm_chk_key].get(str(idx), False),
-                    disabled=not is_actionable, label_visibility="collapsed")
-                st.session_state[_asm_chk_key][str(idx)] = _ck
+                if is_actionable:
+                    _ck = r[0].checkbox("", key=f"asm_cb_{curr_g}_{idx}_{_asm_cb_ver}",
+                        value=st.session_state[_asm_chk_key].get(str(idx), False),
+                        label_visibility="collapsed")
+                    st.session_state[_asm_chk_key][str(idx)] = _ck
+                else:
+                    _ck = False
                 r[1].caption(str(row['시간'])[:16]); r[2].caption(row['모델'])
                 r[3].caption(row['품목코드'])
                 _asm_mc = len(_asm_bulk_mats[_asm_bulk_mats['메인시리얼'] == row['시리얼']]) if not _asm_bulk_mats.empty else 0
