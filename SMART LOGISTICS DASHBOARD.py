@@ -246,63 +246,62 @@ ACTIVE_STATES = ['조립중','검사대기','검사중','OQC대기','OQC중','�
 
 # ── 상태 스타일 (모듈 레벨 상수) ───────────────────────────────
 STATUS_STYLE = {
-    '검사대기': ('#fff3d4','#7a5c00','#f0c878','🔜'),
-    '검사중':   ('#ddeeff','#1a4a7a','#7eb8e8','🔍'),
-    '포장대기': ('#ede0f5','#4a1a7a','#b07ed8','🔜'),
-    '포장중':   ('#fde8d4','#7a3c1a','#e8a87e','📦'),
-    '완료':     ('#d4f0e2','#1f6640','#7ec8a0','✅'),
-    'OQC대기':  ('#fef0d4','#7a5c00','#f0a868','🔜'),
-    'OQC중':    ('#fde8d4','#7a3c1a','#f0a868','🔍'),
-    '출하승인': ('#d4e8f0','#1a4a7a','#7eb8e8','✅'),
-    '조립중':   ('#f0f0f0','#3d3530','#c8b89a','🔧'),
-    '수리 완료(재투입)': ('#f0e8d4','#5a4020','#c8a87a','♻️'),
-    '불량 처리 중': ('#fde8e7','#7a2e2a','#e87e7a','🚫'),
-    '교체됨':      ('#e8e8f4','#3a3a6a','#9a9ad8','🔁'),
+    '검사대기': ('#2a2510','#f5c842','#5a4d00','🔜'),
+    '검사중':   ('#0e2040','#4da6ff','#1a4a8a','🔍'),
+    '포장대기': ('#2a1040','#c084fc','#5a1a8a','🔜'),
+    '포장중':   ('#2a1800','#fb923c','#7a3500','📦'),
+    '완료':     ('#0a2818','#3ecf8e','#0e6040','✅'),
+    'OQC대기':  ('#2a2000','#fbbf24','#7a5500','🔜'),
+    'OQC중':    ('#0a2228','#34d399','#0e5840','🔍'),
+    '출하승인': ('#0a1e2e','#38bdf8','#0c4a70','✅'),
+    '조립중':   ('#1e2a3a','#94a3b8','#2d3f55','🔧'),
+    '수리 완료(재투입)': ('#281800','#fb923c','#7a3500','♻️'),
+    '불량 처리 중': ('#2e0808','#f87171','#7c1010','🚫'),
+    '교체됨':      ('#141428','#818cf8','#2e2e80','🔁'),
 }
 
 # ── 상태별 배경색 (STATE_CLR / STATE_CLR2 공통 상수, 두 곳에서 재사용) ──
 STATUS_BG = {
-    '조립중':           '#fff3d4',
-    '검사대기':         '#fff3d4',
-    '검사중':           '#ddeeff',
-    '포장대기':         '#ede0f5',
-    '포장중':           '#fde8d4',
-    '완료':             '#d4f0e2',
-    '불량 처리 중':     '#fde8e7',
-    '수리 완료(재투입)':'#e8f4fd',
-    'OQC대기':          '#fff3d4',
-    'OQC중':            '#ddeeff',
-    '출하승인':         '#d4f0e2',
-    '부적합(OQC)':      '#fde8e7',
-    '교체됨':           '#e8e8f4',
+    '조립중':           '#1e2a3a',
+    '검사대기':         '#2a2510',
+    '검사중':           '#0e2040',
+    '포장대기':         '#2a1040',
+    '포장중':           '#2a1800',
+    '완료':             '#0a2818',
+    '불량 처리 중':     '#2e0808',
+    '수리 완료(재투입)':'#281800',
+    'OQC대기':          '#2a2000',
+    'OQC중':            '#0a2228',
+    '출하승인':         '#0a1e2e',
+    '부적합(OQC)':      '#2e0808',
+    '교체됨':           '#141428',
 }
 
 st.markdown("""
     <style>
     /* ════════════════════════════════════════
-       파스텔 테마 (v1.0.0)
-       배경: 따뜻한 크림/페이퍼 톤
-       강조: 소프트 블루 · 세이지 그린 · 피치 · 라벤더
+       다크 스마트팩토리 테마 (v2.0.0)
+       배경: 딥 네이비 / 다크 슬레이트
+       강조: 일렉트릭 블루 · 네온 그린 · 앰버 · 레드
     ════════════════════════════════════════ */
 
     /* 전체 앱 배경 */
     .stApp {
-        background-color: #faf6ef !important;
+        background-color: #0d1117 !important;
         overflow-x: hidden;
     }
 
     /* 사이드바 */
     [data-testid="stSidebar"] {
-        background-color: #f0ebe0 !important;
-        border-right: 1px solid #e0d8c8 !important;
+        background-color: #161b27 !important;
+        border-right: 1px solid #2d3a50 !important;
     }
     [data-testid="stSidebar"] p,
     [data-testid="stSidebar"] span:not(.stButton span),
     [data-testid="stSidebar"] .stMarkdown,
     [data-testid="stSidebar"] .stCaption {
-        color: #3d3530 !important;
+        color: #c9d1d9 !important;
     }
-    /* 사이드바 secondary 버튼 텍스트는 기본 색상 유지 */
     [data-testid="stSidebar"] .stButton button {
         color: inherit;
     }
@@ -312,20 +311,19 @@ st.markdown("""
         max-width: 1300px !important;
         padding-left: 2rem !important;
         padding-right: 2rem !important;
-        background-color: #faf6ef;
+        background-color: #0d1117;
     }
 
     /* 입력 필드 */
     .stTextInput input,
     .stNumberInput input,
     .stTextArea textarea {
-        background-color: #fffdf7 !important;
-        border: 1px solid #ddd5c0 !important;
-        border-radius: 8px !important;
-        color: #3d3530 !important;
+        background-color: #1c2333 !important;
+        border: 1px solid #2d3a50 !important;
+        border-radius: 6px !important;
+        color: #e2e8f0 !important;
         max-width: 480px !important;
     }
-    /* 검색 필드는 더 짧게 */
     .stTextInput input[placeholder*="검색"],
     .stTextInput input[placeholder*="S/N"],
     .stTextInput input[placeholder*="시리얼"] {
@@ -333,52 +331,48 @@ st.markdown("""
     }
     .stTextInput input:focus,
     .stTextArea textarea:focus {
-        border-color: #7eb8e8 !important;
-        box-shadow: 0 0 0 2px rgba(126,184,232,0.25) !important;
+        border-color: #4a9eff !important;
+        box-shadow: 0 0 0 2px rgba(74,158,255,0.25) !important;
     }
-    /* selectbox, multiselect 너비 제한 */
+    /* selectbox, multiselect */
     .stSelectbox > div > div,
     .stMultiSelect > div > div {
         max-width: 480px !important;
     }
-    /* selectbox 드롭다운 팝업 글자 선명하게 */
     [data-baseweb="popover"],
     [data-baseweb="popover"] * {
         -webkit-font-smoothing: antialiased !important;
         -moz-osx-font-smoothing: grayscale !important;
-        font-smoothing: antialiased !important;
         opacity: 1 !important;
         backdrop-filter: none !important;
         -webkit-backdrop-filter: none !important;
     }
     [data-baseweb="menu"] {
-        background: #ffffff !important;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
-        border: 1px solid #e0d8c8 !important;
-        border-radius: 8px !important;
+        background: #1c2333 !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+        border: 1px solid #2d3a50 !important;
+        border-radius: 6px !important;
     }
     [data-baseweb="menu"] li,
     [data-baseweb="option"] {
-        color: #2a2420 !important;
+        color: #c9d1d9 !important;
         font-weight: 500 !important;
         opacity: 1 !important;
-        background: #ffffff !important;
+        background: #1c2333 !important;
     }
     [data-baseweb="menu"] li:hover,
     [data-baseweb="option"]:hover {
-        background: #f5f0e8 !important;
-        color: #2a2420 !important;
+        background: #243049 !important;
+        color: #e2e8f0 !important;
     }
     [aria-selected="true"][data-baseweb="option"] {
-        background: #e8e0d0 !important;
-        color: #2a2420 !important;
+        background: #1a3560 !important;
+        color: #4a9eff !important;
         font-weight: 700 !important;
     }
-    /* number_input 짧게 */
     .stNumberInput {
         max-width: 200px !important;
     }
-    /* 파일 업로더 너비 제한 */
     .stFileUploader {
         max-width: 520px !important;
     }
@@ -391,155 +385,155 @@ st.markdown("""
         display: inline-flex !important; justify-content: center !important; align-items: center !important;
         margin-top: 1px !important; padding: 6px 16px !important;
         min-width: 80px !important; max-width: 100% !important;
-        border-radius: 8px !important; font-weight: 600 !important;
+        border-radius: 6px !important; font-weight: 600 !important;
         white-space: nowrap !important; overflow: hidden !important;
-        text-overflow: ellipsis !important; transition: all 0.2s ease !important;
+        text-overflow: ellipsis !important; transition: all 0.18s ease !important;
     }
-    /* Secondary (기본) → 아이보리 배경 */
+    /* Secondary */
     .stButton > button:not([kind="primary"]),
     div[data-testid="stFormSubmitButton"] > button:not([kind="primary"]) {
-        background-color: #fffdf7 !important;
-        border: 1px solid #c8b89a !important;
-        color: #3d3530 !important;
+        background-color: #1c2333 !important;
+        border: 1px solid #2d3a50 !important;
+        color: #c9d1d9 !important;
     }
     .stButton > button:not([kind="primary"]):hover {
-        background-color: #f0ebe0 !important;
-        border-color: #7eb8e8 !important;
-        color: #2a2420 !important;
+        background-color: #243049 !important;
+        border-color: #4a9eff !important;
+        color: #e2e8f0 !important;
     }
-    /* Primary → 파스텔 블루 */
+    /* Primary */
     .stButton > button[kind="primary"],
     div[data-testid="stFormSubmitButton"] > button[kind="primary"] {
-        background-color: #7eb8e8 !important;
-        border: 1px solid #6aaad8 !important;
+        background-color: #1a5fc4 !important;
+        border: 1px solid #4a9eff !important;
         color: #fff !important;
     }
     .stButton > button[kind="primary"]:hover {
-        background-color: #6aaad8 !important;
+        background-color: #2070d8 !important;
+        box-shadow: 0 0 10px rgba(74,158,255,0.4) !important;
     }
-    /* ── 최신 Streamlit 버튼 선택자 강제 적용 ── */
+    /* 최신 Streamlit 선택자 */
     button[data-testid="baseButton-secondary"],
     button[data-testid="baseButton-secondaryFormSubmit"] {
-        background-color: #fffdf7 !important;
-        border: 1px solid #c8b89a !important;
-        color: #3d3530 !important;
+        background-color: #1c2333 !important;
+        border: 1px solid #2d3a50 !important;
+        color: #c9d1d9 !important;
         font-weight: 600 !important;
-        border-radius: 8px !important;
+        border-radius: 6px !important;
     }
     button[data-testid="baseButton-secondary"]:hover,
     button[data-testid="baseButton-secondaryFormSubmit"]:hover {
-        background-color: #f0ebe0 !important;
-        border-color: #7eb8e8 !important;
-        color: #2a2420 !important;
+        background-color: #243049 !important;
+        border-color: #4a9eff !important;
+        color: #e2e8f0 !important;
     }
     button[data-testid="baseButton-primary"],
     button[data-testid="baseButton-primaryFormSubmit"] {
-        background-color: #7eb8e8 !important;
-        border: 1px solid #6aaad8 !important;
+        background-color: #1a5fc4 !important;
+        border: 1px solid #4a9eff !important;
         color: #ffffff !important;
         font-weight: 600 !important;
-        border-radius: 8px !important;
+        border-radius: 6px !important;
     }
     button[data-testid="baseButton-primary"]:hover,
     button[data-testid="baseButton-primaryFormSubmit"]:hover {
-        background-color: #6aaad8 !important;
+        background-color: #2070d8 !important;
         color: #ffffff !important;
+        box-shadow: 0 0 10px rgba(74,158,255,0.4) !important;
     }
-    /* 모든 버튼 텍스트 색 강제 (최후 방어) */
     .stButton button p,
     .stButton button span,
     .stButton button div {
         color: inherit !important;
     }
-    /* 다운로드 버튼 → 파스텔 아이보리 + 진한 글자 */
+    /* 다운로드 버튼 */
     [data-testid="stDownloadButton"] > button {
-        background-color: #fffdf7 !important;
-        border: 1px solid #c8b89a !important;
-        color: #3d3530 !important;
+        background-color: #1c2333 !important;
+        border: 1px solid #2d3a50 !important;
+        color: #c9d1d9 !important;
         font-weight: 600 !important;
-        border-radius: 8px !important;
+        border-radius: 6px !important;
         width: 100% !important;
     }
     [data-testid="stDownloadButton"] > button:hover {
-        background-color: #f0ebe0 !important;
-        border-color: #7eb8e8 !important;
+        background-color: #243049 !important;
+        border-color: #4a9eff !important;
     }
 
     /* 컨테이너 border */
     [data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #fffdf7 !important;
-        border: 1px solid #e0d8c8 !important;
-        border-radius: 10px !important;
+        background-color: #141d2e !important;
+        border: 1px solid #2d3a50 !important;
+        border-radius: 8px !important;
     }
 
     /* 탭 */
     .stTabs [data-baseweb="tab-list"] {
-        background-color: #f0ebe0;
-        border-radius: 8px;
+        background-color: #161b27;
+        border-radius: 6px;
         padding: 2px;
+        border-bottom: 1px solid #2d3a50;
     }
-    .stTabs [data-baseweb="tab"] { color: #8a7f72 !important; }
+    .stTabs [data-baseweb="tab"] { color: #7a8899 !important; }
     .stTabs [aria-selected="true"] {
-        background-color: #fffdf7 !important;
-        color: #3d3530 !important;
-        border-bottom: 3px solid #7eb8e8 !important;
+        background-color: #1c2b45 !important;
+        color: #4a9eff !important;
+        border-bottom: 3px solid #4a9eff !important;
         border-radius: 6px 6px 0 0;
     }
 
     /* 타이틀 / 섹션 헤더 */
     .centered-title {
         text-align: center; font-weight: bold;
-        margin: 20px 0; color: #2a2420 !important;
+        margin: 20px 0; color: #e2e8f0 !important;
     }
     .section-title {
-        background-color: #f5f0e8; color: #2a2420;
-        padding: 14px 20px; border-radius: 10px;
+        background-color: #141d2e; color: #c9d1d9;
+        padding: 12px 20px; border-radius: 6px;
         font-weight: bold; margin: 8px 0 20px 0;
-        border-left: 10px solid #7eb8e8;
-        box-shadow: 0 2px 6px rgba(180,160,120,0.15);
+        border-left: 4px solid #4a9eff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
     }
 
-    /* 본문 텍스트 기본 색상 */
+    /* 본문 텍스트 */
     .stApp p, .stApp label, .stApp .stMarkdown p {
-        color: #2a2420;
+        color: #c9d1d9;
     }
-    /* subheader / h3 / h2 / write 텍스트 */
     .stApp h1, .stApp h2, .stApp h3,
     .stApp h4, .stApp h5, .stApp h6 {
-        color: #2a2420 !important;
+        color: #e2e8f0 !important;
     }
-    /* st.write, st.caption 등 일반 텍스트 */
     .stApp .stMarkdown,
     .stApp .stMarkdown p,
     .stApp .stMarkdown span,
     .stApp .stMarkdown strong,
     .stApp [data-testid="stMarkdownContainer"] p,
     .stApp [data-testid="stMarkdownContainer"] span {
-        color: #2a2420 !important;
+        color: #c9d1d9 !important;
     }
-    /* metric, caption */
     .stApp [data-testid="stMetricLabel"],
     .stApp [data-testid="stMetricValue"],
     .stApp [data-testid="stCaptionContainer"] {
-        color: #5a5048 !important;
+        color: #7a8899 !important;
     }
 
     /* 통계 박스 */
     .stat-box {
         display: flex; flex-direction: column;
         justify-content: center; align-items: center;
-        background-color: #fffdf7; border-radius: 12px;
-        padding: 16px 8px; border: 1px solid #e0d8c8;
+        background-color: #141d2e; border-radius: 8px;
+        padding: 16px 8px; border: 1px solid #2d3a50;
         margin-bottom: 8px;
-        box-shadow: 0 4px 10px rgba(180,160,120,0.1);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         width: 100%; box-sizing: border-box; overflow: hidden;
     }
     .stat-label {
-        font-size: clamp(0.65rem, 1vw, 0.88rem); color: #8a7f72;
+        font-size: clamp(0.65rem, 1vw, 0.88rem); color: #7a8899;
         font-weight: bold; margin-bottom: 8px; white-space: nowrap;
+        text-transform: uppercase; letter-spacing: 0.5px;
     }
     .stat-value {
-        font-size: clamp(1.4rem, 2vw, 2.4rem); color: #5a96c8;
+        font-size: clamp(1.4rem, 2vw, 2.4rem); color: #4a9eff;
         font-weight: bold; line-height: 1; white-space: nowrap;
     }
 
@@ -551,13 +545,13 @@ st.markdown("""
         transition: box-shadow 0.15s ease, border-color 0.15s ease;
     }
     .cal-day-wrap:hover {
-        box-shadow: 0 4px 16px rgba(126,184,232,0.35);
-        border-color: #7eb8e8 !important;
+        box-shadow: 0 4px 16px rgba(74,158,255,0.3);
+        border-color: #4a9eff !important;
     }
     .cal-cell {
-        background: #fffdf8;
-        border: 1px solid #e0d8c8;
-        border-radius: 8px;
+        background: #141d2e;
+        border: 1px solid #2d3a50;
+        border-radius: 6px;
         padding: 8px 6px;
         min-height: 120px;
         box-sizing: border-box;
@@ -565,17 +559,17 @@ st.markdown("""
         cursor: pointer;
     }
     .cal-cell:hover {
-        transform: scale(1.05);
-        box-shadow: 0 8px 24px rgba(126,184,232,0.3);
-        border-color: #7eb8e8 !important;
+        transform: scale(1.03);
+        box-shadow: 0 6px 20px rgba(74,158,255,0.25);
+        border-color: #4a9eff !important;
         z-index: 999; position: relative;
     }
     .cal-cell.today {
-        background: #e8f5ed;
-        border: 2px solid #7ec8a0 !important;
+        background: #0a2818;
+        border: 2px solid #3ecf8e !important;
     }
     .cal-day-num {
-        font-weight: bold; color: #3d3530;
+        font-weight: bold; color: #c9d1d9;
         margin-bottom: 4px; font-size: 0.92rem;
     }
     .cal-event {
@@ -583,14 +577,14 @@ st.markdown("""
         margin-bottom: 3px; font-size: 0.63rem; line-height: 1.3;
     }
 
-    /* ── 캘린더 날짜 버튼: 날짜 숫자처럼 보이는 깔끔한 버튼 ── */
+    /* 캘린더 날짜 버튼 */
     .cal-day-btn > div > button,
     .cal-day-btn button {
         background-color: transparent !important;
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
-        color: #3d3530 !important;
+        color: #c9d1d9 !important;
         font-weight: bold !important;
         font-size: 1.0rem !important;
         min-height: 28px !important;
@@ -599,47 +593,67 @@ st.markdown("""
         margin: 0 !important;
         width: 100% !important;
         cursor: pointer !important;
-        border-radius: 6px !important;
+        border-radius: 4px !important;
         transition: background 0.15s !important;
     }
     .cal-day-btn > div > button:hover,
     .cal-day-btn button:hover {
-        background-color: #e4f0f8 !important;
-        color: #2471a3 !important;
+        background-color: #1c2b45 !important;
+        color: #4a9eff !important;
     }
     .cal-today-btn > div > button,
     .cal-today-btn button {
-        color: #1e8449 !important;
+        color: #3ecf8e !important;
     }
 
-    /* ── Expander (펼치기) ── */
+    /* Expander */
     .stExpander {
-        border: 1px solid #e0d8c8 !important;
-        border-radius: 10px !important;
-        background-color: #fffdf7 !important;
+        border: 1px solid #2d3a50 !important;
+        border-radius: 8px !important;
+        background-color: #141d2e !important;
         margin-bottom: 8px !important;
     }
     .stExpander summary,
     .stExpander [data-testid="stExpanderToggleIcon"],
     .stExpander details summary {
-        background-color: #f5f0e8 !important;
-        border-radius: 10px !important;
-        color: #3d3530 !important;
+        background-color: #1c2333 !important;
+        border-radius: 8px !important;
+        color: #c9d1d9 !important;
         padding: 10px 16px !important;
     }
     .stExpander summary:hover {
-        background-color: #ede8de !important;
+        background-color: #243049 !important;
     }
     .stExpander summary p,
     .stExpander summary span,
     .stExpander details summary p {
-        color: #3d3530 !important;
+        color: #c9d1d9 !important;
         font-weight: 600 !important;
     }
-    /* expander 내부 배경 */
     .stExpander details {
-        background-color: #fffdf7 !important;
-        border-radius: 0 0 10px 10px !important;
+        background-color: #141d2e !important;
+        border-radius: 0 0 8px 8px !important;
+    }
+
+    /* 체크박스 */
+    .stCheckbox label span {
+        color: #c9d1d9 !important;
+    }
+
+    /* 데이터프레임 */
+    .stDataFrame, [data-testid="stDataFrameContainer"] {
+        background-color: #141d2e !important;
+        border: 1px solid #2d3a50 !important;
+        border-radius: 6px !important;
+    }
+
+    /* 구분선 */
+    hr { border-color: #2d3a50 !important; }
+
+    /* info / warning / error 박스 */
+    .stAlert {
+        border-radius: 6px !important;
+        border: 1px solid #2d3a50 !important;
     }
 
     /* 좁은 화면 */
@@ -1084,7 +1098,7 @@ def show_inline_day_panel():
 
         ph1, ph2 = st.columns([8, 1])
         ph1.markdown(
-            f"### 📆 {html_mod.escape(str(selected_date))} &nbsp;<span style='font-size:0.85rem;color:#8a7f72;font-weight:normal;'>총 {len(day_data)}건</span>",
+            f"### 📆 {html_mod.escape(str(selected_date))} &nbsp;<span style='font-size:0.85rem;color:#7a8899;font-weight:normal;'>총 {len(day_data)}건</span>",
             unsafe_allow_html=True
         )
         if ph2.button("✖ 닫기", key="inline_view_close"):
@@ -1104,7 +1118,7 @@ def show_inline_day_panel():
                     f"<div style='background:{ban_color}12; border-left:4px solid {ban_color}; "
                     f"padding:7px 14px; border-radius:5px; margin:12px 0 4px 0;'>"
                     f"<span style='color:{ban_color}; font-weight:bold; font-size:0.92rem;'>🏭 {_ban_esc}</span>"
-                    f"<span style='color:#8a7f72; font-size:0.8rem; margin-left:8px;'>{len(ban_rows)}건</span>"
+                    f"<span style='color:#7a8899; font-size:0.8rem; margin-left:8px;'>{len(ban_rows)}건</span>"
                     f"</div>", unsafe_allow_html=True
                 )
                 col_w = [1.8, 2.8, 1.5, 1.2, 1.8, 0.9] if can_edit else [1.8, 2.8, 1.5, 1.2, 2.2]
@@ -1112,7 +1126,7 @@ def show_inline_day_panel():
                 hcols = st.columns(col_w)
                 for hc, hl in zip(hcols, hdrs):
                     hc.markdown(
-                        f"<p style='color:#8a7f72;font-size:0.72rem;font-weight:bold;margin:0 0 2px;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{hl}</p>",
+                        f"<p style='color:#7a8899;font-size:0.72rem;font-weight:bold;margin:0 0 2px;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{hl}</p>",
                         unsafe_allow_html=True
                     )
                 # 성능: iterrows → to_dict('records') (_esc는 루프 밖에서 정의)
@@ -1132,10 +1146,10 @@ def show_inline_day_panel():
 
                     rcols = st.columns(col_w)
                     rcols[0].markdown(f"<span style='background:{cat_color}22;color:{cat_color};font-weight:bold;font-size:0.72rem;padding:1px 6px;border-radius:8px;'>{cat_v}</span>", unsafe_allow_html=True)
-                    rcols[1].markdown(f"<p style='font-size:0.78rem;margin:2px 0;color:#2a2420;font-weight:bold;'>{model_v}{note_str}</p>", unsafe_allow_html=True)
-                    rcols[2].markdown(f"<p style='font-size:0.75rem;margin:2px 0;color:#5a5048;'>{pn_v or '-'}</p>", unsafe_allow_html=True)
+                    rcols[1].markdown(f"<p style='font-size:0.78rem;margin:2px 0;color:#c9d1d9;font-weight:bold;'>{model_v}{note_str}</p>", unsafe_allow_html=True)
+                    rcols[2].markdown(f"<p style='font-size:0.75rem;margin:2px 0;color:#7a8899;'>{pn_v or '-'}</p>", unsafe_allow_html=True)
                     rcols[3].markdown(f"<p style='font-size:0.78rem;margin:2px 0;color:#2471a3;font-weight:bold;'>{qty_str}</p>", unsafe_allow_html=True)
-                    rcols[4].markdown(f"<p style='font-size:0.75rem;margin:2px 0;color:#5a5048;'>{ship_str}</p>", unsafe_allow_html=True)
+                    rcols[4].markdown(f"<p style='font-size:0.75rem;margin:2px 0;color:#7a8899;'>{ship_str}</p>", unsafe_allow_html=True)
 
                     if can_edit and row_id:
                         confirm_key = f"del_confirm_{row_id}"
@@ -1542,7 +1556,7 @@ if _is_admin:
                 st.markdown(
                     f"**{_hr.get('requester','')}** ({_hr.get('role','')})"
                     f"  \n📍 {_hr.get('page','')}  \n💬 {_hr.get('message','')}"
-                    f"  \n<small style='color:#aaa;'>{str(_hr.get('created_at',''))[:16]}</small>",
+                    f"  \n<small style='color:#4a5568;'>{str(_hr.get('created_at',''))[:16]}</small>",
                     unsafe_allow_html=True
                 )
                 _hr_id = _hr.get('id')
@@ -1677,7 +1691,7 @@ def _render_cal_cells(sch_df, cal_year, cal_month, weeks_to_show, today, can_edi
                             f"<div style='background:{color}18; border-left:3px solid {color}; "
                             f"border-radius:3px; padding:2px 5px; font-size:0.65rem; line-height:1.4;'>"
                             f"<span style='color:{color}; font-weight:bold;'>{cat}</span> "
-                            f"<span style='color:#5a5048; font-weight:bold;'>{cnt}건</span>"
+                            f"<span style='color:#7a8899; font-weight:bold;'>{cnt}건</span>"
                             f"</div>"
                         )
                     badge_html += "</div>"
@@ -1752,7 +1766,7 @@ def render_calendar_weekly():
                 st.session_state.cal_week_idx = len(prev_weeks) - 1
             _rerun("cal_weekly")
         w2.markdown(
-            f"<p style='text-align:center; color:#8a7f72; margin:8px 0;'>"
+            f"<p style='text-align:center; color:#7a8899; margin:8px 0;'>"
             f"{cal_year}년 {cal_month}월 {week_idx+1}주차</p>",
             unsafe_allow_html=True)
         if w3.button("다음주 ▶", key="w_next_week", use_container_width=True):
@@ -1883,7 +1897,7 @@ _adm_main_js = """
         '#adm_modal_overlay{display:none;position:fixed;top:0;left:0;',
         'width:100%;height:100%;background:rgba(0,0,0,0.52);',
         'z-index:999995;align-items:center;justify-content:center;}',
-        '#adm_modal_box{background:#fff;border-radius:18px;padding:38px 44px 32px;',
+        '#adm_modal_box{background:#141d2e;border-radius:18px;padding:38px 44px 32px;',
         'min-width:340px;max-width:460px;',
         'box-shadow:0 12px 48px rgba(0,0,0,0.35);text-align:center;}',
         '@keyframes admPopIn{from{transform:scale(0.75);opacity:0}to{transform:scale(1);opacity:1}}',
@@ -1895,7 +1909,7 @@ _adm_main_js = """
         '.adm_submit_btn{background:#e74c3c;color:#fff;border:none;border-radius:10px;',
         'padding:11px 30px;font-size:0.97rem;font-weight:700;cursor:pointer;}',
         '.adm_submit_btn:hover{background:#c0392b;}',
-        '.adm_cancel_btn{background:#eee;color:#555;border:none;border-radius:10px;',
+        '.adm_cancel_btn{background:#eee;color:#7a8899;border:none;border-radius:10px;',
         'padding:11px 24px;font-size:0.97rem;cursor:pointer;}',
         '.adm_cancel_btn:hover{background:#ddd;}'
     ].join('');
@@ -1950,8 +1964,8 @@ _adm_main_js = """
     overlay.id = 'adm_modal_overlay';
     overlay.innerHTML = '<div id="adm_modal_box">'
         + '<div style="font-size:2.4rem;margin-bottom:6px;">🚨</div>'
-        + '<div style="font-size:1.25rem;font-weight:800;color:#1a1a2e;margin-bottom:4px;">관리자 호출</div>'
-        + '<div style="font-size:0.85rem;color:#888;margin-bottom:2px;">호출 사유를 입력하세요 (선택)</div>'
+        + '<div style="font-size:1.25rem;font-weight:800;color:#e2e8f0;margin-bottom:4px;">관리자 호출</div>'
+        + '<div style="font-size:0.85rem;color:#7a8899;margin-bottom:2px;">호출 사유를 입력하세요 (선택)</div>'
         + '<input id="adm_msg_input" type="text" placeholder="예: 라인 이상, 자재 부족, 품질 문제..." maxlength="100"/>'
         + '<div class="adm_btn_row">'
         + '<button id="adm_submit_btn" class="adm_submit_btn">📣 호출하기</button>'
@@ -2043,20 +2057,20 @@ if curr_l == "현황판":
         불량 = len(gdf[gdf['상태'].str.contains('불량|부적합',na=False)])
         투입 = len(gdf)
         cards_html += (
-            f"<div style='flex:1; background:#fffdf8; border:1px solid #e0d8c8; border-radius:14px; padding:20px; box-sizing:border-box; min-width:0;'>"
-            f"<div style='font-size:clamp(1rem,1.5vw,1.2rem); font-weight:bold; margin-bottom:14px; color:#3d3530;'>📍 {g}</div>"
-            f"<div style='background:#f5f0e8; border-radius:10px; padding:14px; text-align:center; margin-bottom:12px;'>"
-            f"<div style='font-size:clamp(0.65rem,1vw,0.85rem); color:#8a7f72; font-weight:bold; margin-bottom:6px;'>총 투입</div>"
+            f"<div style='flex:1; background:#141d2e; border:1px solid #2d3a50; border-radius:14px; padding:20px; box-sizing:border-box; min-width:0;'>"
+            f"<div style='font-size:clamp(1rem,1.5vw,1.2rem); font-weight:bold; margin-bottom:14px; color:#c9d1d9;'>📍 {g}</div>"
+            f"<div style='background:#1c2333; border-radius:10px; padding:14px; text-align:center; margin-bottom:12px;'>"
+            f"<div style='font-size:clamp(0.65rem,1vw,0.85rem); color:#7a8899; font-weight:bold; margin-bottom:6px;'>총 투입</div>"
             f"<div style='font-size:clamp(1.5rem,3vw,2.5rem); color:#5a96c8; font-weight:bold;'>{투입} EA</div></div>"
             f"<div style='display:flex; gap:8px;'>"
-            f"<div style='flex:1; background:#f5f0e8; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
-            f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#8a7f72; font-weight:bold;'>✅ 완료</div>"
+            f"<div style='flex:1; background:#1c2333; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
+            f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#7a8899; font-weight:bold;'>✅ 완료</div>"
             f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#4da875; font-weight:bold;'>{완료}</div></div>"
-            f"<div style='flex:1; background:#f5f0e8; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
-            f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#8a7f72; font-weight:bold;'>🏗️ 작업중</div>"
+            f"<div style='flex:1; background:#1c2333; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
+            f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#7a8899; font-weight:bold;'>🏗️ 작업중</div>"
             f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#5a96c8; font-weight:bold;'>{재공}</div></div>"
-            f"<div style='flex:1; background:#f5f0e8; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
-            f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#8a7f72; font-weight:bold;'>🚨 불량</div>"
+            f"<div style='flex:1; background:#1c2333; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
+            f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#7a8899; font-weight:bold;'>🚨 불량</div>"
             f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#c8605a; font-weight:bold;'>{불량}</div></div>"
             f"</div></div>"
         )
@@ -2125,7 +2139,7 @@ elif curr_l == "조립 라인":
         else:
             th = st.columns([1.2, 2.8, 1.5, 0.8, 1.8, 2.5])
             for col, txt in zip(th, ["유형", "모델명", "P/N", "처리수", "출하계획", "특이사항"]):
-                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:2px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;padding-bottom:3px;border-bottom:2px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
             # 성능: iterrows → to_dict('records')
             for sr in today_sch.to_dict('records'):
                 cat   = str(sr.get('카테고리', '기타'))
@@ -2196,40 +2210,40 @@ elif curr_l == "조립 라인":
 
         # 초과 블록 HTML (한 줄로 유지 - 들여쓰기 4칸 이상이면 마크다운이 코드블록으로 처리)
         if _over > 0:
-            _over_block = f"<div style='text-align:center;padding:12px 20px;background:#e8f8ee;border-radius:12px;border:2px solid #28a745;min-width:100px;'><div style='color:#28a745;font-size:2.2rem;font-weight:900;line-height:1;'>+{_over}</div><div style='color:#28a745;font-size:0.78rem;font-weight:600;margin-top:2px;'>초과 달성</div></div>"
+            _over_block = f"<div style='text-align:center;padding:12px 20px;background:#0a2818;border-radius:8px;border:2px solid #3ecf8e;min-width:100px;'><div style='color:#3ecf8e;font-size:2.2rem;font-weight:900;line-height:1;'>+{_over}</div><div style='color:#3ecf8e;font-size:0.78rem;font-weight:600;margin-top:2px;'>초과 달성</div></div>"
         else:
-            _over_block = "<div style='text-align:center;padding:12px 20px;background:#f5f5f5;border-radius:12px;border:2px solid #ddd;min-width:100px;'><div style='color:#aaa;font-size:2.2rem;font-weight:900;line-height:1;'>-</div><div style='color:#aaa;font-size:0.78rem;font-weight:600;margin-top:2px;'>초과 없음</div></div>"
+            _over_block = "<div style='text-align:center;padding:12px 20px;background:#1c2333;border-radius:8px;border:2px solid #2d3a50;min-width:100px;'><div style='color:#4a5568;font-size:2.2rem;font-weight:900;line-height:1;'>-</div><div style='color:#4a5568;font-size:0.78rem;font-weight:600;margin-top:2px;'>초과 없음</div></div>"
 
         st.markdown(f"""
-        <div style='background:#ffffff;border-radius:16px;padding:24px 28px;margin-bottom:16px;
+        <div style='background:#141d2e;border-radius:8px;padding:24px 28px;margin-bottom:16px;
                     border:2px solid {_bar_color};box-shadow:0 4px 16px rgba(0,0,0,0.1);'>
             <div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;'>
-                <span style='color:#1a1a2e;font-size:1.1rem;font-weight:700;'>🎯 오늘의 목표 달성 현황</span>
-                <span style='color:#888;font-size:0.85rem;'>{today_str}</span>
+                <span style='color:#e2e8f0;font-size:1.1rem;font-weight:700;'>🎯 오늘의 목표 달성 현황</span>
+                <span style='color:#7a8899;font-size:0.85rem;'>{today_str}</span>
             </div>
             <div style='display:flex;align-items:center;gap:16px;margin-bottom:14px;'>
-                <div style='text-align:center;padding:12px 20px;background:#f0f4ff;
-                            border-radius:12px;border:2px solid {_bar_color};min-width:100px;'>
+                <div style='text-align:center;padding:12px 20px;background:#1a2a40;
+                            border-radius:8px;border:2px solid {_bar_color};min-width:100px;'>
                     <div style='color:{_bar_color};font-size:2.2rem;font-weight:900;line-height:1;'>{_done_today}</div>
-                    <div style='color:#555;font-size:0.78rem;font-weight:600;margin-top:2px;'>오늘 누적</div>
+                    <div style='color:#7a8899;font-size:0.78rem;font-weight:600;margin-top:2px;'>오늘 누적</div>
                 </div>
-                <div style='color:#bbb;font-size:1.6rem;font-weight:300;'>/</div>
-                <div style='text-align:center;padding:12px 20px;background:#fafafa;
-                            border-radius:12px;border:2px solid #ddd;min-width:100px;'>
-                    <div style='color:#444;font-size:2.2rem;font-weight:900;line-height:1;'>{_plan_qty}</div>
-                    <div style='color:#888;font-size:0.78rem;font-weight:600;margin-top:2px;'>오늘 목표</div>
+                <div style='color:#4a5568;font-size:1.6rem;font-weight:300;'>/</div>
+                <div style='text-align:center;padding:12px 20px;background:#1c2333;
+                            border-radius:8px;border:2px solid #2d3a50;min-width:100px;'>
+                    <div style='color:#c9d1d9;font-size:2.2rem;font-weight:900;line-height:1;'>{_plan_qty}</div>
+                    <div style='color:#7a8899;font-size:0.78rem;font-weight:600;margin-top:2px;'>오늘 목표</div>
                 </div>
                 <div style='flex:1;'></div>
                 {_over_block}
                 <span style='font-size:2rem;'>{_emoji}</span>
             </div>
-            <div style='background:#e9ecef;border-radius:8px;height:14px;overflow:hidden;margin-bottom:10px;'>
-                <div style='background:{_bar_color};width:{_bar_pct}%;height:100%;border-radius:8px;
-                            transition:width 0.4s ease;'></div>
+            <div style='background:#1c2333;border-radius:6px;height:14px;overflow:hidden;margin-bottom:10px;'>
+                <div style='background:{_bar_color};width:{_bar_pct}%;height:100%;border-radius:6px;
+                            transition:width 0.4s ease;box-shadow:0 0 8px {_bar_color}88;'></div>
             </div>
             <div style='display:flex;justify-content:space-between;align-items:center;'>
-                <span style='color:#333;font-size:0.92rem;font-weight:600;'>{_msg}</span>
-                <span style='color:#666;font-size:0.82rem;'>{_real_pct}% · 작업 중: {_wip_today}개</span>
+                <span style='color:#e2e8f0;font-size:0.92rem;font-weight:600;'>{_msg}</span>
+                <span style='color:#7a8899;font-size:0.82rem;'>{_real_pct}% · 작업 중: {_wip_today}개</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -2336,7 +2350,7 @@ elif curr_l == "조립 라인":
             # STATUS_STYLE: 모듈 상수 사용 (상단 정의 참조)
             h = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 1.1, 1.1])
             for col, txt in zip(h, ["☑","기록 시간","모델","품목","시리얼","✅","🚫"]):
-                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;text-align:center;'>{txt}</p>", unsafe_allow_html=True)
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;text-align:center;'>{txt}</p>", unsafe_allow_html=True)
 
             _asm_cb_ver = st.session_state[_asm_search_cnt]  # 스캔 시 변경 → 체크박스 강제 재렌더
             # 자재 시리얼 일괄 조회 (N+1 방지)
@@ -2381,7 +2395,7 @@ elif curr_l == "조립 라인":
                 else:
                     s = row['상태']
                     if "불량" in str(s):
-                        r[5].markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s}</div>", unsafe_allow_html=True)
+                        r[5].markdown(f"<div style='background:#2e0808;color:#f87171;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s}</div>", unsafe_allow_html=True)
                     else:
                         bg,tc,bc,ic = STATUS_STYLE.get(s, ('#f5f2ec','#5a5048','#c8b89a','•'))
                         r[5].markdown(f"<div style='background:{bg};color:{tc};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc};font-size:0.75rem;'>{ic} {s}</div>", unsafe_allow_html=True)
@@ -2502,10 +2516,10 @@ elif curr_l == "조립 라인":
 
         mat_list_now = st.session_state[_mat_list_key]
         if mat_list_now:
-            st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 2px 0;'>등록 예정 자재: <b>{len(mat_list_now)}개</b></p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='font-size:0.78rem;color:#7a8899;margin:6px 0 2px 0;'>등록 예정 자재: <b>{len(mat_list_now)}개</b></p>", unsafe_allow_html=True)
             lh1, lh2, lh3 = st.columns([2, 4, 1])
-            lh1.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>자재명</p>", unsafe_allow_html=True)
-            lh2.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>자재 S/N</p>", unsafe_allow_html=True)
+            lh1.markdown("<p style='font-size:0.7rem;font-weight:700;color:#4a5568;margin:0;'>자재명</p>", unsafe_allow_html=True)
+            lh2.markdown("<p style='font-size:0.7rem;font-weight:700;color:#4a5568;margin:0;'>자재 S/N</p>", unsafe_allow_html=True)
 
             updated_list = []
             _should_rerun = False
@@ -2585,10 +2599,10 @@ elif curr_l == "조립 라인":
 
                 existing_mats = load_material_serials(add_main_sn.strip())
                 if not existing_mats.empty:
-                    st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 4px 0;'>기존 등록 자재: <b>{len(existing_mats)}개</b></p>", unsafe_allow_html=True)
+                    st.markdown(f"<p style='font-size:0.78rem;color:#7a8899;margin:6px 0 4px 0;'>기존 등록 자재: <b>{len(existing_mats)}개</b></p>", unsafe_allow_html=True)
                     emh1, emh2 = st.columns([2, 4])
-                    emh1.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>자재명</p>", unsafe_allow_html=True)
-                    emh2.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>자재 S/N</p>", unsafe_allow_html=True)
+                    emh1.markdown("<p style='font-size:0.7rem;font-weight:700;color:#4a5568;margin:0;'>자재명</p>", unsafe_allow_html=True)
+                    emh2.markdown("<p style='font-size:0.7rem;font-weight:700;color:#4a5568;margin:0;'>자재 S/N</p>", unsafe_allow_html=True)
                     for mat_r in existing_mats.to_dict('records'):
                         emc1, emc2 = st.columns([2, 4])
                         emc1.caption(mat_r.get('자재명', ''))
@@ -2630,7 +2644,7 @@ elif curr_l == "조립 라인":
 
                 add_mat_list_now = st.session_state[_add_mat_list_key]
                 if add_mat_list_now:
-                    st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 2px 0;'>추가 예정 자재: <b>{len(add_mat_list_now)}개</b></p>", unsafe_allow_html=True)
+                    st.markdown(f"<p style='font-size:0.78rem;color:#7a8899;margin:6px 0 2px 0;'>추가 예정 자재: <b>{len(add_mat_list_now)}개</b></p>", unsafe_allow_html=True)
                     add_updated_list = []
                     _add_should_rerun = False
                     for ami, amat in enumerate(add_mat_list_now):
@@ -2867,7 +2881,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
 
             h = st.columns([0.4, 1.8, 1.8, 1.3, 1.6, 1.1, 1.1])
             for col, txt in zip(h, ["☑","기록 시간","모델","품목","시리얼","✅","🚫"]):
-                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;text-align:center;'>{txt}</p>",
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;text-align:center;'>{txt}</p>",
                              unsafe_allow_html=True)
 
             _hcb_ver = st.session_state[_hsrch_cnt]
@@ -2917,7 +2931,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 else:
                     s2 = row['상태']
                     if "불량" in str(s2):
-                        r[5].markdown(f"<div style='background:#fde8e7;color:#7a2e2a;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s2}</div>", unsafe_allow_html=True)
+                        r[5].markdown(f"<div style='background:#2e0808;color:#f87171;padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;font-size:0.75rem;'>🚫 {s2}</div>", unsafe_allow_html=True)
                     else:
                         bg2,tc2,bc2,ic2 = STATUS_STYLE2.get(s2, ('#f5f2ec','#5a5048','#c8b89a','•'))
                         r[5].markdown(f"<div style='background:{bg2};color:{tc2};padding:2px 6px;border-radius:5px;text-align:center;font-weight:bold;border:1px solid {bc2};font-size:0.75rem;'>{ic2} {s2}</div>", unsafe_allow_html=True)
@@ -2985,7 +2999,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
 
                 _ql_mats = load_material_serials(ql_main_sn.strip())
                 if not _ql_mats.empty:
-                    st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 4px 0;'>기존 등록 자재: <b>{len(_ql_mats)}개</b></p>", unsafe_allow_html=True)
+                    st.markdown(f"<p style='font-size:0.78rem;color:#7a8899;margin:6px 0 4px 0;'>기존 등록 자재: <b>{len(_ql_mats)}개</b></p>", unsafe_allow_html=True)
                     for _qm in _ql_mats.to_dict('records'):
                         qmc1, qmc2 = st.columns([2, 4])
                         qmc1.caption(_qm.get('자재명', ''))
@@ -3033,7 +3047,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
 
                 ql_mat_list_now = st.session_state[_ql_mat_list_key]
                 if ql_mat_list_now:
-                    st.markdown(f"<p style='font-size:0.78rem;color:#8a7f72;margin:6px 0 2px 0;'>추가 예정: <b>{len(ql_mat_list_now)}개</b></p>", unsafe_allow_html=True)
+                    st.markdown(f"<p style='font-size:0.78rem;color:#7a8899;margin:6px 0 2px 0;'>추가 예정: <b>{len(ql_mat_list_now)}개</b></p>", unsafe_allow_html=True)
                     ql_updated = []
                     _ql_rerun = False
                     for qi, qmat in enumerate(ql_mat_list_now):
@@ -3224,7 +3238,7 @@ elif curr_l == "생산 현황 리포트":
             if _pr1.button("◀ 이전", key="pr_prev", disabled=(_pr_page <= 1)):
                 st.session_state["prod_rpt_page"] -= 1; _rerun("rpt_tbl")
             _pr2.markdown(
-                f"<p style='text-align:center;font-size:0.82rem;color:#8a7f72;margin:6px 0;'>"
+                f"<p style='text-align:center;font-size:0.82rem;color:#7a8899;margin:6px 0;'>"
                 f"페이지 <b>{_pr_page}</b> / {_rpt_total_pages}　"
                 f"(전체 <b>{_rpt_total:,}</b>건, {_RPT_PAGE_SIZE}건/페이지)</p>",
                 unsafe_allow_html=True)
@@ -3265,7 +3279,7 @@ elif curr_l == "검사 라인":
     if not wait_df.empty:
         hh = st.columns([2, 2, 2, 1.5])
         for col, txt in zip(hh, ["시간", "모델", "시리얼", "검사 시작"]):
-            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
         # 성능: iterrows → enumerate + to_dict('records')
         for idx, row in enumerate(wait_df.to_dict('records')):
             rr = st.columns([2, 2, 2, 1.5])
@@ -3388,7 +3402,7 @@ elif curr_l == "포장 라인":
     if not pk_wait_df.empty:
         hh = st.columns([2, 2, 2, 1.5])
         for col, txt in zip(hh, ["시간", "모델", "시리얼", "포장 시작"]):
-            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
         # 성능: iterrows → enumerate + to_dict('records')
         for idx, row in enumerate(pk_wait_df.to_dict('records')):
             rr = st.columns([2, 2, 2, 1.5])
@@ -3415,7 +3429,7 @@ elif curr_l == "포장 라인":
     if not pk_ing_df.empty:
         hh = st.columns([1.5, 1.5, 2, 2.5, 1.5])
         for col, txt in zip(hh, ["시간", "모델", "제품 시리얼", "라벨 S/N 스캔", "포장 완료"]):
-            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+            col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
         # 성능: iterrows → enumerate + to_dict('records')
         for idx, row in enumerate(pk_ing_df.to_dict('records')):
             rr = st.columns([1.5, 1.5, 2, 2.5, 1.5])
@@ -3475,45 +3489,48 @@ elif curr_l == "생산 지표 관리":
     # ── CSS: 전광판 스타일 ─────────────────────────────────────────
     st.markdown("""
 <style>
-.db-title   { font-size:1.35rem; font-weight:800; color:#2a2420; letter-spacing:-0.5px; margin:0 0 2px 0; }
+.db-title   { font-size:1.35rem; font-weight:800; color:#e2e8f0; letter-spacing:-0.5px; margin:0 0 2px 0; }
 .db-section { display:flex; align-items:center; gap:8px; font-size:0.78rem; font-weight:700;
-              color:#fff; padding:5px 14px; border-radius:20px; margin:14px 0 8px 0;
-              width:fit-content; letter-spacing:0.3px; }
-.kpi-card   { background:#fff; border:1px solid #e8e2d8; border-radius:10px;
-              padding:12px 16px 10px 16px; text-align:center; }
-.kpi-lbl    { font-size:0.68rem; font-weight:600; color:#8a7f72;
+              color:#e2e8f0; padding:5px 14px; border-radius:4px; margin:14px 0 8px 0;
+              width:fit-content; letter-spacing:0.3px; border:1px solid #2d3a50; }
+.kpi-card   { background:#141d2e; border:1px solid #2d3a50; border-radius:8px;
+              padding:12px 16px 10px 16px; text-align:center;
+              box-shadow:0 4px 12px rgba(0,0,0,0.4); }
+.kpi-lbl    { font-size:0.68rem; font-weight:600; color:#7a8899;
               text-transform:uppercase; letter-spacing:0.6px; margin-bottom:2px; }
-.kpi-val    { font-size:2.2rem; font-weight:800; line-height:1.1; color:#2a2420; }
-.kpi-sub    { font-size:0.68rem; color:#aaa; margin-top:2px; }
-.kpi-green  { color:#1e8449; }
-.kpi-red    { color:#c0392b; }
-.kpi-blue   { color:#2471a3; }
-.kpi-amber  { color:#d68910; }
-.ban-card   { border-radius:10px; padding:10px 14px 8px 14px; margin-bottom:2px; }
-.ban-name   { font-size:0.72rem; font-weight:700; letter-spacing:0.4px; margin-bottom:4px; }
+.kpi-val    { font-size:2.2rem; font-weight:800; line-height:1.1; color:#e2e8f0; }
+.kpi-sub    { font-size:0.68rem; color:#4a5568; margin-top:2px; }
+.kpi-green  { color:#3ecf8e; }
+.kpi-red    { color:#f87171; }
+.kpi-blue   { color:#4a9eff; }
+.kpi-amber  { color:#fbbf24; }
+.ban-card   { border-radius:8px; padding:10px 14px 8px 14px; margin-bottom:2px;
+              border:1px solid #2d3a50; background:#141d2e; }
+.ban-name   { font-size:0.72rem; font-weight:700; letter-spacing:0.4px; margin-bottom:4px; color:#7a8899; }
 .ban-pct    { font-size:2.6rem; font-weight:900; line-height:1.05; }
-.ban-sub    { font-size:0.65rem; color:#888; margin-top:1px; }
+.ban-sub    { font-size:0.65rem; color:#4a5568; margin-top:1px; }
 .ban-row    { display:flex; gap:6px; margin-top:8px; }
-.ban-chip   { flex:1; border-radius:6px; padding:5px 0; text-align:center; }
-.ban-chip-lbl { font-size:0.6rem; font-weight:600; color:#888; }
-.ban-chip-val { font-size:1.3rem; font-weight:800; line-height:1.1; }
-.proc-card  { border-radius:10px; padding:10px 14px 10px 14px; }
-.proc-name  { font-size:0.75rem; font-weight:700; letter-spacing:0.3px; margin-bottom:6px; }
+.ban-chip   { flex:1; border-radius:4px; padding:5px 0; text-align:center;
+              background:#1c2333; border:1px solid #2d3a50; }
+.ban-chip-lbl { font-size:0.6rem; font-weight:600; color:#7a8899; }
+.ban-chip-val { font-size:1.3rem; font-weight:800; line-height:1.1; color:#e2e8f0; }
+.proc-card  { border-radius:8px; padding:10px 14px; background:#141d2e; border:1px solid #2d3a50; }
+.proc-name  { font-size:0.75rem; font-weight:700; letter-spacing:0.3px; margin-bottom:6px; color:#c9d1d9; }
 .proc-row   { display:flex; gap:6px; }
-.proc-chip  { flex:1; background:#f5f2ec; border-radius:6px; padding:6px 4px; text-align:center; }
-.proc-chip-lbl { font-size:0.58rem; font-weight:600; color:#888; }
-.proc-chip-val { font-size:1.5rem; font-weight:800; line-height:1.1; color:#2a2420; }
+.proc-chip  { flex:1; background:#1c2333; border:1px solid #2d3a50; border-radius:4px; padding:6px 4px; text-align:center; }
+.proc-chip-lbl { font-size:0.58rem; font-weight:600; color:#7a8899; }
+.proc-chip-val { font-size:1.5rem; font-weight:800; line-height:1.1; color:#e2e8f0; }
 .proc-arrow { display:flex; align-items:center; justify-content:center;
-              font-size:1.6rem; color:#c8b89a; padding:0 2px; }
+              font-size:1.6rem; color:#2d3a50; padding:0 2px; }
 .ng-row     { display:flex; gap:8px; align-items:center; padding:6px 0;
-              border-bottom:1px solid #f0ebe0; }
-.ng-model   { flex:2; font-size:0.82rem; font-weight:600; color:#2a2420; }
-.ng-bar-wrap{ flex:3; background:#f0ebe0; border-radius:99px; height:7px; overflow:hidden; }
+              border-bottom:1px solid #1c2333; }
+.ng-model   { flex:2; font-size:0.82rem; font-weight:600; color:#c9d1d9; }
+.ng-bar-wrap{ flex:3; background:#1c2333; border-radius:99px; height:7px; overflow:hidden; }
 .ng-bar     { height:100%; border-radius:99px; }
-.ng-pct     { flex:1; font-size:0.82rem; font-weight:700; text-align:right; }
-.ng-cnt     { flex:1; font-size:0.72rem; color:#888; text-align:right; }
-.rt-row     { display:flex; gap:0; padding:5px 0; border-bottom:1px solid #f5f2ec;
-              align-items:center; font-size:0.78rem; }
+.ng-pct     { flex:1; font-size:0.82rem; font-weight:700; text-align:right; color:#e2e8f0; }
+.ng-cnt     { flex:1; font-size:0.72rem; color:#7a8899; text-align:right; }
+.rt-row     { display:flex; gap:0; padding:5px 0; border-bottom:1px solid #1c2333;
+              align-items:center; font-size:0.78rem; color:#c9d1d9; }
 .rt-chip    { font-size:0.65rem; font-weight:600; border-radius:4px;
               padding:1px 6px; margin-right:6px; }
 </style>""", unsafe_allow_html=True)
@@ -3596,7 +3613,7 @@ elif curr_l == "생산 지표 관리":
         col.markdown(f"""
 <div class='kpi-card'>
   <div class='kpi-lbl'>{lbl}</div>
-  <div class='kpi-val' style='color:{color};'>{val}<span style='font-size:1rem;font-weight:600;color:#aaa;margin-left:2px;'>{unit}</span></div>
+  <div class='kpi-val' style='color:{color};'>{val}<span style='font-size:1rem;font-weight:600;color:#4a5568;margin-left:2px;'>{unit}</span></div>
   <div class='kpi-sub'>{_sub}</div>
 </div>""", unsafe_allow_html=True)
 
@@ -3678,7 +3695,7 @@ elif curr_l == "생산 지표 관리":
     <div class='proc-chip'><div class='proc-chip-lbl'>진행</div><div class='proc-chip-val' style='color:{wip_clr};'>{l_wip}</div></div>
     <div class='proc-chip'><div class='proc-chip-lbl'>불량</div><div class='proc-chip-val' style='color:{"#c0392b" if l_ng>0 else "#aaa"};'>{l_ng}</div></div>
   </div>
-  {"<div style='font-size:0.6rem;color:#888;margin-top:4px;'>📥 대기 "+str(l_wait)+"대</div>" if pi>0 else ""}
+  {"<div style='font-size:0.6rem;color:#7a8899;margin-top:4px;'>📥 대기 "+str(l_wait)+"대</div>" if pi>0 else ""}
 </div>"""
             if pi < 2:
                 proc_html += "<div class='proc-arrow'>▶</div>"
@@ -3740,7 +3757,7 @@ elif curr_l == "생산 지표 관리":
                 BAN_CL = {"제조1반":"#2471a3","제조2반":"#1e8449","제조3반":"#6c3483"}
                 LINE_BG = {"조립 라인":"#fff3d4","검사 라인":"#d4f0e2","포장 라인":"#fde8d4","OQC 라인":"#e8d4f0"}
                 STATE_BG = {"불량 처리 중":"#fde8e7"}
-                rt_html = "<div style='font-size:0.7rem;font-weight:600;color:#aaa;display:flex;gap:0;padding:0 0 4px 0;border-bottom:2px solid #e8e2d8;margin-bottom:2px;'><span style='flex:1.2;'>반</span><span style='flex:1.5;'>라인</span><span style='flex:2.5;'>모델</span><span style='flex:2;'>시리얼</span><span style='flex:1.8;'>상태</span></div>"
+                rt_html = "<div style='font-size:0.7rem;font-weight:600;color:#4a5568;display:flex;gap:0;padding:0 0 4px 0;border-bottom:2px solid #e8e2d8;margin-bottom:2px;'><span style='flex:1.2;'>반</span><span style='flex:1.5;'>라인</span><span style='flex:2.5;'>모델</span><span style='flex:2;'>시리얼</span><span style='flex:1.8;'>상태</span></div>"
                 for row in rt_wip.to_dict('records'):
                     ban_v   = row.get('반','')
                     line_v  = row.get('라인','')
@@ -3752,9 +3769,9 @@ elif curr_l == "생산 지표 관리":
                     rt_html += f"""
 <div class='rt-row' style='{row_bg}'>
   <span style='flex:1.2;'><span class='rt-chip' style='background:{bbg};color:{bcl};'>{ban_v[:3]}</span></span>
-  <span style='flex:1.5;'><span class='rt-chip' style='background:{lbg};color:#555;'>{line_v[:2]}</span></span>
+  <span style='flex:1.5;'><span class='rt-chip' style='background:{lbg};color:#7a8899;'>{line_v[:2]}</span></span>
   <span style='flex:2.5;font-weight:600;'>{row.get('모델','')}</span>
-  <span style='flex:2;color:#5a5048;font-family:monospace;'>{row.get('시리얼','')}</span>
+  <span style='flex:2;color:#7a8899;font-family:monospace;'>{row.get('시리얼','')}</span>
   <span style='flex:1.8;color:{state_color};font-size:0.68rem;'>{state_v}</span>
 </div>"""
                 st.markdown(rt_html, unsafe_allow_html=True)
@@ -3978,7 +3995,7 @@ elif curr_l == "생산 지표 관리":
 
             th = st.columns([1.8, 1.0, 1.0, 1.0, 1.0, 0.9, 2.5, 2.0, 1.2])
             for col, txt in zip(th, ["시간","반","월","이전","변경","증감","변경 사유","상세 내용","작업자"]):
-                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
             # 성능: iterrows → to_dict('records')
             for row in plog_df.to_dict('records'):
                 tr = st.columns([1.8, 1.0, 1.0, 1.0, 1.0, 0.9, 2.5, 2.0, 1.2])
@@ -4030,7 +4047,7 @@ elif curr_l == "생산 지표 관리":
             st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
             th2 = st.columns([1.6, 1.0, 1.0, 1.2, 2.0, 2.0, 2.2, 1.8, 1.2])
             for col, txt in zip(th2, ["수정 시간","날짜","반","모델","이전 내용","변경 내용","변경 사유","상세","작업자"]):
-                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
             # 성능: iterrows → to_dict('records')
             for row in slog_df.to_dict('records'):
                 tr2 = st.columns([1.6, 1.0, 1.0, 1.2, 2.0, 2.0, 2.2, 1.8, 1.2])
@@ -4061,7 +4078,7 @@ elif curr_l == "생산 지표 관리":
     sch_tab1, sch_tab2, sch_tab3 = st.tabs(["➕ 직접 입력", "📂 엑셀 일괄 업로드", "📋 등록된 일정 관리"])
 
     with sch_tab2:
-        st.markdown("<p style='color:#2a2420;'>생산계획 엑셀 파일을 업로드하면 일정에 자동 등록됩니다.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#c9d1d9;'>생산계획 엑셀 파일을 업로드하면 일정에 자동 등록됩니다.</p>", unsafe_allow_html=True)
 
         # 양식 다운로드
         dl1, dl2 = st.columns([1, 2])
@@ -4221,7 +4238,7 @@ elif curr_l == "생산 지표 관리":
         # 지원 형식 안내
         with st.expander("📌 지원 엑셀 형식 안내"):
             st.markdown("""
-    <p style='color:#2a2420;'>
+    <p style='color:#c9d1d9;'>
     <b>① PMS 반별 시트 양식</b> (위 버튼으로 다운로드) ⭐추천<br>
     &nbsp;&nbsp;• 시트명: <b>제조1반 / 제조2반 / 제조3반</b> — 시트명이 곧 반 정보<br>
     &nbsp;&nbsp;• 컬럼: 날짜 / 카테고리 / P/N / 모델명 / 처리수 / 출하계획 / 특이사항<br>
@@ -4258,7 +4275,7 @@ elif curr_l == "생산 지표 관리":
                 # ══════════════════════════════════════════
                 if detected_mode == "PMS 반별 시트 양식":
                     st.markdown(
-                        f"<p style='color:#2a2420;'>감지된 반 시트: "
+                        f"<p style='color:#c9d1d9;'>감지된 반 시트: "
                         + " ".join([f"<b style='color:#5a96c8;'>[{s}]</b>" for s in group_sheets])
                         + " — 전체 파싱합니다.</p>",
                         unsafe_allow_html=True)
@@ -4355,7 +4372,7 @@ elif curr_l == "생산 지표 관리":
                     # 미리보기
                     import pandas as _pd
                     preview_df = _pd.DataFrame(parsed)[['날짜','카테고리','pn','모델명','조립수','출하계획']].rename(columns={'조립수': '처리수'})
-                    st.markdown(f"<p style='color:#2a2420;'>✅ <b>{len(parsed)}건</b> 파싱 완료 — 미리보기:</p>", unsafe_allow_html=True)
+                    st.markdown(f"<p style='color:#c9d1d9;'>✅ <b>{len(parsed)}건</b> 파싱 완료 — 미리보기:</p>", unsafe_allow_html=True)
                     st.dataframe(preview_df, use_container_width=True, hide_index=True, height=300)
 
                     st.divider()
@@ -4539,7 +4556,7 @@ elif curr_l == "생산 지표 관리":
             # ── 헤더 행 ──
             hh = st.columns([1.0, 0.8, 1.2, 1.5, 2.2, 0.8, 1.8, 0.5])
             for col, txt in zip(hh, ["유형","반","날짜","P/N","모델명","수량","특이사항",""]):
-                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
 
             # 성능: iterrows → to_dict('records') (위젯 키는 row['id'] 사용)
             for row in sch_list.sort_values('날짜').to_dict('records'):
@@ -4675,7 +4692,7 @@ elif curr_l == "OQC 라인":
     
             hh = st.columns([0.4, 2, 2, 1.5, 2, 1.5])
             for col, txt in zip(hh, ["☑", "시간", "모델", "반", "시리얼", "OQC 시작"]):
-                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
             _oqc_in_cb_ver = st.session_state[_oqc_in_sc_cnt]
             for idx, row in enumerate(packing_done.to_dict('records')):
                 rr = st.columns([0.4, 2, 2, 1.5, 2, 1.5])
@@ -4886,7 +4903,7 @@ elif curr_l == "OQC 라인":
     
             rh = st.columns([1.8, 2, 1.5, 2.2, 1.5, 2.5, 1])
             for col, txt in zip(rh, ["시간", "모델", "반", "시리얼", "결과", "비고", "이력"]):
-                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
     
             # 자재 시리얼 일괄 조회 (OQC 결과 이력)
             _oqc_done_sns = tuple(oqc_done['시리얼'].unique().tolist())
@@ -4911,9 +4928,9 @@ elif curr_l == "OQC 라인":
                     rr2[4].markdown("<span style='background:#d4f0e2;color:#1f6640;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>✅ 출하승인</span>", unsafe_allow_html=True)
                 else:
                     if _is_oqc_transferred:
-                        rr2[4].markdown("<span style='background:#fde8e7;color:#7a2e2a;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>🚫 부적합 · 이관완료</span>", unsafe_allow_html=True)
+                        rr2[4].markdown("<span style='background:#2e0808;color:#f87171;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>🚫 부적합 · 이관완료</span>", unsafe_allow_html=True)
                     else:
-                        rr2[4].markdown("<span style='background:#fde8e7;color:#7a2e2a;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>🚫 부적합</span>", unsafe_allow_html=True)
+                        rr2[4].markdown("<span style='background:#2e0808;color:#f87171;padding:2px 8px;border-radius:5px;font-size:0.8rem;font-weight:bold;'>🚫 부적합</span>", unsafe_allow_html=True)
                     if 결과 == '부적합(OQC)':
                         if rr2[4].button("🔧 불량 공정 이관", key=f"oqc_send_defect_{_i}",
                                          use_container_width=True, help="불량 공정으로 이관하여 수리/교체 처리"):
@@ -4963,7 +4980,7 @@ elif curr_l == "OQC 라인":
                                 aud_df = pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
                                 ah = st.columns([1.8, 1.5, 1.5, 1.2, 3])
                                 for col, txt in zip(ah, ["시간","이전상태","이후상태","작업자","비고"]):
-                                    col.markdown(f"<p style='font-size:0.7rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                                    col.markdown(f"<p style='font-size:0.7rem;font-weight:700;color:#7a8899;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
                                 # 성능: iterrows → to_dict('records')
                                 for ar in aud_df.to_dict('records'):
                                     ac = st.columns([1.8, 1.5, 1.5, 1.2, 3])
@@ -4986,7 +5003,7 @@ elif curr_l == "OQC 라인":
                         if not mat_df.empty:
                             # 성능: iterrows → to_dict('records')
                             for mr in mat_df.to_dict('records'):
-                                st.markdown(f"- **{mr.get('자재명','')}** : `{mr.get('자재시리얼','')}`　<span style='color:#aaa;font-size:0.75rem;'>{mr.get('작업자','')}</span>", unsafe_allow_html=True)
+                                st.markdown(f"- **{mr.get('자재명','')}** : `{mr.get('자재시리얼','')}`　<span style='color:#4a5568;font-size:0.75rem;'>{mr.get('작업자','')}</span>", unsafe_allow_html=True)
                         else:
                             st.info("등록된 자재 시리얼 없음")
                 # ── 시리얼 클릭 자재 토글 표시 ──
@@ -5299,7 +5316,7 @@ elif curr_l == "OQC 라인":
                     st.markdown(f"**메인 S/N: `{main_search.strip()}`에 사용된 자재 목록**")
                     mh1 = st.columns([2, 2.5, 2.5, 1.5])
                     for col, txt in zip(mh1, ["등록시간", "자재명", "자재 S/N", "작업자"]):
-                        col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                        col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
                     
                     # 성능: iterrows → to_dict('records')
                     for mr in mat_list.to_dict('records'):
@@ -5324,7 +5341,7 @@ elif curr_l == "OQC 라인":
                     st.markdown(f"**자재 S/N: `{mat_search.strip()}`이 사용된 제품**")
                     mh2 = st.columns([1.8, 2, 1.5, 2, 1.5])
                     for col, txt in zip(mh2, ["등록시간","메인 S/N","반","모델","작업자"]):
-                        col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                        col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
                     
                     # 성능: iterrows → to_dict('records')
                     for mr in found.to_dict('records'):
@@ -5450,8 +5467,8 @@ elif curr_l == "불량 공정":
         d = len(db[(db['반']==g)&(db['상태']=='수리 완료(재투입)')])
         with card_cols[ci]:
             st.markdown(
-                f"<div style='background:#fffdf8; border:1px solid #e0d8c8; border-radius:12px; padding:14px; margin-bottom:8px;'>"
-                f"<div style='font-weight:bold; color:#3d3530; margin-bottom:10px; font-size:1rem;'>📍 {g}</div>"
+                f"<div style='background:#141d2e; border:1px solid #2d3a50; border-radius:12px; padding:14px; margin-bottom:8px;'>"
+                f"<div style='font-weight:bold; color:#c9d1d9; margin-bottom:10px; font-size:1rem;'>📍 {g}</div>"
                 f"<div style='display:flex; gap:8px;'>"
                 f"<div style='flex:1; background:#fde8e7; border-radius:8px; padding:10px 4px; text-align:center;'>"
                 f"<div style='font-size:0.72rem; color:#7a2e2a; font-weight:bold;'>🛠️ 분석 대기</div>"
@@ -5783,7 +5800,7 @@ elif curr_l == "수리 현황 리포트":
         if _rh1.button("◀ 이전", key="rh_prev", disabled=(_rh_page <= 1)):
             st.session_state["repair_hist_page"] -= 1; st.rerun()
         _rh2.markdown(
-            f"<p style='text-align:center;font-size:0.82rem;color:#8a7f72;margin:6px 0;'>"
+            f"<p style='text-align:center;font-size:0.82rem;color:#7a8899;margin:6px 0;'>"
             f"페이지 <b>{_rh_page}</b> / {_hist_total_pages}　"
             f"(전체 <b>{_hist_total:,}</b>건, {_HIST_PAGE_SIZE}건/페이지)</p>",
             unsafe_allow_html=True)
@@ -5848,7 +5865,7 @@ elif curr_l == "수리 현황 리포트":
             if _pn1.button("◀ 이전", key="audit_prev", disabled=(_audit_page <= 1)):
                 st.session_state["audit_page"] -= 1; st.rerun()
             _pn2.markdown(
-                f"<p style='text-align:center;font-size:0.82rem;color:#8a7f72;margin:6px 0;'>"
+                f"<p style='text-align:center;font-size:0.82rem;color:#7a8899;margin:6px 0;'>"
                 f"페이지 <b>{_audit_page}</b> / {_audit_total_pages}　"
                 f"(전체 <b>{_audit_total:,}</b>건, {_AUDIT_PAGE_SIZE}건/페이지)</p>",
                 unsafe_allow_html=True)
@@ -5858,7 +5875,7 @@ elif curr_l == "수리 현황 리포트":
             # 테이블 헤더
             th = st.columns([1.8, 1.5, 2.2, 1.2, 1.5, 1.5, 1.2, 2.5])
             for col, txt in zip(th, ["시간", "시리얼", "모델", "반", "이전 상태", "이후 상태", "작업자", "비고"]):
-                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
+                col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
 
             for row in audit_page_df.to_dict('records'):
                 tr = st.columns([1.8, 1.5, 2.2, 1.2, 1.5, 1.5, 1.2, 2.5])
@@ -5905,7 +5922,7 @@ elif curr_l == "마스터 관리":
                 c1, c2 = st.columns(2)
                 with c1:
                     with st.container(border=True):
-                        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin-bottom:6px;'>신규 모델 등록</h4>", unsafe_allow_html=True)
+                        st.markdown("<h4 style='color:#c9d1d9; font-weight:bold; margin-bottom:6px;'>신규 모델 등록</h4>", unsafe_allow_html=True)
                         st.caption("여러 모델은 줄바꿈으로 구분")
                         nm_bulk = st.text_area(f"{g_name} 모델명", key=f"nm_{g_name}", height=120, placeholder="EPS7150\nEPS7133\nT20i")
                         if st.button(f"{g_name} 모델 저장", key=f"nb_{g_name}", use_container_width=True):
@@ -5925,7 +5942,7 @@ elif curr_l == "마스터 관리":
                             else: st.warning("모델명을 입력해주세요.")
                 with c2:
                     with st.container(border=True):
-                        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin-bottom:6px;'>세부 품목 등록</h4>", unsafe_allow_html=True)
+                        st.markdown("<h4 style='color:#c9d1d9; font-weight:bold; margin-bottom:6px;'>세부 품목 등록</h4>", unsafe_allow_html=True)
                         g_mods = st.session_state.group_master_models.get(g_name, [])
                         if g_mods:
                             sm = st.selectbox(f"{g_name} 모델 선택", g_mods, key=f"sm_{g_name}")
@@ -5981,7 +5998,7 @@ elif curr_l == "마스터 관리":
 
                 with del_c1:
                     with st.container(border=True):
-                        st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:4px;'>모델 삭제</p>", unsafe_allow_html=True)
+                        st.markdown("<p style='color:#c9d1d9; font-weight:bold; margin-bottom:4px;'>모델 삭제</p>", unsafe_allow_html=True)
                         st.caption("삭제 시 해당 모델의 모든 품목코드도 함께 삭제됩니다")
                         g_mods_del = st.session_state.group_master_models.get(g_name, [])
                         if g_mods_del:
@@ -6012,7 +6029,7 @@ elif curr_l == "마스터 관리":
 
                 with del_c2:
                     with st.container(border=True):
-                        st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:4px;'>품목 삭제</p>", unsafe_allow_html=True)
+                        st.markdown("<p style='color:#c9d1d9; font-weight:bold; margin-bottom:4px;'>품목 삭제</p>", unsafe_allow_html=True)
                         st.caption("선택한 모델에서 특정 품목코드만 삭제합니다")
                         g_mods_di = st.session_state.group_master_models.get(g_name, [])
                         if g_mods_di:
@@ -6130,7 +6147,7 @@ elif curr_l == "마스터 관리":
             with _req_tabs[2]:
                 _render_requests(load_access_requests(status="rejected"), "rejected")
 
-        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin:16px 0 10px 0;'>계정 및 데이터 관리</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color:#c9d1d9; font-weight:bold; margin:16px 0 10px 0;'>계정 및 데이터 관리</h4>", unsafe_allow_html=True)
         ac1, ac2 = st.columns(2)
 
         with ac1:
@@ -6139,7 +6156,7 @@ elif curr_l == "마스터 관리":
             
             with user_tab1:
                 with st.form("user_mgmt"):
-                    st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>👤 사용자 계정 생성/업데이트</p>", unsafe_allow_html=True)
+                    st.markdown("<p style='color:#c9d1d9; font-weight:bold; margin-bottom:8px;'>👤 사용자 계정 생성/업데이트</p>", unsafe_allow_html=True)
                     nu  = st.text_input("ID")
                     np_ = st.text_input("PW", type="password")
                     nr  = st.selectbox("Role", ["admin","master","control_tower","assembly_team","qc_team","packing_team","schedule_manager","oqc_team"])
@@ -6159,7 +6176,7 @@ elif curr_l == "마스터 관리":
                         else: st.warning("ID와 PW를 모두 입력해주세요.")
             
             with user_tab2:
-                st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>🔑 사용자별 개별 권한 부여</p>", unsafe_allow_html=True)
+                st.markdown("<p style='color:#c9d1d9; font-weight:bold; margin-bottom:8px;'>🔑 사용자별 개별 권한 부여</p>", unsafe_allow_html=True)
 
                 # 등록된 사용자 목록
                 user_list = list(st.session_state.user_db.keys())
@@ -6294,7 +6311,7 @@ elif curr_l == "마스터 관리":
                     st.info("등록된 사용자가 없습니다. 먼저 계정을 생성해주세요.")
 
             with user_tab3:
-                st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>🗑️ 계정 삭제</p>", unsafe_allow_html=True)
+                st.markdown("<p style='color:#c9d1d9; font-weight:bold; margin-bottom:8px;'>🗑️ 계정 삭제</p>", unsafe_allow_html=True)
                 del_user_list = [u for u in st.session_state.user_db.keys()
                                  if u != st.session_state.user_id]
                 if del_user_list:
@@ -6332,7 +6349,7 @@ elif curr_l == "마스터 관리":
                     st.info("삭제 가능한 계정이 없습니다. (본인 계정은 삭제 불가)")
 
         with ac2:
-            st.markdown("<p style='color:#2a2420; font-weight:bold; margin-bottom:8px;'>🗄️ 시스템 데이터 관리</p>", unsafe_allow_html=True)
+            st.markdown("<p style='color:#c9d1d9; font-weight:bold; margin-bottom:8px;'>🗄️ 시스템 데이터 관리</p>", unsafe_allow_html=True)
             db_export    = st.session_state.production_db.copy()
             export_group = st.selectbox("반 선택", ["전체"] + PRODUCTION_GROUPS, key="export_group")
             ex_c1, ex_c2 = st.columns(2)
@@ -6363,7 +6380,7 @@ elif curr_l == "마스터 관리":
 
         # ── 데이터 삭제 관리 ──────────────────────────────────────
         # ── 드롭박스 편집 ──────────────────────────────────────────
-        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin:16px 0 10px 0;'>📝 드롭박스 옵션 편집</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color:#c9d1d9; font-weight:bold; margin:16px 0 10px 0;'>📝 드롭박스 옵션 편집</h4>", unsafe_allow_html=True)
         st.caption("각 항목을 한 줄에 하나씩 입력하세요. '(선택)'과 '기타 (직접 입력)'은 자동 유지됩니다.")
 
         dd_tab1, dd_tab2, dd_tab3, dd_tab4 = st.tabs([
@@ -6490,7 +6507,7 @@ elif curr_l == "마스터 관리":
         st.divider()
 
         # ── 상태 되돌리기 ────────────────────────────────────────
-        st.markdown("<h4 style='color:#2a2420; font-weight:bold; margin:16px 0 10px 0;'>↩️ 제품 상태 수동 변경 (관리자 전용)</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color:#c9d1d9; font-weight:bold; margin:16px 0 10px 0;'>↩️ 제품 상태 수동 변경 (관리자 전용)</h4>", unsafe_allow_html=True)
         with st.container(border=True):
             st.caption("실수로 잘못 처리된 제품의 상태를 되돌리거나 직접 변경합니다.")
             _all_states = ['조립중', '검사대기', '검사중', 'OQC대기', 'OQC중', '출하승인', '포장대기', '포장중', '완료', '불량 처리 중', '수리 완료(재투입)']
@@ -6580,7 +6597,7 @@ elif curr_l == "마스터 관리":
                 with st.expander(f"📋 개별 삭제 목록 ({len(prod_df)}건)", expanded=False):
                     ph = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
                     for c, t in zip(ph, ["시간","반","라인","시리얼","상태","삭제"]):
-                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
                     for i, row in enumerate(prod_df.sort_values('시간', ascending=False).head(200).to_dict('records')):
                         pr = st.columns([1.8, 1.5, 1.5, 1.8, 1.5, 1.0])
                         pr[0].caption(str(row.get('시간',''))[:16])
@@ -6660,7 +6677,7 @@ elif curr_l == "마스터 관리":
                 with st.expander(f"📋 개별 삭제 목록 ({len(adf)}건)", expanded=False):
                     ah = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
                     for c, t in zip(ah, ["시간","반","시리얼","모델","이전상태","이후상태","삭제"]):
-                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
                     for row in adf.to_dict('records'):
                         ar = st.columns([1.8, 1.5, 1.8, 1.3, 1.5, 1.5, 1.0])
                         ar[0].caption(str(row.get('시간',''))[:16])
@@ -6725,7 +6742,7 @@ elif curr_l == "마스터 관리":
                 with st.expander(f"📋 개별 삭제 목록 ({len(mdf)}건)", expanded=False):
                     mh = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
                     for c, t in zip(mh, ["시간","메인S/N","모델","자재명","자재S/N","삭제"]):
-                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
                     for row in mdf.to_dict('records'):
                         mr = st.columns([1.8, 1.8, 1.5, 1.5, 1.8, 1.0])
                         mr[0].caption(str(row.get('시간',''))[:16])
@@ -6779,7 +6796,7 @@ elif curr_l == "마스터 관리":
                 with st.expander(f"📋 개별 삭제 목록 ({len(sdf)}건)", expanded=False):
                     sh = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
                     for c, t in zip(sh, ["날짜","반","카테고리","모델명","처리수","출하계획","삭제"]):
-                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
                     for row in sdf.sort_values('날짜', ascending=False).to_dict('records'):
                         sr = st.columns([1.5, 1.2, 1.5, 2.0, 1.2, 1.2, 1.0])
                         sr[0].caption(str(row.get('날짜',''))[:10])
@@ -6843,7 +6860,7 @@ elif curr_l == "마스터 관리":
                 with st.expander(f"📋 개별 삭제 목록 ({len(pldf)}건)", expanded=False):
                     plh = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
                     for c, t in zip(plh, ["시간","반","월","이전수량","변경수량","증감","변경사유","삭제"]):
-                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
                     for row in pldf.to_dict('records'):
                         plr = st.columns([1.8, 1.2, 1.3, 1.2, 1.2, 1.0, 1.8, 1.0])
                         plr[0].caption(str(row.get('시간',''))[:16])
@@ -6908,7 +6925,7 @@ elif curr_l == "마스터 관리":
                 with st.expander(f"📋 개별 삭제 목록 ({len(sldf)}건)", expanded=False):
                     slh = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
                     for c, t in zip(slh, ["시간","반","날짜","모델명","변경사유","작업자","삭제"]):
-                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>", unsafe_allow_html=True)
                     for row in sldf.to_dict('records'):
                         slr = st.columns([1.8, 1.2, 1.3, 1.8, 1.8, 1.5, 1.0])
                         slr[0].caption(str(row.get('시간',''))[:16])
@@ -6972,7 +6989,7 @@ elif curr_l == "마스터 관리":
                 with st.expander(f"📋 개별 삭제 목록 ({len(ppdf)}건)", expanded=False):
                     pph = st.columns([2, 2, 2, 1])
                     for c, t in zip(pph, ["반", "월", "계획 수량", "삭제"]):
-                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>",
+                        c.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#7a8899;margin:0;border-bottom:1px solid #e0d8c8;'>{t}</p>",
                                    unsafe_allow_html=True)
                     for _pi, row in enumerate(ppdf.to_dict('records')):
                         ppr = st.columns([2, 2, 2, 1])
@@ -7014,7 +7031,7 @@ elif curr_l == "마스터 관리":
         st.divider()
 
         # 기존 전체 초기화 버튼 (하위 호환)
-        st.markdown("<p style='color:#8a7f72;font-size:0.85rem;'>⚠️ 아래는 생산 이력만 초기화하는 기존 버튼입니다. 위 탭을 이용하세요.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#7a8899;font-size:0.85rem;'>⚠️ 아래는 생산 이력만 초기화하는 기존 버튼입니다. 위 탭을 이용하세요.</p>", unsafe_allow_html=True)
         # 초기화 버튼 - 2단계 확인
         if 'confirm_reset' not in st.session_state:
             st.session_state.confirm_reset = False
@@ -7047,7 +7064,7 @@ elif curr_l == "작업자 매뉴얼":
     # 📖 작업자 매뉴얼
     # ══════════════════════════════════════════════════════════
     st.markdown("<h2 class='centered-title'>📖 작업자 매뉴얼</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;color:#8a7f72;font-size:0.9rem;'>스마트 물류 대시보드 &nbsp;·&nbsp; 현장 작업자용</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;color:#7a8899;font-size:0.9rem;'>스마트 물류 대시보드 &nbsp;·&nbsp; 현장 작업자용</p>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
     def _man_section(icon, title, color="#1B3A5C"):
@@ -7103,19 +7120,19 @@ elif curr_l == "작업자 매뉴얼":
         _man_box("""
         <div style='display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 0;'>
           <span style='background:#2B7CB5;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>조립중</span>
-          <span style='color:#aaa;'>▶</span>
+          <span style='color:#4a5568;'>▶</span>
           <span style='background:#0D9488;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>검사대기</span>
-          <span style='color:#aaa;'>▶</span>
+          <span style='color:#4a5568;'>▶</span>
           <span style='background:#0D9488;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>검사중</span>
-          <span style='color:#aaa;'>▶</span>
+          <span style='color:#4a5568;'>▶</span>
           <span style='background:#16A34A;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>OQC대기</span>
-          <span style='color:#aaa;'>▶</span>
+          <span style='color:#4a5568;'>▶</span>
           <span style='background:#16A34A;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>OQC중</span>
-          <span style='color:#aaa;'>▶</span>
+          <span style='color:#4a5568;'>▶</span>
           <span style='background:#F4892A;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>출하승인</span>
-          <span style='color:#aaa;'>▶</span>
+          <span style='color:#4a5568;'>▶</span>
           <span style='background:#7C3AED;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>포장중</span>
-          <span style='color:#aaa;'>▶</span>
+          <span style='color:#4a5568;'>▶</span>
           <span style='background:#1B3A5C;color:#fff;padding:4px 10px;border-radius:5px;font-size:0.85rem;font-weight:600;'>✅ 완료</span>
         </div>
         <hr style='border:none;border-top:1px solid #e0d8c8;margin:10px 0;'>
@@ -7276,7 +7293,7 @@ elif curr_l == "관리자 매뉴얼":
     # 🔐 관리자 매뉴얼
     # ══════════════════════════════════════════════════════════
     st.markdown("<h2 class='centered-title'>🔐 관리자 매뉴얼</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;color:#8a7f72;font-size:0.9rem;'>스마트 물류 대시보드 &nbsp;·&nbsp; 관리자·마스터 전용</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;color:#7a8899;font-size:0.9rem;'>스마트 물류 대시보드 &nbsp;·&nbsp; 관리자·마스터 전용</p>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
     def _adm_section(icon, title, color="#1B3A5C"):
