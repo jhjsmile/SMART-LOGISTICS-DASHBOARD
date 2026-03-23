@@ -5426,8 +5426,7 @@ elif curr_l == "불량 공정":
         key="defect_sn_search"
     )
 
-    # 불량 원인 / 수리 조치 선택지
-    DEFECT_CAUSES = st.session_state.get('dropdown_defect_cause', ['(선택)', '기타 (직접 입력)'])
+    # 수리 조치 선택지
     REPAIR_ACTIONS = st.session_state.get('dropdown_repair_action', ['(선택)', '기타 (직접 입력)'])
 
     # 처리 대기 목록
@@ -5484,24 +5483,9 @@ elif curr_l == "불량 공정":
                             f"border-left:3px solid #f0c878;'>⚠️ 불량 원인: <b>{_ng_cause_disp}</b></div>",
                             unsafe_allow_html=True)
 
-                    r1, r2 = st.columns(2)
-                    # 불량원인 자동 세팅 (조립/검사/포장 라인에서 원인 선택 후 넘어온 경우)
-                    _cs_key = f"cs_{sn_key}"
-                    if _cs_key not in st.session_state and '불량원인:' in _증상_raw:
-                        _parsed_cause = _증상_raw.split('불량원인:')[-1].strip().split('|')[0].strip()
-                        if _parsed_cause in DEFECT_CAUSES:
-                            st.session_state[_cs_key] = _parsed_cause
-                    cause_sel = r1.selectbox("불량 원인", DEFECT_CAUSES, key=_cs_key)
-                    if cause_sel == "기타 (직접 입력)":
-                        v_c = r1.text_input("직접 입력", key=f"c_{sn_key}", placeholder="원인 직접 입력")
-                    elif cause_sel == "(선택)":
-                        v_c = ""
-                    else:
-                        v_c = cause_sel
-
-                    action_sel = r2.selectbox("수리 조치", REPAIR_ACTIONS, key=f"as_{sn_key}")
+                    action_sel = st.selectbox("수리 조치", REPAIR_ACTIONS, key=f"as_{sn_key}")
                     if action_sel == "기타 (직접 입력)":
-                        v_a = r2.text_input("직접 입력", key=f"a_{sn_key}", placeholder="조치 직접 입력")
+                        v_a = st.text_input("직접 입력", key=f"a_{sn_key}", placeholder="조치 직접 입력")
                     elif action_sel == "(선택)":
                         v_a = ""
                     else:
@@ -5533,7 +5517,7 @@ elif curr_l == "불량 공정":
                     _is_submitting = st.session_state.get(f"_def_submit_{sn_key}", False)
                     if _btn_col.button("✅ 확정", key=f"b_{sn_key}", type="primary",
                                        use_container_width=True, disabled=_is_submitting):
-                        if v_c and v_a:
+                        if v_a:
                             st.session_state[f"_def_submit_{sn_key}"] = True
                             _target_sn = target_sn.strip() or row['시리얼']
                             _rep_sn = replace_sn.strip()
@@ -5553,14 +5537,14 @@ elif curr_l == "불량 공정":
                                         load_material_serials.clear()
                                         _upd = {
                                             '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
-                                            '증상': v_c, '수리': f"자재교체({_mat_name}:{_target_sn}→{_rep_sn})"
+                                            '수리': f"자재교체({_mat_name}:{_target_sn}→{_rep_sn})"
                                         }
                                         update_row(row['시리얼'], _upd)
                                         insert_audit_log(
                                             시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                                             이전상태="불량 처리 중", 이후상태="수리 완료(재투입)",
                                             작업자=st.session_state.user_id,
-                                            비고=f"원인:{v_c} / 자재교체:{_mat_name} {_target_sn}→{_rep_sn}"
+                                            비고=f"자재교체:{_mat_name} {_target_sn}→{_rep_sn}"
                                         )
                                         _prod_update(row['시리얼'], _upd)
                                         st.toast(f"✅ 자재 시리얼 교체 완료: {_target_sn} → {_rep_sn}", icon="✅")
@@ -5574,14 +5558,14 @@ elif curr_l == "불량 공정":
                                     else:
                                         _upd = {
                                             '상태': "교체됨", '시간': get_now_kst_str(),
-                                            '증상': v_c, '수리': f"교체처리({_rep_sn})"
+                                            '수리': f"교체처리({_rep_sn})"
                                         }
                                         update_row(_target_sn, _upd)
                                         insert_audit_log(
                                             시리얼=_target_sn, 모델=row['모델'], 반=row['반'],
                                             이전상태="불량 처리 중", 이후상태="교체됨",
                                             작업자=st.session_state.user_id,
-                                            비고=f"원인:{v_c} / 교체S/N:{_rep_sn}"
+                                            비고=f"교체S/N:{_rep_sn}"
                                         )
                                         _prod_update(_target_sn, _upd)
                                         insert_row({
@@ -5604,19 +5588,19 @@ elif curr_l == "불량 공정":
                             else:
                                 _upd = {
                                     '상태': "수리 완료(재투입)", '시간': get_now_kst_str(),
-                                    '증상': v_c, '수리': v_a
+                                    '수리': v_a
                                 }
                                 update_row(row['시리얼'], _upd)
                                 insert_audit_log(
                                     시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                                     이전상태="불량 처리 중", 이후상태="수리 완료(재투입)",
                                     작업자=st.session_state.user_id,
-                                    비고=f"원인:{v_c} / 조치:{v_a}"
+                                    비고=f"조치:{v_a}"
                                 )
                                 _prod_update(row['시리얼'], _upd)
                                 _rerun(f"def_wait_{g}")
                         else:
-                            st.warning("불량 원인과 수리 조치를 모두 선택해주세요.")
+                            st.warning("수리 조치를 선택해주세요.")
     if not has_any:
         if _def_search.strip():
             st.info(f"🔍 '{_def_search.strip()}' 에 해당하는 처리 대기 항목이 없습니다.")
