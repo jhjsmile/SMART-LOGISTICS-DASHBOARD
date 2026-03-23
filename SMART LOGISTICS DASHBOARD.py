@@ -59,7 +59,7 @@ from modules.database import (
     load_app_setting, save_app_setting,
     submit_help_request, load_help_requests,
     submit_access_request, load_access_requests, review_access_request,
-    insert_audit_log, load_audit_log, load_oqc_fail_audit_log,
+    insert_audit_log, load_audit_log, load_audit_log_by_date, load_oqc_fail_audit_log,
     delete_all_audit_log, delete_audit_log_row,
     insert_material_serials, load_material_serials,
     load_material_serials_bulk, search_material_by_sn,
@@ -5653,7 +5653,7 @@ elif curr_l == "불량 공정":
 elif curr_l == "수리 현황 리포트":
     st.markdown("<h2 class='centered-title'>📈 품질 분석 및 수리 이력 리포트</h2>", unsafe_allow_html=True)
 
-    # ── 날짜 / 반 / 상태 필터 (데이터 로드 전에 먼저 표시) ──────────
+    # ── 날짜 / 반 / 상태 필터 ────────────────────────────────────
     _rp_f1, _rp_f2, _rp_f3 = st.columns([3, 1.2, 1.5])
     _rp_drange = _rp_f1.date_input(
         "조회 기간",
@@ -5664,10 +5664,14 @@ elif curr_l == "수리 현황 리포트":
     _rp_state = _rp_f3.selectbox("상태 필터", ["전체", "불량 처리 중", "수리 완료(재투입)", "부적합(OQC)"], key="repair_rpt_state")
 
     if isinstance(_rp_drange, (list, tuple)) and len(_rp_drange) == 2:
-        hist_df = load_production_history(str(_rp_drange[0]), str(_rp_drange[1]))
+        _rp_from, _rp_to = str(_rp_drange[0]), str(_rp_drange[1])
     else:
-        hist_df = load_production_history(str(date.today()), str(date.today()))
+        _rp_from = _rp_to = str(date.today())
 
+    hist_df    = load_production_history(_rp_from, _rp_to)
+    _audit_rp  = load_audit_log_by_date(_rp_from, _rp_to)
+
+    # 수리 이력 필터 (수리 컬럼 비어있지 않은 행)
     _repair_col = hist_df['수리'].astype(str).str.strip()
     hist_df = hist_df[_repair_col != ""]
     if _rp_ban != "전체":
@@ -5675,9 +5679,69 @@ elif curr_l == "수리 현황 리포트":
     if _rp_state != "전체":
         hist_df = hist_df[hist_df['상태'] == _rp_state]
 
-    if not hist_df.empty:
+    # audit_rp 반 필터
+    if _rp_ban != "전체" and not _audit_rp.empty:
+        _audit_rp = _audit_rp[_audit_rp['반'] == _rp_ban]
 
-        st.caption(f"조회 결과: {len(hist_df)}건")
+    # ══════════════════════════════════════════════════════════════
+    # 누적 수리 KPI (audit_log 기반)
+    # ══════════════════════════════════════════════════════════════
+    st.markdown("<div class='section-title'>📊 기간 누적 수리 지표</div>", unsafe_allow_html=True)
+    if not _audit_rp.empty:
+        _ng_total   = len(_audit_rp[_audit_rp['이후상태'] == '불량 처리 중'])
+        _repair_done = len(_audit_rp[_audit_rp['이후상태'] == '수리 완료(재투입)'])
+        _oqc_fail   = len(_audit_rp[_audit_rp['이후상태'].isin(['부적합(OQC)', '불량 처리 중']) &
+                                    _audit_rp['이전상태'].isin(['OQC중', 'OQC대기'])])
+        # 반복 수리: 동일 시리얼에서 '수리 완료(재투입)' 이벤트 2회 이상
+        _repeat_sn = (
+            _audit_rp[_audit_rp['이후상태'] == '수리 완료(재투입)']
+            .groupby('시리얼').size()
+        )
+        _repeat_cnt = int((_repeat_sn >= 2).sum()) if not _repeat_sn.empty else 0
+
+        _kk = st.columns(4)
+        _kk[0].metric("🔴 불량 발생 (누적)", f"{_ng_total:,} 건",
+                      help="기간 내 '불량 처리 중' 상태로 전환된 총 횟수")
+        _kk[1].metric("🔧 수리 완료 (누적)", f"{_repair_done:,} 건",
+                      help="기간 내 수리 후 재투입된 총 횟수")
+        _kk[2].metric("🚫 OQC 부적합 (누적)", f"{_oqc_fail:,} 건",
+                      help="OQC 단계에서 부적합 판정된 총 횟수")
+        _kk[3].metric("🔁 반복 수리 S/N", f"{_repeat_cnt:,} 건",
+                      help="동일 시리얼이 2회 이상 수리된 건수")
+    else:
+        st.info("해당 기간 감사 로그 데이터가 없습니다.")
+
+    st.divider()
+
+    # ══════════════════════════════════════════════════════════════
+    # 날짜별 수리 추이 (audit_log 기반)
+    # ══════════════════════════════════════════════════════════════
+    if not _audit_rp.empty:
+        _trend_df = _audit_rp[_audit_rp['이후상태'].isin(
+            ['불량 처리 중', '수리 완료(재투입)', '부적합(OQC)'])].copy()
+        if not _trend_df.empty:
+            _trend_df['날짜'] = _trend_df['시간'].astype(str).str[:10]
+            _trend_grp = (
+                _trend_df.groupby(['날짜', '이후상태'])
+                .size().reset_index(name='건수')
+            )
+            _trend_color = {
+                '불량 처리 중':       '#c0392b',
+                '수리 완료(재투입)':  '#27ae60',
+                '부적합(OQC)':       '#e67e22',
+            }
+            st.plotly_chart(
+                px.bar(_trend_grp, x='날짜', y='건수', color='이후상태',
+                       barmode='group', title="날짜별 불량·수리 발생 추이",
+                       color_discrete_map=_trend_color),
+                use_container_width=True
+            )
+
+    # ══════════════════════════════════════════════════════════════
+    # 공정별 이슈 빈도 + 모델별 비중 차트
+    # ══════════════════════════════════════════════════════════════
+    if not hist_df.empty:
+        st.caption(f"수리 이력 조회 결과: {len(hist_df)}건")
         c_l, c_r = st.columns([1.8, 1.2])
         with c_l:
             _line_order = ['조립 라인', '검사 라인', 'OQC 라인']
@@ -5689,12 +5753,12 @@ elif curr_l == "수리 현황 리포트":
         with c_r:
             st.plotly_chart(px.pie(hist_df.groupby('모델').size().reset_index(name='수량'),
                 values='수량', names='모델', hole=0.4, title="모델별 불량 비중"), use_container_width=True)
-        # ── 이력 테이블 (페이지네이션) ─────────────────────────────
+
+        # ── 수리 이력 테이블 (페이지네이션) ───────────────────────
         _HIST_PAGE_SIZE = 50
         _hist_total = len(hist_df)
         _hist_total_pages = max(1, (_hist_total + _HIST_PAGE_SIZE - 1) // _HIST_PAGE_SIZE)
-        # 필터 변경 시 페이지 초기화
-        _rh_filter_key = f"{str(_rp_drange)}|{_rp_ban}|{_rp_state}"
+        _rh_filter_key = f"{_rp_from}|{_rp_to}|{_rp_ban}|{_rp_state}"
         if st.session_state.get("_repair_filter_key") != _rh_filter_key:
             st.session_state["repair_hist_page"] = 1
             st.session_state["_repair_filter_key"] = _rh_filter_key
