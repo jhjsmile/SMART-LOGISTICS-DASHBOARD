@@ -4703,7 +4703,7 @@ elif curr_l == "OQC 라인":
                         if _oi_int in oqc_wait_list.index:
                             _orow = oqc_wait_list.loc[_oi_int]
                             _upd = {'상태': '출하승인', '시간': get_now_kst_str(),
-                                    '수리': 'OQC합격'}
+                                    'OQC판정': 'OQC합격'}
                             update_row(_orow['시리얼'], _upd)
                             insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
                                 이전상태='OQC중', 이후상태='출하승인', 작업자=st.session_state.user_id)
@@ -4728,8 +4728,7 @@ elif curr_l == "OQC 라인":
                                 _upd = {
                                     '상태': '불량 처리 중',
                                     '시간': get_now_kst_str(),
-                                    '증상': f"불량입고출처: OQC 라인 (부적합사유: {_dflt})",
-                                    '수리': f"OQC 부적합 판정 - 사유: {_dflt}"
+                                    'OQC판정': f"OQC 부적합 - 사유: {_dflt}"
                                 }
                                 update_row(_orow['시리얼'], _upd)
                                 insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
@@ -4780,7 +4779,7 @@ elif curr_l == "OQC 라인":
                                          use_container_width=True)
                     if btn1:
                         _upd = {'상태': '출하승인', '시간': get_now_kst_str(),
-                                '수리': 'OQC합격'}
+                                'OQC판정': 'OQC합격'}
                         update_row(row['시리얼'], _upd)
                         insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
                             이전상태='OQC중', 이후상태='출하승인', 작업자=st.session_state.user_id)
@@ -4795,8 +4794,7 @@ elif curr_l == "OQC 라인":
                             _upd = {
                                 '상태': '불량 처리 중',
                                 '시간': get_now_kst_str(),
-                                '증상': f"불량입고출처: OQC 라인 (부적합사유: {defect_txt})",
-                                '수리': f"OQC 부적합 판정 - 사유: {defect_txt}"
+                                'OQC판정': f"OQC 부적합 - 사유: {defect_txt}"
                             }
                             update_row(row['시리얼'], _upd)
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
@@ -4876,12 +4874,15 @@ elif curr_l == "OQC 라인":
                     if 결과 == '부적합(OQC)':
                         if rr2[4].button("🔧 불량 공정 이관", key=f"oqc_send_defect_{_i}",
                                          use_container_width=True, help="불량 공정으로 이관하여 수리/교체 처리"):
-                            _reason = row.get('증상', '') or row.get('수리', '').replace('사유:', '')
+                            _oqc_판정 = str(row.get('OQC판정', ''))
+                            if '사유: ' in _oqc_판정:
+                                _reason = _oqc_판정.split('사유: ', 1)[-1].strip()
+                            else:
+                                _reason = _oqc_판정 or str(row.get('증상', ''))
                             _upd = {
                                 '상태': '불량 처리 중',
                                 '시간': get_now_kst_str(),
-                                '증상': f"불량입고출처: OQC 라인 (부적합사유: {_reason})",
-                                '수리': f"OQC 부적합 판정 - 사유: {_reason}"
+                                'OQC판정': f"OQC 부적합 이관 - 사유: {_reason}"
                             }
                             update_row(row['시리얼'], _upd)
                             insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=row['반'],
@@ -4984,6 +4985,10 @@ elif curr_l == "OQC 라인":
 
         # ── 부적합 사유 추출 (부적합 판정 이력 + 차트 ② 공통 사용) ────
         def _extract_reason_nc(r):
+            oqc판정 = str(r.get('OQC판정', ''))
+            if 'OQC 부적합' in oqc판정 and '사유: ' in oqc판정:
+                return oqc판정.split('사유: ', 1)[-1].strip()
+            # 구 방식 호환 (이전 데이터)
             수리 = str(r.get('수리', ''))
             증상 = str(r.get('증상', ''))
             if 'OQC 부적합 판정' in 수리 and '사유: ' in 수리:
@@ -5448,9 +5453,12 @@ elif curr_l == "불량 공정":
                 with st.container(border=True):
                     # 불량 입고 출처 파싱
                     _증상_raw = str(row.get('증상', ''))
+                    _oqc판정_raw = str(row.get('OQC판정', ''))
                     _from_line = ''
                     if '불량입고출처:' in _증상_raw:
                         _from_line = _증상_raw.split('불량입고출처:')[-1].strip().split()[0]
+                    elif 'OQC 부적합' in _oqc판정_raw:
+                        _from_line = 'OQC 라인'
 
                     ic1, ic2, ic3, ic4, ic5 = st.columns([2, 1.3, 1.5, 1.5, 1.2])
                     ic1.markdown(f"**{row['모델']}**")
@@ -5466,9 +5474,13 @@ elif curr_l == "불량 공정":
                     else:
                         ic5.caption("출처 미기록")
 
-                    # OQC 부적합 사유 표시
-                    if '부적합사유:' in _증상_raw:
+                    # OQC 부적합 사유 표시 (신규: OQC판정 / 구 방식: 증상 호환)
+                    _oqc_reason = ''
+                    if 'OQC 부적합' in _oqc판정_raw and '사유: ' in _oqc판정_raw:
+                        _oqc_reason = _oqc판정_raw.split('사유: ', 1)[-1].strip()
+                    elif '부적합사유:' in _증상_raw:
                         _oqc_reason = _증상_raw.split('부적합사유:')[-1].strip().rstrip(')')
+                    if _oqc_reason:
                         st.markdown(
                             f"<div style='background:#fde8e8;color:#7a1a1a;padding:4px 10px;"
                             f"border-radius:5px;font-size:0.78rem;margin:4px 0 2px 0;"
@@ -5627,7 +5639,7 @@ elif curr_l == "수리 현황 리포트":
         hist_df = load_production_history(str(date.today()), str(date.today()))
 
     _repair_col = hist_df['수리'].astype(str).str.strip()
-    hist_df = hist_df[(_repair_col != "") & (_repair_col != "OQC합격")]
+    hist_df = hist_df[_repair_col != ""]
     if _rp_ban != "전체":
         hist_df = hist_df[hist_df['반'] == _rp_ban]
     if _rp_state != "전체":
