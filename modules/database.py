@@ -79,6 +79,7 @@ def keep_supabase_alive() -> None:
 
 def _clear_production_cache() -> None:
     load_realtime_ledger.clear()
+    load_production_history.clear()
 
 def _clear_schedule_cache() -> None:
     load_schedule.clear()
@@ -92,11 +93,12 @@ def _clear_master_cache() -> None:
 
 def _clear_audit_cache() -> None:
     load_audit_log.clear()
+    load_oqc_fail_audit_log.clear()
 
-def _clear_help_request_cache():
+def _clear_help_request_cache() -> None:
     load_help_requests.clear()
 
-def _clear_access_request_cache():
+def _clear_access_request_cache() -> None:
     load_access_requests.clear()
 
 def _clear_all_cache() -> None:

@@ -2025,7 +2025,7 @@ if curr_l == "현황판":
     total      = len(db_all)
     completed  = len(db_all[(db_all['라인']=='포장 라인')&(db_all['상태']=='완료')])
     in_prog    = len(db_all[db_all['상태'].isin(ACTIVE_STATES)])
-    defects    = len(db_all[db_all['상태'].str.contains('불량',na=False)])
+    defects    = len(db_all[db_all['상태'].str.contains('불량|부적합',na=False)])
     col1.markdown(f"<div class='stat-box'><div class='stat-label'>📦 총 투입</div><div class='stat-value'>{total}</div></div>", unsafe_allow_html=True)
     col2.markdown(f"<div class='stat-box'><div class='stat-label'>✅ 최종 완료</div><div class='stat-value'>{completed}</div></div>", unsafe_allow_html=True)
     col3.markdown(f"<div class='stat-box'><div class='stat-label'>🏗️ 작업 중</div><div class='stat-value'>{in_prog}</div></div>", unsafe_allow_html=True)
@@ -2040,7 +2040,7 @@ if curr_l == "현황판":
         gdf  = db_all[db_all['반'] == g]
         완료 = len(gdf[(gdf['라인']=='포장 라인')&(gdf['상태']=='완료')])
         재공 = len(gdf[gdf['상태'].isin(['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)'])])
-        불량 = len(gdf[gdf['상태'].str.contains('불량',na=False)])
+        불량 = len(gdf[gdf['상태'].str.contains('불량|부적합',na=False)])
         투입 = len(gdf)
         cards_html += (
             f"<div style='flex:1; background:#fffdf8; border:1px solid #e0d8c8; border-radius:14px; padding:20px; box-sizing:border-box; min-width:0;'>"
@@ -2245,7 +2245,7 @@ elif curr_l == "조립 라인":
                 total  = len(gdf)
                 done   = len(gdf[gdf['상태'].isin(['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료'])])
                 wip    = len(gdf[gdf['상태'].isin(['조립중','수리 완료(재투입)'])])
-                defect = len(gdf[gdf['상태'].str.contains('불량', na=False)])
+                defect = len(gdf[gdf['상태'].str.contains('불량|부적합', na=False)])
                 count_rows.append((model, pn, total, done, wip, defect))
 
             for (model, pn, total, done, wip, defect) in count_rows:
@@ -3637,7 +3637,7 @@ elif curr_l == "생산 지표 관리":
             l_tot  = len(ldf)
             l_done = len(ldf[ldf['상태']=='완료']) if not ldf.empty else 0
             l_wip  = len(ldf[ldf['상태'].isin(['조립중','검사중','포장중','수리 완료(재투입)'])]) if not ldf.empty else 0
-            l_ng   = len(ldf[ldf['상태'].str.contains('불량',na=False)]) if not ldf.empty else 0
+            l_ng   = len(ldf[ldf['상태'].str.contains('불량|부적합',na=False)]) if not ldf.empty else 0
             l_wait = len(db_f[(db_f['라인']==line_names_full[pi-1])&(db_f['상태']=='완료')]) if pi>0 and not db_f.empty else 0
             btl_flag = "⚠" if l_wip > 5 else ""
             wip_clr = "#c0392b" if l_wip > 5 else "#2471a3"
@@ -5670,9 +5670,14 @@ elif curr_l == "수리 현황 리포트":
         _HIST_PAGE_SIZE = 50
         _hist_total = len(hist_df)
         _hist_total_pages = max(1, (_hist_total + _HIST_PAGE_SIZE - 1) // _HIST_PAGE_SIZE)
+        # 필터 변경 시 페이지 초기화
+        _rh_filter_key = f"{str(_rp_drange)}|{_rp_ban}|{_rp_state}"
+        if st.session_state.get("_repair_filter_key") != _rh_filter_key:
+            st.session_state["repair_hist_page"] = 1
+            st.session_state["_repair_filter_key"] = _rh_filter_key
         if "repair_hist_page" not in st.session_state:
             st.session_state["repair_hist_page"] = 1
-        _rh_page = st.session_state["repair_hist_page"]
+        _rh_page = min(st.session_state["repair_hist_page"], _hist_total_pages)
         _rh_start = (_rh_page - 1) * _HIST_PAGE_SIZE
         hist_page_df = hist_df.iloc[_rh_start:_rh_start + _HIST_PAGE_SIZE]
 
