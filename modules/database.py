@@ -262,17 +262,24 @@ def insert_row(row: dict) -> bool:
     except Exception as e:
         err_str = str(e)
         if "23505" in err_str or "duplicate key" in err_str or "already exists" in err_str:
-            prod_db = st.session_state.get('production_db', pd.DataFrame())
-            if not prod_db.empty and sn in prod_db['시리얼'].values:
-                st.error(f"⚠️ 이미 등록된 시리얼입니다: **{sn}**\n\n동일한 S/N이 이미 생산 이력에 존재합니다. 시리얼을 확인해주세요.")
-                return False
+            # 중복키 에러 → DB에 이미 해당 시리얼이 존재함이 확실.
+            # 세션 캐시(production_db)는 로드 타이밍에 따라 비어있을 수 있으므로
+            # 캐시 기준으로 판단하지 않고 DB에서 직접 현재 상태 조회 후 에러 표시.
+            # (기존: 캐시가 비어있으면 UPSERT → 진행 중인 제품을 조립중으로 덮어쓰는 버그)
             try:
-                upsert_row = {**row, 'deleted_at': None, 'deleted_by': None}
-                sb.table("production").upsert(upsert_row, on_conflict="시리얼").execute()
-                return True
-            except Exception as e2:
-                st.error(f"등록 실패: {e2}")
-                return False
+                existing = sb.table("production").select("시리얼,상태,반,모델").eq("시리얼", sn).execute()
+                if existing.data:
+                    ex = existing.data[0]
+                    st.error(
+                        f"⚠️ 이미 등록된 시리얼입니다: **{sn}**\n\n"
+                        f"현재 상태: **{ex.get('상태','')}** | 반: {ex.get('반','')} | 모델: {ex.get('모델','')}\n\n"
+                        f"동일한 S/N이 이미 생산 이력에 존재합니다. 시리얼을 확인해주세요."
+                    )
+                    return False
+            except Exception:
+                pass
+            st.error(f"⚠️ 이미 등록된 시리얼입니다: **{sn}**\n\n시리얼을 확인해주세요.")
+            return False
         else:
             st.error(f"등록 실패: {e}")
         return False
