@@ -3417,17 +3417,26 @@ elif curr_l == "포장 라인":
     pk_ing_df = db_pk[db_pk['상태'] == '포장중'].sort_values('시간', ascending=False)
 
     if not pk_ing_df.empty:
-        hh = st.columns([2, 2, 2, 1.5])
-        for col, txt in zip(hh, ["시간", "모델", "시리얼", "포장 완료"]):
+        hh = st.columns([1.5, 1.5, 2, 2.5, 1.5])
+        for col, txt in zip(hh, ["시간", "모델", "제품 시리얼", "라벨 S/N 스캔", "포장 완료"]):
             col.markdown(f"<p style='font-size:0.72rem;font-weight:700;color:#8a7f72;margin:0;padding-bottom:3px;border-bottom:1px solid #e0d8c8;'>{txt}</p>", unsafe_allow_html=True)
         # 성능: iterrows → enumerate + to_dict('records')
         for idx, row in enumerate(pk_ing_df.to_dict('records')):
-            rr = st.columns([2, 2, 2, 1.5])
+            rr = st.columns([1.5, 1.5, 2, 2.5, 1.5])
             rr[0].caption(str(row.get('시간', ''))[:16])
             rr[1].write(row.get('모델', ''))
             rr[2].markdown(f"`{row.get('시리얼', '')}`")
-            if rr[3].button("✔ 포장 완료", key=f"pk_done_{idx}", use_container_width=True, type="primary"):
-                _upd = {'상태': '완료', '시간': get_now_kst_str()}
+            _label_key = f"pk_label_{row['시리얼']}"
+            label_sn = rr[3].text_input(
+                "라벨 S/N",
+                placeholder="바코드 스캔 또는 직접 입력",
+                key=_label_key,
+                label_visibility="collapsed",
+            )
+            _btn_disabled = not bool(label_sn.strip())
+            if rr[4].button("✔ 완료", key=f"pk_done_{idx}", use_container_width=True,
+                            type="primary", disabled=_btn_disabled):
+                _upd = {'상태': '완료', '시간': get_now_kst_str(), '라벨시리얼': label_sn.strip()}
                 update_row(row['시리얼'], _upd)
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
                     이전상태='포장중', 이후상태='완료', 작업자=st.session_state.user_id)
@@ -3457,7 +3466,9 @@ elif curr_l == "포장 라인":
         hist = hist.sort_values('시간', ascending=False)
         st.caption(f"조회 결과: {len(hist)}건")
         if not hist.empty:
-            st.dataframe(hist[['시간', '모델', '시리얼', '작업자']].reset_index(drop=True),
+            _pk_hist_cols = ['시간', '모델', '시리얼', '라벨시리얼', '작업자']
+            _pk_hist_cols = [c for c in _pk_hist_cols if c in hist.columns]
+            st.dataframe(hist[_pk_hist_cols].reset_index(drop=True),
                          use_container_width=True, hide_index=True)
         else:
             st.info("완료된 제품이 없습니다.")
