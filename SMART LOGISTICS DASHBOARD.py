@@ -3518,12 +3518,36 @@ elif curr_l == "포장 라인":
         if _pk_model_f != "전체":
             hist = hist[hist['모델'] == _pk_model_f]
         hist = hist.sort_values('시간', ascending=False)
-        st.caption(f"조회 결과: {len(hist)}건")
+        st.caption(f"조회 결과: {len(hist)}건  |  라벨 S/N 셀 클릭 후 직접 수정 가능")
         if not hist.empty:
             _pk_hist_cols = ['시간', '모델', '시리얼', '라벨시리얼', '작업자']
             _pk_hist_cols = [c for c in _pk_hist_cols if c in hist.columns]
-            st.dataframe(hist[_pk_hist_cols].reset_index(drop=True),
-                         use_container_width=True, hide_index=True)
+            _hist_disp = hist[_pk_hist_cols].reset_index(drop=True)
+            _edited = st.data_editor(
+                _hist_disp,
+                column_config={
+                    '시간':     st.column_config.TextColumn('시간',     disabled=True),
+                    '모델':     st.column_config.TextColumn('모델',     disabled=True),
+                    '시리얼':   st.column_config.TextColumn('시리얼',   disabled=True),
+                    '작업자':   st.column_config.TextColumn('작업자',   disabled=True),
+                    '라벨시리얼': st.column_config.TextColumn('라벨 S/N', help="클릭하여 수정"),
+                },
+                use_container_width=True,
+                hide_index=True,
+                key="pk_hist_editor",
+            )
+            # 변경된 행 감지 → 저장
+            _changed = _edited[_edited['라벨시리얼'] != _hist_disp['라벨시리얼']]
+            if not _changed.empty:
+                for _, _crow in _changed.iterrows():
+                    _sn  = _crow['시리얼']
+                    _lsn = str(_crow['라벨시리얼']).strip() if pd.notna(_crow['라벨시리얼']) else ''
+                    update_row(_sn, {'라벨시리얼': _lsn})
+                    insert_audit_log(시리얼=_sn, 모델=_crow.get('모델', ''), 반=curr_g,
+                        이전상태='완료', 이후상태='완료', 작업자=st.session_state.user_id,
+                        비고=f"라벨시리얼 수정: {_lsn}")
+                    _prod_update(_sn, {'라벨시리얼': _lsn})
+                st.rerun()
         else:
             st.info("완료된 제품이 없습니다.")
 
