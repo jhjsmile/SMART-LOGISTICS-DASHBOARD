@@ -293,19 +293,19 @@ st.markdown("""
 
     /* 사이드바 */
     [data-testid="stSidebar"] {
-        background-color: #1e2830 !important;
-        border-right: 2px solid #37474f !important;
+        background-color: #cfd8dc !important;
+        border-right: 2px solid #90a4ae !important;
     }
     [data-testid="stSidebar"] p,
     [data-testid="stSidebar"] span:not(.stButton span),
     [data-testid="stSidebar"] .stMarkdown,
     [data-testid="stSidebar"] .stCaption {
-        color: #b0bec5 !important;
+        color: #1a242c !important;
     }
     [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3 {
-        color: #eceff1 !important;
+        color: #1a242c !important;
     }
     /* 사이드바 secondary 버튼 텍스트는 기본 색상 유지 */
     [data-testid="stSidebar"] .stButton button {
