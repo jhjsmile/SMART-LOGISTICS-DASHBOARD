@@ -161,6 +161,8 @@ def load_realtime_ledger() -> pd.DataFrame:
         if rows:
             df = pd.DataFrame(rows)
             df = df.drop(columns=[c for c in ['id','deleted_at','deleted_by'] if c in df.columns])
+            # 시리얼 중복 제거: 같은 시리얼이 두 쿼리에 모두 포함된 엣지케이스 방어
+            df = df.drop_duplicates(subset=['시리얼'], keep='last')
             return df.fillna("")
         return pd.DataFrame(columns=_EMPTY_COLS)
     except Exception as e:
