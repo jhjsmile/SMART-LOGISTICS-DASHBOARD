@@ -849,6 +849,23 @@ def _prod_bulk_update(updates: list) -> None:
                 st.session_state.production_db.loc[_mask, col] = val
 
 
+def _run_bulk_db_ops(ops: list) -> list:
+    """update_row + insert_audit_log를 ThreadPoolExecutor로 병렬 실행.
+    ops: [{"sn": str, "data": dict, "audit": dict}, ...]
+      audit 키는 insert_audit_log의 kwargs (시리얼, 모델, 반, 이전상태, 이후상태, 작업자, [비고]).
+    반환: _prod_bulk_update에 넘길 [{"sn":..., "data":...}, ...] 리스트.
+    max_workers=5: Supabase httpx 클라이언트는 동시 요청 안전, 과부하 방지를 위해 제한."""
+    if not ops:
+        return []
+    from concurrent.futures import ThreadPoolExecutor
+    def _one(op):
+        update_row(op["sn"], op["data"])
+        insert_audit_log(**op["audit"])
+    with ThreadPoolExecutor(max_workers=min(len(ops), 5)) as _ex:
+        list(_ex.map(_one, ops))
+    return [{"sn": o["sn"], "data": o["data"]} for o in ops]
+
+
 # =================================================================
 # 5. 캘린더 다이얼로그
 # =================================================================
@@ -2355,39 +2372,39 @@ elif curr_l == "조립 라인":
                     _bulk_ng_cause_final = _bulk_ng_cause
                 if ba3.button(" 일괄 완료", key=f"bulk_ok_{curr_g}", type="primary", use_container_width=True,
                              disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
-                    _bulk = []
+                    _ops = []
                     for ci in checked_idxs:
                         ci_int = int(ci)
                         if ci_int in f_df.index:
                             _r = f_df.loc[ci_int]
                             _upd = {'상태':'검사대기','시간':get_now_kst_str()}
-                            update_row(_r['시리얼'], _upd)
-                            insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
-                                이전상태=_r['상태'], 이후상태='검사대기', 작업자=st.session_state.user_id)
-                            _bulk.append({"sn": _r['시리얼'], "data": _upd})
+                            _ops.append({"sn": _r['시리얼'], "data": _upd,
+                                "audit": {"시리얼": _r['시리얼'], "모델": _r['모델'], "반": curr_g,
+                                         "이전상태": _r['상태'], "이후상태": '검사대기',
+                                         "작업자": st.session_state.user_id}})
                     st.session_state[_asm_chk_key] = {}
                     st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
-                    _prod_bulk_update(_bulk)
+                    _prod_bulk_update(_run_bulk_db_ops(_ops))
                     _rerun("asm_hist")
                 if ba4.button(" 일괄 불량", key=f"bulk_ng_{curr_g}", use_container_width=True,
                              disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
                     if _bulk_ng_cause_final in ["(선택)", ""]:
                         st.warning(" 불량 원인을 먼저 선택해주세요.")
                     else:
-                        _bulk = []
+                        _ops = []
                         for ci in checked_idxs:
                             ci_int = int(ci)
                             if ci_int in f_df.index:
                                 _r = f_df.loc[ci_int]
                                 _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
                                     '증상': f'불량입고출처: 조립 라인 | 불량원인: {_bulk_ng_cause_final}'}
-                                update_row(_r['시리얼'], _upd)
-                                insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
-                                    이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
-                                _bulk.append({"sn": _r['시리얼'], "data": _upd})
+                                _ops.append({"sn": _r['시리얼'], "data": _upd,
+                                    "audit": {"시리얼": _r['시리얼'], "모델": _r['모델'], "반": curr_g,
+                                             "이전상태": _r['상태'], "이후상태": '불량 처리 중',
+                                             "작업자": st.session_state.user_id}})
                         st.session_state[_asm_chk_key] = {}
                         st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
-                        _prod_bulk_update(_bulk)
+                        _prod_bulk_update(_run_bulk_db_ops(_ops))
                         _rerun("asm_hist")
 
             # STATUS_STYLE: 모듈 상수 사용 (상단 정의 참조)
@@ -2776,7 +2793,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                type="primary", use_container_width=True):
                     _next_s = '검사중' if curr_l == '검사 라인' else '포장중'
                     _prev_s = '검사대기' if curr_l == '검사 라인' else '출하승인'
-                    _bulk = []
+                    _ops = []
                     for wi in w_checked:
                         wi_int = int(wi)
                         if wi_int in wait_list.index:
@@ -2784,14 +2801,13 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             _upd = {'시간': get_now_kst_str(),
                                 '라인': curr_l, '상태': _next_s,
                                 '작업자': st.session_state.user_id}
-                            update_row(_wr['시리얼'], _upd)
-                            insert_audit_log(시리얼=_wr['시리얼'], 모델=_wr['모델'],
-                                반=curr_g, 이전상태=_prev_s, 이후상태=_next_s,
-                                작업자=st.session_state.user_id)
-                            _bulk.append({"sn": _wr['시리얼'], "data": _upd})
+                            _ops.append({"sn": _wr['시리얼'], "data": _upd,
+                                "audit": {"시리얼": _wr['시리얼'], "모델": _wr['모델'],
+                                         "반": curr_g, "이전상태": _prev_s, "이후상태": _next_s,
+                                         "작업자": st.session_state.user_id}})
                     st.session_state[_wck_key] = {}
                     st.session_state[_wscan_cnt] += 1  # 체크박스 키 리셋
-                    _prod_bulk_update(_bulk)
+                    _prod_bulk_update(_run_bulk_db_ops(_ops))
                     _rerun("chk_wait")
                 if wba3.button(" 선택 해제", key=f"wait_unck_{curr_g}_{curr_l}",
                                use_container_width=True):
@@ -2881,27 +2897,27 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                disabled=not check_perm(f"{curr_l}::{curr_g}", "write")):
                     _ok_s  = 'OQC대기' if curr_l == '검사 라인' else '완료'
                     _prv_s = '검사중'  if curr_l == '검사 라인' else '포장중'
-                    _bulk = []
+                    _ops = []
                     for ci in _h_checked:
                         ci_int = int(ci)
                         if ci_int in f_df.index:
                             _r = f_df.loc[ci_int]
                             if _r['상태'] in ["검사중","포장중","수리 완료(재투입)"]:
                                 _upd = {'상태':_ok_s,'시간':get_now_kst_str()}
-                                update_row(_r['시리얼'], _upd)
-                                insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
-                                    이전상태=_r['상태'], 이후상태=_ok_s, 작업자=st.session_state.user_id)
-                                _bulk.append({"sn": _r['시리얼'], "data": _upd})
+                                _ops.append({"sn": _r['시리얼'], "data": _upd,
+                                    "audit": {"시리얼": _r['시리얼'], "모델": _r['모델'], "반": curr_g,
+                                             "이전상태": _r['상태'], "이후상태": _ok_s,
+                                             "작업자": st.session_state.user_id}})
                     st.session_state[_hck_key] = {}
                     st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
-                    _prod_bulk_update(_bulk)
+                    _prod_bulk_update(_run_bulk_db_ops(_ops))
                     _rerun("chk_hist")
                 if hba4.button(" 일괄 불량", key=f"hist_bulk_ng_{curr_g}_{curr_l}",
                                use_container_width=True):
                     if _hist_bulk_ng_cause_final in ["(선택)", ""]:
                         st.warning(" 불량 원인을 먼저 선택해주세요.")
                     else:
-                        _bulk = []
+                        _ops = []
                         for ci in _h_checked:
                             ci_int = int(ci)
                             if ci_int in f_df.index:
@@ -2909,13 +2925,13 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 if _r['상태'] in ["검사중","포장중","수리 완료(재투입)"]:
                                     _upd = {'상태':'불량 처리 중','시간':get_now_kst_str(),
                                         '증상': f'불량입고출처: {curr_l} | 불량원인: {_hist_bulk_ng_cause_final}'}
-                                    update_row(_r['시리얼'], _upd)
-                                    insert_audit_log(시리얼=_r['시리얼'], 모델=_r['모델'], 반=curr_g,
-                                        이전상태=_r['상태'], 이후상태='불량 처리 중', 작업자=st.session_state.user_id)
-                                    _bulk.append({"sn": _r['시리얼'], "data": _upd})
+                                    _ops.append({"sn": _r['시리얼'], "data": _upd,
+                                        "audit": {"시리얼": _r['시리얼'], "모델": _r['모델'], "반": curr_g,
+                                                 "이전상태": _r['상태'], "이후상태": '불량 처리 중',
+                                                 "작업자": st.session_state.user_id}})
                         st.session_state[_hck_key] = {}
                         st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
-                        _prod_bulk_update(_bulk)
+                        _prod_bulk_update(_run_bulk_db_ops(_ops))
                         _rerun("chk_hist")
                 if hba5.button("해제", key=f"hist_unck_{curr_g}_{curr_l}",
                                use_container_width=True, help="선택 해제"):
@@ -4803,19 +4819,19 @@ elif curr_l == "OQC 라인":
                 oib1.markdown(f"<span style='color:#2E75B6;font-weight:700;'> {len(_oqc_in_checked)}개 선택됨</span>",
                               unsafe_allow_html=True)
                 if oib2.button("▶ 일괄 OQC 시작", key="oqc_bulk_in", type="primary", use_container_width=True):
-                    _bulk = []
+                    _ops = []
                     for _oi in _oqc_in_checked:
                         _oi_int = int(_oi)
                         if _oi_int in packing_done.index:
                             _orow = packing_done.loc[_oi_int]
                             _upd = {'상태': 'OQC중', '시간': get_now_kst_str(), '라인': 'OQC 라인'}
-                            update_row(_orow['시리얼'], _upd)
-                            insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
-                                이전상태='OQC대기', 이후상태='OQC중', 작업자=st.session_state.user_id)
-                            _bulk.append({"sn": _orow['시리얼'], "data": _upd})
+                            _ops.append({"sn": _orow['시리얼'], "data": _upd,
+                                "audit": {"시리얼": _orow['시리얼'], "모델": _orow['모델'], "반": _orow['반'],
+                                         "이전상태": 'OQC대기', "이후상태": 'OQC중',
+                                         "작업자": st.session_state.user_id}})
                     st.session_state[_oqc_in_ck_key] = {}
                     st.session_state[_oqc_in_sc_cnt] += 1  # 체크박스 키 리셋
-                    _prod_bulk_update(_bulk)
+                    _prod_bulk_update(_run_bulk_db_ops(_ops))
                     _rerun("oqc_wait")
                 if oib3.button(" 해제", key="oqc_in_unck", use_container_width=True):
                     st.session_state[_oqc_in_ck_key] = {}
@@ -4886,20 +4902,20 @@ elif curr_l == "OQC 라인":
                              unsafe_allow_html=True)
                 if ob2.button(" 일괄 합격", key="oqc_bulk_ok", type="primary", use_container_width=True,
                               disabled=not check_perm("OQC 라인", "write")):
-                    _bulk = []
+                    _ops = []
                     for _oi in _oqc_checked:
                         _oi_int = int(_oi)
                         if _oi_int in oqc_wait_list.index:
                             _orow = oqc_wait_list.loc[_oi_int]
                             _upd = {'상태': '출하승인', '시간': get_now_kst_str(),
                                     'OQC판정': 'OQC합격'}
-                            update_row(_orow['시리얼'], _upd)
-                            insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
-                                이전상태='OQC중', 이후상태='출하승인', 작업자=st.session_state.user_id)
-                            _bulk.append({"sn": _orow['시리얼'], "data": _upd})
+                            _ops.append({"sn": _orow['시리얼'], "data": _upd,
+                                "audit": {"시리얼": _orow['시리얼'], "모델": _orow['모델'], "반": _orow['반'],
+                                         "이전상태": 'OQC중', "이후상태": '출하승인',
+                                         "작업자": st.session_state.user_id}})
                     st.session_state[_oqc_ck_key] = {}
                     st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
-                    _prod_bulk_update(_bulk)
+                    _prod_bulk_update(_run_bulk_db_ops(_ops))
                     _rerun("oqc_ing")
                 _bulk_defect = ob3.selectbox("부적합 사유", OQC_DEFECT_REASONS,
                                              key="oqc_bulk_defect", label_visibility="collapsed")
@@ -4909,7 +4925,7 @@ elif curr_l == "OQC 라인":
                     if not _dflt:
                         st.warning(" 부적합 사유를 먼저 선택해주세요.")
                     else:
-                        _bulk = []
+                        _ops = []
                         for _oi in _oqc_checked:
                             _oi_int = int(_oi)
                             if _oi_int in oqc_wait_list.index:
@@ -4919,14 +4935,14 @@ elif curr_l == "OQC 라인":
                                     '시간': get_now_kst_str(),
                                     'OQC판정': f"OQC 부적합 - 사유: {_dflt}"
                                 }
-                                update_row(_orow['시리얼'], _upd)
-                                insert_audit_log(시리얼=_orow['시리얼'], 모델=_orow['모델'], 반=_orow['반'],
-                                    이전상태='OQC중', 이후상태='불량 처리 중',
-                                    작업자=st.session_state.user_id, 비고=f"OQC 부적합 - 사유: {_dflt}")
-                                _bulk.append({"sn": _orow['시리얼'], "data": _upd})
+                                _ops.append({"sn": _orow['시리얼'], "data": _upd,
+                                    "audit": {"시리얼": _orow['시리얼'], "모델": _orow['모델'], "반": _orow['반'],
+                                             "이전상태": 'OQC중', "이후상태": '불량 처리 중',
+                                             "작업자": st.session_state.user_id,
+                                             "비고": f"OQC 부적합 - 사유: {_dflt}"}})
                         st.session_state[_oqc_ck_key] = {}
                         st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
-                        _prod_bulk_update(_bulk)
+                        _prod_bulk_update(_run_bulk_db_ops(_ops))
                         _rerun("oqc_ing")
 
             st.markdown("<hr style='margin:8px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
