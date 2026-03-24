@@ -57,10 +57,10 @@ def _inject_autofocus(label: str = None, placeholder: str = None):
         f'var r=inp.getBoundingClientRect();'
         f'var d=Math.abs(r.bottom-ir.top)+Math.abs(r.left-ir.left);'
         f'if(d<bestD){{bestD=d;best=inp;}}}}'
-        f'if(best){{best.focus();return true;}}}}'
+        f'if(best){{best.focus();var bl=best.value.length;best.setSelectionRange(bl,bl);return true;}}}}'
         f'var inp=inputs[0];'
         f'if(inp&&!inp.disabled&&!inp.readOnly&&inp.offsetParent!==null)'
-        f'{{inp.focus();return true;}}return false;}}'
+        f'{{inp.focus();var il=inp.value.length;inp.setSelectionRange(il,il);return true;}}return false;}}'
         f'if(!f()){{setTimeout(function(){{if(!f())setTimeout(f,300);}},100);}}'
         f'}})();</script>'
     )
