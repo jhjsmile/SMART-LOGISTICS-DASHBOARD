@@ -736,7 +736,11 @@ st.markdown("""
     /* ── 스캐너 자동 포커스 복원 ──────────────────────────────────
        Streamlit은 rerun 후 포커스를 body로 이동시킴.
        blur 발생 후 50ms 내 activeElement가 body이면 rerun에 의한
-       포커스 소실로 판단 → 해당 입력란을 재포커스 (최대 8회 재시도). */
+       포커스 소실로 판단 → 해당 입력란을 재포커스 (최대 8회 재시도).
+       동일 label을 가진 입력란이 여러 섹션에 있을 경우,
+       blur된 입력란의 수직 위치와 가장 가까운 입력란에 포커스. */
+    var _lastBlurTop = -1;
+
     function tryRefocus(label, attempt) {
         attempt = attempt || 0;
         var ae = document.activeElement;
@@ -745,12 +749,17 @@ st.markdown("""
             (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
         var inputs = document.querySelectorAll(
             '[data-testid="stTextInput"] input[type="text"]');
+        var bestEl = null, bestDist = Infinity;
         for (var i = 0; i < inputs.length; i++) {
-            if (getLabelText(inputs[i]) === label) {
-                inputs[i].focus();
-                return;
-            }
+            if (getLabelText(inputs[i]) !== label) continue;
+            if (inputs[i].disabled || inputs[i].readOnly || inputs[i].offsetParent === null) continue;
+            /* 위치 기반: blur된 입력란과 수직 거리가 가장 가까운 것 선택 */
+            var dist = _lastBlurTop >= 0
+                ? Math.abs(inputs[i].getBoundingClientRect().top + window.scrollY - _lastBlurTop)
+                : i;
+            if (dist < bestDist) { bestDist = dist; bestEl = inputs[i]; }
         }
+        if (bestEl) { bestEl.focus(); return; }
         /* 아직 rerun 완료 전 - 최대 8회(약 2초) 재시도 */
         if (attempt < 8) {
             setTimeout(function() { tryRefocus(label, attempt + 1); }, 250);
@@ -761,6 +770,8 @@ st.markdown("""
         if (!e.target || e.target.tagName !== 'INPUT') return;
         if (!isSearchInput(e.target)) return;
         var label = getLabelText(e.target);
+        var r = e.target.getBoundingClientRect();
+        _lastBlurTop = r.top + window.scrollY;
         setTimeout(function() {
             var ae = document.activeElement;
             if (ae === document.body || ae === document.documentElement) {
