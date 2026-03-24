@@ -2375,13 +2375,14 @@ elif curr_l == "조립 라인":
                 r[1].caption(str(row['시간'])[:16]); r[2].caption(row['모델'])
                 r[3].caption(row['품목코드'])
                 _asm_mc = len(_asm_bulk_mats[_asm_bulk_mats['메인시리얼'] == row['시리얼']]) if not _asm_bulk_mats.empty else 0
-                _asm_mat_badge = f"  {_asm_mc}" if _asm_mc > 0 else "  "
                 _asm_tog_key = f"mat_tog_{row['시리얼']}_{curr_g}_asm"
-                if r[4].button(f"{row['시리얼']}{_asm_mat_badge}", key=f"sntog_asm_{idx}_{_asm_cb_ver}",
+                if r[4].button(row['시리얼'], key=f"sntog_asm_{idx}_{_asm_cb_ver}",
                                use_container_width=True, help="클릭하여 자재 시리얼 조회"):
                     st.session_state[_asm_tog_key] = not st.session_state.get(_asm_tog_key, False)
+                if _asm_mc > 0:
+                    r[4].markdown(f"<p style='font-size:0.7rem;color:#0D9488;margin:0;text-align:center;line-height:1;'>자재 {_asm_mc}개</p>", unsafe_allow_html=True)
                 if is_actionable:
-                    if r[5].button("", key=f"ok_{idx}", use_container_width=True, help="검사대기로 이동"):
+                    if r[5].button("완료", key=f"ok_{idx}", use_container_width=True, type="primary"):
                         _upd = {'상태':'검사대기','시간':get_now_kst_str()}
                         update_row(row['시리얼'], _upd)
                         insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
@@ -2392,11 +2393,11 @@ elif curr_l == "조립 라인":
                         _rerun("asm_hist")
                     _ng_open_key = f"_ng_open_asm_{idx}"
                     if not st.session_state.get(_ng_open_key):
-                        if r[6].button("", key=f"ng_{idx}", use_container_width=True, help="불량 원인 입력"):
+                        if r[6].button("불량", key=f"ng_{idx}", use_container_width=True):
                             st.session_state[_ng_open_key] = True
                             _rerun("asm_hist")
                     else:
-                        r[6].button("", key=f"ng_{idx}", use_container_width=True, disabled=True)
+                        r[6].button("불량", key=f"ng_{idx}", use_container_width=True, disabled=True)
                 else:
                     s = row['상태']
                     s_esc = html_mod.escape(str(s))
@@ -2910,11 +2911,12 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 r[2].caption(row['모델'])
                 r[3].caption(row['품목코드'])
                 _hist_mc = len(_hist_bulk_mats[_hist_bulk_mats['메인시리얼'] == row['시리얼']]) if not _hist_bulk_mats.empty else 0
-                _hist_mat_badge = f"  {_hist_mc}" if _hist_mc > 0 else "  "
                 _hist_tog_key = f"mat_tog_{row['시리얼']}_{curr_g}_{curr_l}"
-                if r[4].button(f"{row['시리얼']}{_hist_mat_badge}", key=f"sntog_hist_{idx}_{_hcb_ver}",
+                if r[4].button(row['시리얼'], key=f"sntog_hist_{idx}_{_hcb_ver}",
                                use_container_width=True, help="클릭하여 자재 시리얼 조회"):
                     st.session_state[_hist_tog_key] = not st.session_state.get(_hist_tog_key, False)
+                if _hist_mc > 0:
+                    r[4].markdown(f"<p style='font-size:0.7rem;color:#0D9488;margin:0;text-align:center;line-height:1;'>자재 {_hist_mc}개</p>", unsafe_allow_html=True)
                 if is_act:
                     btn_lbl = "합격" if curr_l == "검사 라인" else "완료"
                     _act_b1, _act_b2 = r[5].columns(2)
@@ -5045,7 +5047,7 @@ elif curr_l == "OQC 라인":
     
                 # 이력 버튼 → 해당 행 아래 인라인 expander로 표시
                 _hist_key = f"oqc_hist_open_{_i}"
-                if rr2[6].button("", key=f"oqc_hist_{_i}", help="이력 조회"):
+                if rr2[6].button("이력", key=f"oqc_hist_{_i}", help="이력 조회"):
                     st.session_state[_hist_key] = not st.session_state.get(_hist_key, False)
     
                 if st.session_state.get(_hist_key, False):
