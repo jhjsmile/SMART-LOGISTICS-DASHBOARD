@@ -6688,15 +6688,37 @@ elif curr_l == "마스터 관리":
             if _cached_sn:
                 _rb_df = st.session_state.production_db
                 _rb_match = _rb_df[_rb_df['시리얼'] == _cached_sn] if not _rb_df.empty else pd.DataFrame()
+                _rb_from_history = False
+                # production_db 캐시 미포함(어제 이전 완료 등) → DB 직접 조회
+                if _rb_match.empty:
+                    try:
+                        _rb_direct = get_supabase().table("production").select("*").eq("시리얼", _cached_sn).is_("deleted_at", "null").execute()
+                        if _rb_direct.data:
+                            _rb_match = pd.DataFrame(_rb_direct.data).drop(columns=['id','deleted_at','deleted_by'], errors='ignore').fillna("")
+                        else:
+                            # production_history 아카이브 테이블도 조회
+                            try:
+                                _rb_hist = get_supabase().table("production_history").select("*").eq("시리얼", _cached_sn).execute()
+                                if _rb_hist.data:
+                                    _rb_match = pd.DataFrame(_rb_hist.data).drop(columns=['id','deleted_at','deleted_by'], errors='ignore').fillna("")
+                                    _rb_from_history = True
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                 if not _rb_match.empty:
                     _rb_row = _rb_match.iloc[0]
                     _rb_cur_line = _rb_row.get('라인', '')
-                    st.info(f"현재 상태: **{_rb_row['상태']}** | 현재 라인: **{_rb_cur_line}** | 모델: {_rb_row.get('모델','')} | 반: {_rb_row.get('반','')}")
+                    _rb_info_suffix = "  ⚠️ *아카이브 이력 데이터*" if _rb_from_history else ""
+                    st.info(f"현재 상태: **{_rb_row['상태']}** | 현재 라인: **{_rb_cur_line}** | 모델: {_rb_row.get('모델','')} | 반: {_rb_row.get('반','')}{_rb_info_suffix}")
+                    if _rb_from_history:
+                        st.warning("아카이브된 이력 데이터는 상태 변경이 불가합니다. production 테이블에 해당 시리얼이 존재하지 않습니다.")
                     _rb_col1, _rb_col2 = st.columns([2, 1])
                     _rb_target = _rb_col1.selectbox("변경할 상태", _all_states, key="rollback_target")
                     _rb_new_line = _STATE_TO_LINE.get(_rb_target, _rb_cur_line)
                     _rb_col1.caption(f"라인 자동 변경: **{_rb_cur_line}** → **{_rb_new_line}**" if _rb_new_line != _rb_cur_line else f"라인 유지: {_rb_cur_line}")
-                    if _rb_col2.button(" 상태 변경 실행", key="rollback_exec", type="primary", use_container_width=True):
+                    if _rb_col2.button(" 상태 변경 실행", key="rollback_exec", type="primary",
+                                       use_container_width=True, disabled=_rb_from_history):
                         _prev_s = _rb_row['상태']
                         _upd = {'상태': _rb_target, '라인': _rb_new_line, '시간': get_now_kst_str()}
                         # update_row + insert_audit_log 병렬 실행으로 DB 대기 시간 단축
