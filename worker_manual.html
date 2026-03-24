@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>작업자 매뉴얼 — 스마트 물류 대시보드</title>
+  <style>
+    :root {
+      --navy:   #1B3A5C;
+      --teal:   #0D9488;
+      --green:  #16A34A;
+      --blue:   #2B7CB5;
+      --orange: #F4892A;
+      --purple: #7C3AED;
+      --red:    #DC2626;
+      --slate:  #64748B;
+      --bg:     #f5f2ed;
+      --card:   #ffffff;
+      --border: #ddd5c0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', 'Malgun Gothic', '맑은 고딕', sans-serif;
+      background: var(--bg);
+      color: #2c2c2c;
+      line-height: 1.7;
+    }
+
+    /* ── 헤더 ── */
+    header {
+      background: linear-gradient(135deg, var(--navy) 0%, #2B5F9E 100%);
+      color: #fff;
+      text-align: center;
+      padding: 40px 20px 32px;
+    }
+    header h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.5px; }
+    header p  { margin-top: 8px; opacity: .75; font-size: .95rem; }
+
+    /* ── 레이아웃 ── */
+    .container { max-width: 900px; margin: 0 auto; padding: 32px 16px 60px; }
+
+    /* ── 섹션 카드 ── */
+    .section-card {
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.07);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 20px;
+      color: #fff;
+      font-weight: 700;
+      font-size: 1rem;
+    }
+    .section-body {
+      padding: 18px 22px;
+      font-size: .92rem;
+    }
+
+    /* ── 플로우차트 ── */
+    .flowchart {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 16px 20px;
+      background: #f8f6f2;
+    }
+    .flow-node {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: .82rem;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+    }
+    .flow-arrow {
+      color: #aaa;
+      font-size: 1.1rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .flow-divider {
+      width: 100%;
+      border: none;
+      border-top: 1px solid #e0d8c8;
+      margin: 10px 0;
+    }
+    .flow-defect {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 0 20px 16px;
+      background: #f8f6f2;
+      font-size: .88rem;
+      color: #555;
+    }
+
+    /* ── 스텝 목록 ── */
+    ol.steps, ul.bullets {
+      padding-left: 1.5em;
+      margin: 6px 0 10px;
+    }
+    ol.steps li, ul.bullets li { margin-bottom: 5px; }
+    .step-block { margin-bottom: 14px; }
+    .step-title {
+      font-weight: 700;
+      font-size: .93rem;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ── 배지 ── */
+    .badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 5px;
+      font-size: .78rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* ── 알림 박스 ── */
+    .notice {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: .88rem;
+      margin-top: 10px;
+    }
+    .notice-yellow { background: #fff3d4; color: #7a5c00; }
+    .notice-green  { background: #e8f5e9; color: #1B5E20; }
+    .notice-red    { background: #fef2f2; color: #7F1D1D; }
+    .notice-blue   { background: #e0f2fe; color: #0C4A6E; }
+
+    /* ── FAQ 테이블 ── */
+    .faq-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    .faq-table th {
+      background: var(--slate);
+      color: #fff;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    .faq-table td { padding: 8px 12px; border-bottom: 1px solid #eee; vertical-align: top; }
+    .faq-table tr:nth-child(even) td { background: #f7f7f7; }
+    .faq-q { font-weight: 700; }
+
+    /* ── 색상 유틸 ── */
+    .c-navy   { background: var(--navy); }
+    .c-teal   { background: var(--teal); }
+    .c-green  { background: var(--green); }
+    .c-blue   { background: var(--blue); }
+    .c-orange { background: var(--orange); }
+    .c-purple { background: var(--purple); }
+    .c-red    { background: var(--red); }
+    .c-slate  { background: var(--slate); }
+
+    /* ── TOC ── */
+    .toc {
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.07);
+      padding: 20px 24px;
+      margin-bottom: 28px;
+    }
+    .toc h3 { color: var(--navy); font-size: .95rem; margin-bottom: 12px; }
+    .toc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 8px;
+    }
+    .toc a {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 7px;
+      background: #f0f4f8;
+      color: var(--navy);
+      text-decoration: none;
+      font-size: .88rem;
+      font-weight: 600;
+      transition: background .15s;
+    }
+    .toc a:hover { background: #d9e9f5; }
+
+    @media (max-width: 600px) {
+      header h1 { font-size: 1.4rem; }
+      .toc-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📋 작업자 매뉴얼</h1>
+  <p>스마트 물류 대시보드 &nbsp;·&nbsp; 현장 작업자용</p>
+</header>
+
+<div class="container">
+
+  <!-- TOC -->
+  <nav class="toc">
+    <h3>📌 목차</h3>
+    <div class="toc-grid">
+      <a href="#s1">🔐 1. 로그인</a>
+      <a href="#s2">📊 2. 현황판</a>
+      <a href="#s3">🔄 3. 상태 흐름도</a>
+      <a href="#s4">🔧 4. 조립 라인</a>
+      <a href="#s5">🔍 5. 검사 라인</a>
+      <a href="#s6">✅ 6. OQC 라인</a>
+      <a href="#s7">📦 7. 포장 라인</a>
+      <a href="#s8">⚠️ 8. 불량 공정</a>
+      <a href="#s9">📈 9. 생산 리포트</a>
+      <a href="#s10">❓ 10. FAQ</a>
+    </div>
+  </nav>
+
+
+  <!-- 1. 로그인 -->
+  <div class="section-card" id="s1">
+    <div class="section-header c-navy">🔐 &nbsp;1. 로그인 방법</div>
+    <div class="section-body">
+      <ol class="steps">
+        <li>브라우저(Chrome 권장)에서 시스템 URL 접속</li>
+        <li><strong>아이디(ID)</strong>와 <strong>비밀번호(PW)</strong> 입력 후 <strong>인증 시작</strong> 클릭</li>
+        <li>로그인 성공 → 내 권한에 맞는 화면으로 자동 이동</li>
+        <li>실패 시 '로그인 정보가 올바르지 않습니다.' 메시지 → 관리자 문의</li>
+      </ol>
+      <div class="notice notice-yellow">💡 비밀번호는 대소문자를 구분합니다. 초기 비밀번호는 관리자에게 문의하세요.</div>
+      <div class="notice notice-green">🆕 계정이 없으면 로그인 화면 하단 <strong>계정 신청</strong> 버튼으로 접근 권한을 요청할 수 있습니다. 관리자 승인 후 사용 가능합니다.</div>
+    </div>
+  </div>
+
+
+  <!-- 2. 생산 통합 현황판 -->
+  <div class="section-card" id="s2">
+    <div class="section-header c-navy">📊 &nbsp;2. 생산 통합 현황판</div>
+    <div class="section-body">
+      <p style="margin-bottom:12px;">로그인 후 처음 보이는 화면으로, 전체 생산 상황을 한눈에 파악할 수 있습니다.</p>
+
+      <div class="step-block">
+        <div class="step-title">📈 실시간 차트</div>
+        <ul class="bullets">
+          <li>반별·공정별 진행 현황 막대 그래프</li>
+          <li>전체 상태 비중 파이 차트</li>
+          <li>반별 총 투입 차트</li>
+        </ul>
+      </div>
+
+      <div class="step-block">
+        <div class="step-title">🗂️ 전체 생산 요약 카드</div>
+        <ul class="bullets">
+          <li>총 투입 / 최종 완료 / 작업 중 / 불량 이슈 수량</li>
+        </ul>
+      </div>
+
+      <div class="step-block">
+        <div class="step-title">🏭 반별 생산 현황</div>
+        <ul class="bullets">
+          <li>각 반(제조1·2·3반)의 투입·완료·재공·불량 수량 카드</li>
+        </ul>
+      </div>
+
+      <div class="step-block">
+        <div class="step-title">📅 생산 일정 달력</div>
+        <ul class="bullets">
+          <li>주간/월간 캘린더에서 당일 포함 향후 일정 확인 가능</li>
+        </ul>
+      </div>
+
+      <div class="notice notice-green">🔄 데이터는 실시간으로 갱신됩니다. 화면이 오래됐다고 느껴지면 브라우저를 새로 고침하세요.</div>
+    </div>
+  </div>
+
+
+  <!-- 3. 생산 상태 흐름도 -->
+  <div class="section-card" id="s3">
+    <div class="section-header" style="background:#2B7CB5;">🔄 &nbsp;3. 생산 상태 흐름도</div>
+
+    <!-- 메인 플로우 -->
+    <div class="flowchart">
+      <span class="flow-node" style="background:#2B7CB5;">조립중</span>
+      <span class="flow-arrow">▶</span>
+      <span class="flow-node" style="background:#0D9488;">검사대기</span>
+      <span class="flow-arrow">▶</span>
+      <span class="flow-node" style="background:#0D9488;">검사중</span>
+      <span class="flow-arrow">▶</span>
+      <span class="flow-node" style="background:#16A34A;">OQC대기</span>
+      <span class="flow-arrow">▶</span>
+      <span class="flow-node" style="background:#16A34A;">OQC중</span>
+      <span class="flow-arrow">▶</span>
+      <span class="flow-node" style="background:#F4892A;">출하승인</span>
+      <span class="flow-arrow">▶</span>
+      <span class="flow-node" style="background:#7C3AED;">포장중</span>
+      <span class="flow-arrow">▶</span>
+      <span class="flow-node" style="background:#1B3A5C;">✅ 완료</span>
+    </div>
+
+    <!-- 불량 분기 -->
+    <div class="flow-defect">
+      <strong>⚠️ 불량 발생 시:</strong>
+      <span class="flow-node" style="background:#DC2626;">불량 처리 중</span>
+      <span class="flow-arrow">▶</span>
+      <span style="color:#555;">불량 공정 원인 분석</span>
+      <span class="flow-arrow">▶</span>
+      <span class="flow-node" style="background:#F4892A;">수리 완료(재투입)</span>
+      <span class="flow-arrow">▶</span>
+      <span style="color:#555;">검사대기 복귀</span>
+    </div>
+
+    <div class="section-body" style="padding-top:0;">
+      <div class="notice notice-blue" style="margin-top:0;">ℹ️ 각 라인 담당자는 자기 공정 단계만 처리합니다. 다른 공정 제품은 수정하지 마세요.</div>
+    </div>
+  </div>
+
+
+  <!-- 4. 조립 라인 -->
+  <div class="section-card" id="s4">
+    <div class="section-header" style="background:#16A34A;">🔧 &nbsp;4. 조립 라인 사용법</div>
+    <div class="section-body">
+
+      <div class="step-block">
+        <div class="step-title">① 오늘 일정 확인</div>
+        <ul class="bullets">
+          <li>화면 상단에 당일 생산 일정이 자동 표시됩니다.</li>
+          <li>새 일정 등록 시 알림 팝업 → <strong>확인</strong> 버튼으로 닫기</li>
+        </ul>
+      </div>
+
+      <div class="step-block">
+        <div class="step-title">② 신규 제품 등록</div>
+        <ul class="bullets">
+          <li>모델명·품목코드·시리얼 번호 입력 후 <strong>등록</strong> 버튼 클릭</li>
+          <li>바코드 스캐너 연동 가능 — 스캔 후 자동 입력됩니다.</li>
+          <li><strong>일괄 등록</strong>: 여러 시리얼을 줄바꿈으로 입력하면 한 번에 등록 가능</li>
+          <li>자재 시리얼(부품 S/N)은 등록 화면 하단의 자재 항목에 추가 입력</li>
+        </ul>
+      </div>
+
+      <div class="step-block">
+        <div class="step-title">③ 조립 완료 처리</div>
+        <ul class="bullets">
+          <li>이력 목록에서 완료된 항목 체크박스 선택</li>
+          <li><strong>조립 완료</strong> 버튼 클릭 → 상태가 <span class="badge" style="background:#0D9488;">검사대기</span>로 자동 전환</li>
+          <li>불량 발생 시 <strong>불량 처리</strong> 버튼 클릭 → 불량 공정으로 이동</li>
+        </ul>
+      </div>
+
+      <div class="step-block">
+        <div class="step-title">④ 자재 시리얼 등록</div>
+        <ul class="bullets">
+          <li>제품에 사용된 부품의 S/N을 자재명과 함께 등록합니다.</li>
+          <li>바코드 스캔으로 빠르게 등록 가능</li>
+          <li>등록된 자재 S/N은 나중에 <strong>생산 현황 리포트 → 자재 S/N 추적</strong>에서 역추적 가능</li>
+        </ul>
+      </div>
+
+      <div class="notice notice-green">💡 사이드바에서 반(제조1반·2반·3반)을 선택하면 해당 반의 일정과 이력만 표시됩니다.</div>
+    </div>
+  </div>
+
+
+  <!-- 5. 검사 라인 -->
+  <div class="section-card" id="s5">
+    <div class="section-header" style="background:#0D9488;">🔍 &nbsp;5. 검사 라인 사용법</div>
+    <div class="section-body">
+
+      <div class="step-block">
+        <div class="step-title">① 입고 처리 <span class="badge" style="background:#0D9488;">검사대기 → 검사중</span></div>
+        <ul class="bullets">
+          <li>조립 완료된 제품 목록이 <strong>검사대기</strong> 섹션에 표시됩니다.</li>
+          <li>시리얼 번호 스캔/검색으로 빠른 조회</li>
+          <li>체크박스 선택 후 <strong>일괄 입고</strong> 버튼 → <span class="badge" style="background:#0D9488;">검사중</span>으로 전환</li>
+        </ul>
+      </div>
+
+      <div class="step-block">
+        <div class="step-title">② 검사 판정</div>
+        <ul class="bullets">
+          <li>✅ <strong>검사 합격</strong> 버튼 → 상태가 <span class="badge" style="background:#16A34A;">OQC대기</span>로 자동 전환</li>
+          <li>❌ <strong>불합격</strong> 버튼 → 증상 메모 입력 후 확인 → <span class="badge" style="background:#DC2626;">불량 처리 중</span>으로 전환</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 6. OQC 라인 -->
+  <div class="section-card" id="s6">
+    <div class="section-header" style="background:#16A34A;">✅ &nbsp;6. OQC 라인 사용법</div>
+    <div class="section-body">
+
+      <div class="step-block">
+        <div class="step-title">① OQC 시작 <span class="badge" style="background:#16A34A;">OQC대기 → OQC중</span></div>
+        <ul class="bullets">
+          <li>검사 완료(OQC대기) 제품 목록에서 체크박스 선택 후 <strong>OQC 시작</strong> 버튼 클릭 → <span class="badge" style="background:#16A34A;">OQC중</span> 전환</li>
+        </ul>
+      </div>
+
+      <div class="step-block">
+        <div class="step-title">② 최종 판정</div>
+        <ul class="bullets">
+          <li>✅ <strong>합격 (포장 완료)</strong> → <span class="badge" style="background:#F4892A;">출하승인</span> 상태로 전환 (포장 라인으로 이동)</li>
+          <li>❌ <strong>부적합</strong> → 부적합 사유 드롭다운 선택(또는 직접 입력) 후 확인 → <span class="badge" style="background:#DC2626;">불량 처리 중</span>으로 전환</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 7. 포장 라인 -->
+  <div class="section-card" id="s7">
+    <div class="section-header" style="background:#7C3AED;">📦 &nbsp;7. 포장 라인 사용법</div>
+    <div class="section-body">
+
+      <div class="step-block">
+        <div class="step-title">① 입고 처리 <span class="badge" style="background:#F4892A;">출하승인 → 포장중</span></div>
+        <ul class="bullets">
+          <li>OQC 합격(출하승인) 제품이 목록에 표시됩니다.</li>
+          <li>체크박스 선택 후 <strong>일괄 입고</strong> 버튼 → <span class="badge" style="background:#7C3AED;">포장중</span>으로 전환</li>
+        </ul>
+      </div>
+
+      <div class="step-block">
+        <div class="step-title">② 포장 완료 처리</div>
+        <ul class="bullets">
+          <li>포장중 목록에서 <strong>포장 완료</strong> 버튼 클릭 → <span class="badge" style="background:#1B3A5C;">✅ 완료</span> 상태로 최종 처리</li>
+          <li>완료된 수량은 생산 지표 관리 KPI에 자동 반영됩니다.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 8. 불량 공정 -->
+  <div class="section-card" id="s8">
+    <div class="section-header" style="background:#DC2626;">⚠️ &nbsp;8. 불량 공정 처리</div>
+    <div class="section-body">
+      <ol class="steps">
+        <li>불량 처리 중 목록에서 해당 제품 확인</li>
+        <li><strong>불량 원인</strong> 드롭다운에서 원인 선택 (없으면 '기타(직접 입력)' 선택 후 입력)</li>
+        <li><strong>조치 방법</strong> 드롭다운에서 선택 (재작업·폐기·반품 등)</li>
+        <li><strong>조치 완료</strong> 버튼 클릭 → <span class="badge" style="background:#F4892A;">수리 완료(재투입)</span> 상태로 전환</li>
+        <li>재투입된 제품은 <span class="badge" style="background:#0D9488;">검사대기</span> 상태로 복귀하여 재검사 진행</li>
+      </ol>
+      <div class="notice notice-red">🚫 불량 원인과 조치 방법의 드롭다운 항목은 관리자가 설정합니다. 새 항목이 필요하면 관리자에게 요청하세요.</div>
+    </div>
+  </div>
+
+
+  <!-- 9. 생산 현황 리포트 -->
+  <div class="section-card" id="s9">
+    <div class="section-header" style="background:#2B7CB5;">📈 &nbsp;9. 생산 현황 리포트</div>
+    <div class="section-body">
+
+      <div class="step-block">
+        <div class="step-title">📋 생산 현황 리포트 탭</div>
+        <ul class="bullets">
+          <li>기간·반 필터로 원하는 기간의 생산 이력을 조회합니다.</li>
+          <li>시리얼 번호 검색으로 특정 제품의 공정 이력을 추적할 수 있습니다.</li>
+          <li>조회 결과를 <strong>Excel / CSV</strong>로 다운로드 가능합니다.</li>
+        </ul>
+      </div>
+
+      <div class="step-block">
+        <div class="step-title">🔎 자재 S/N 추적 탭</div>
+        <ul class="bullets">
+          <li><strong>메인 S/N → 자재 조회</strong>: 완제품 시리얼로 해당 제품에 쓰인 모든 자재 S/N 확인</li>
+          <li><strong>자재 S/N → 메인 역추적</strong>: 부품 시리얼로 해당 부품이 어느 완제품에 사용됐는지 역추적</li>
+          <li>품질 이슈 발생 시 영향받은 제품 범위를 신속하게 파악할 수 있습니다.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 10. FAQ -->
+  <div class="section-card" id="s10">
+    <div class="section-header" style="background:#64748B;">❓ &nbsp;10. 자주 묻는 질문 (FAQ)</div>
+    <div class="section-body">
+      <table class="faq-table">
+        <thead>
+          <tr><th style="width:40%">질문</th><th>답변</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="faq-q">Q. 로그인이 안 됩니다.</td>
+            <td>A. 아이디/비밀번호 재확인 후 관리자에게 계정 재설정 요청하세요. 또는 로그인 화면의 <strong>계정 신청</strong>을 이용하세요.</td>
+          </tr>
+          <tr>
+            <td class="faq-q">Q. 데이터가 표시되지 않습니다.</td>
+            <td>A. 사이드바의 연결 상태 경고 확인 후 페이지를 새로 고침하세요.</td>
+          </tr>
+          <tr>
+            <td class="faq-q">Q. 버튼을 눌렀는데 반응이 없습니다.</td>
+            <td>A. 처리 후 자동 새로고침됩니다. 잠시 기다려 주세요.</td>
+          </tr>
+          <tr>
+            <td class="faq-q">Q. 불량 처리 후 제품이 안 보입니다.</td>
+            <td>A. 불량 공정 화면에서 해당 시리얼을 검색하세요.</td>
+          </tr>
+          <tr>
+            <td class="faq-q">Q. 내 반이 아닌 데이터가 보입니다.</td>
+            <td>A. 사이드바에서 본인 반(제조1반·2반·3반)을 선택하세요.</td>
+          </tr>
+          <tr>
+            <td class="faq-q">Q. 드롭다운에 필요한 항목이 없습니다.</td>
+            <td>A. 관리자에게 드롭박스 옵션 추가를 요청하세요. (마스터 관리 → 드롭박스 옵션 편집)</td>
+          </tr>
+          <tr>
+            <td class="faq-q">Q. 실수로 잘못된 상태로 처리했습니다.</td>
+            <td>A. 스스로 되돌릴 수 없습니다. 관리자에게 감사 로그 확인 및 수정을 요청하세요.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<footer style="text-align:center;padding:20px;color:#aaa;font-size:.8rem;background:#e8e4dd;">
+  스마트 물류 대시보드 · 작업자 매뉴얼 · 2026
+</footer>
+
+</body>
+</html>
