@@ -2740,7 +2740,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             w_scan = ws1.text_input(" 시리얼 스캔/검색", placeholder="스캔 또는 입력 → 자동 체크",
                                     key=_wscan_key)
             if st.session_state.pop("_autofocus_after_rerun", None) == _wscan_key:
-                _inject_autofocus(" 시리얼 스캔/검색")
+                _inject_autofocus(placeholder="스캔 또는 입력 → 자동 체크")
             if w_scan.strip():
                 matched_sn = wait_list[wait_list['시리얼'].str.contains(
                     w_scan.strip(), case=False, na=False)]
@@ -2835,7 +2835,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
             _sn_search_qp = hs1.text_input(" 시리얼 스캔/검색",
                 placeholder="스캔 또는 입력 → 자동 체크", key=_hsrch_key)
             if st.session_state.pop("_autofocus_after_rerun", None) == _hsrch_key:
-                _inject_autofocus(" 시리얼 스캔/검색")
+                _inject_autofocus(placeholder="스캔 또는 입력 → 자동 체크")
 
             f_df_view = f_df
             if _sn_search_qp.strip():
@@ -4770,7 +4770,7 @@ elif curr_l == "OQC 라인":
             _oqc_in_scan = oi_c1.text_input(" 시리얼 스캔/검색", placeholder="스캔 또는 입력 → 자동 체크",
                                              key=_oqc_in_sc_key)
             if st.session_state.pop("_autofocus_after_rerun", None) == _oqc_in_sc_key:
-                _inject_autofocus(" 시리얼 스캔/검색")
+                _inject_autofocus(placeholder="스캔 또는 입력 → 자동 체크")
             if _oqc_in_scan.strip():
                 _oqc_in_matched = packing_done[packing_done['시리얼'].str.contains(
                     _oqc_in_scan.strip(), case=False, na=False)]
@@ -4851,7 +4851,7 @@ elif curr_l == "OQC 라인":
             _oqc_scan = os1.text_input(" 시리얼 스캔/검색", placeholder="스캔 또는 입력 → 자동 체크",
                                         key=_oqc_sc_key)
             if st.session_state.pop("_autofocus_after_rerun", None) == _oqc_sc_key:
-                _inject_autofocus(" 시리얼 스캔/검색")
+                _inject_autofocus(placeholder="스캔 또는 입력 → 자동 체크")
             if _oqc_scan.strip():
                 _oqc_matched = oqc_wait_list[oqc_wait_list['시리얼'].str.contains(
                     _oqc_scan.strip(), case=False, na=False)]
