@@ -947,7 +947,7 @@ def show_inline_day_panel():
 
             ph1, ph2 = st.columns([8, 1])
             ph1.markdown(f" **일정 수정** — {saved_date}")
-            if ph2.button("", key="inline_edit_close"):
+            if ph2.button("✕", key="inline_edit_close"):
                 st.session_state.cal_action = None; _rerun(_dp_xp_key)
 
             if not can_edit:
@@ -1021,7 +1021,7 @@ def show_inline_day_panel():
             selected_date = action_data
             ph1, ph2 = st.columns([8, 1])
             ph1.markdown(f" **일정 추가** — {selected_date}")
-            if ph2.button("", key="inline_add_close"):
+            if ph2.button("✕", key="inline_add_close"):
                 st.session_state.cal_action = None; _rerun(_dp_xp_key)
 
             if not can_edit:
@@ -1168,12 +1168,12 @@ def show_inline_day_panel():
                         confirm_key = f"del_confirm_{row_id}"
                         if not st.session_state.get(confirm_key, False):
                             bc1, bc2 = rcols[5].columns(2)
-                            if bc1.button("", key=f"mod_{row_id}", help="수정"):
+                            if bc1.button("수정", key=f"mod_{row_id}", help="수정"):
                                 st.session_state.cal_action      = "edit"
                                 st.session_state.cal_action_data = int(row_id)
                                 st.session_state.cal_action_sub  = None
                                 _rerun(_dp_xp_key)
-                            if bc2.button("", key=f"del_{row_id}", help="삭제"):
+                            if bc2.button("삭제", key=f"del_{row_id}", help="삭제"):
                                 st.session_state[confirm_key] = True
                                 _rerun(_dp_xp_key)
                         else:
@@ -2552,7 +2552,7 @@ elif curr_l == "조립 라인":
                 new_sn = lc2.text_input("", value=mat["자재시리얼"],
                     key=f"mat_sv_{curr_g}_{mi}", label_visibility="collapsed",
                     placeholder="S/N 직접 입력 또는 스캔")
-                if not lc3.button("", key=f"mat_del_{curr_g}_{mi}", help="삭제"):
+                if not lc3.button("삭제", key=f"mat_del_{curr_g}_{mi}", help="삭제"):
                     updated_list.append({"자재명": new_name, "자재시리얼": new_sn})
                 else:
                     _should_rerun = True  # 삭제 버튼 클릭됨 — 해당 항목은 updated_list에 추가 안 됨
@@ -2676,7 +2676,7 @@ elif curr_l == "조립 라인":
                         anew_sn = alc2.text_input("", value=amat["자재시리얼"],
                             key=f"add_mat_sv_{curr_g}_{ami}", label_visibility="collapsed",
                             placeholder="S/N 직접 입력 또는 스캔")
-                        if not alc3.button("", key=f"add_mat_del_{curr_g}_{ami}", help="삭제"):
+                        if not alc3.button("삭제", key=f"add_mat_del_{curr_g}_{ami}", help="삭제"):
                             add_updated_list.append({"자재명": anew_name, "자재시리얼": anew_sn})
                         else:
                             _add_should_rerun = True
@@ -2891,7 +2891,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
                         _prod_bulk_update(_bulk)
                         _rerun("chk_hist")
-                if hba5.button("", key=f"hist_unck_{curr_g}_{curr_l}",
+                if hba5.button("해제", key=f"hist_unck_{curr_g}_{curr_l}",
                                use_container_width=True, help="선택 해제"):
                     st.session_state[_hck_key] = {}
                     st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
@@ -3109,7 +3109,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         qs = qlc2.text_input("", value=qmat["자재시리얼"],
                             key=f"ql_sv_{curr_g}_{curr_l}_{qi}", label_visibility="collapsed",
                             placeholder="S/N 직접 입력 또는 스캔")
-                        if not qlc3.button("", key=f"ql_del_{curr_g}_{curr_l}_{qi}", help="삭제"):
+                        if not qlc3.button("삭제", key=f"ql_del_{curr_g}_{curr_l}_{qi}", help="삭제"):
                             ql_updated.append({"자재명": qn, "자재시리얼": qs})
                         else:
                             _ql_rerun = True
@@ -4680,7 +4680,7 @@ elif curr_l == "생산 지표 관리":
                 c5.caption(row.get('모델명',''))
                 c6.caption(f"{row.get('조립수',0)}대")
                 c7.caption(row.get('특이사항',''))
-                if c8.button("", key=f"del_sch_{row_id}", help="삭제"):
+                if c8.button("삭제", key=f"del_sch_{row_id}", help="삭제"):
                     st.session_state[del_ck] = True
                     st.rerun()
 
@@ -6544,7 +6544,7 @@ elif curr_l == "마스터 관리":
                 for i, item in enumerate(current):
                     r1, r2 = st.columns([5, 1])
                     r1.markdown(f"<div style='padding:5px 8px;background:#f5f2ec;border-radius:6px;font-size:0.85rem;'>{item}</div>", unsafe_allow_html=True)
-                    if r2.button("", key=f"mat_del_item_{i}", help=f"{item} 삭제", use_container_width=True):
+                    if r2.button("삭제", key=f"mat_del_item_{i}", help=f"{item} 삭제", use_container_width=True):
                         _del_idx = i
                 if _del_idx is not None:
                     current.pop(_del_idx)
@@ -6713,7 +6713,7 @@ elif curr_l == "마스터 관리":
                         pr[2].caption(row.get('라인',''))
                         pr[3].caption(f"`{row.get('시리얼','')}`")
                         pr[4].caption(row.get('상태',''))
-                        if pr[5].button("", key=f"del_prod_{i}", help="이 행 삭제"):
+                        if pr[5].button("삭제", key=f"del_prod_{i}", help="이 행 삭제"):
                             if delete_production_row_by_sn(row['시리얼']):
                                 _clear_production_cache()
                                 st.session_state.production_db = load_realtime_ledger()
@@ -6795,7 +6795,7 @@ elif curr_l == "마스터 관리":
                         ar[4].caption(row.get('이전상태',''))
                         ar[5].caption(row.get('이후상태',''))
                         _row_id = row.get('id')
-                        if _row_id and ar[6].button("", key=f"del_audit_{_row_id}", help="이 행 삭제"):
+                        if _row_id and ar[6].button("삭제", key=f"del_audit_{_row_id}", help="이 행 삭제"):
                             if delete_audit_log_row(_row_id):
                                 _clear_audit_cache()
                                 st.session_state["_del_mgr_toast"] = " 감사 로그 삭제 완료"; st.rerun()
@@ -6859,7 +6859,7 @@ elif curr_l == "마스터 관리":
                         mr[3].caption(row.get('자재명',''))
                         mr[4].caption(f"`{row.get('자재시리얼','')}`")
                         _mid = row.get('id')
-                        if _mid and mr[5].button("", key=f"del_mat_{_mid}", help="이 행 삭제"):
+                        if _mid and mr[5].button("삭제", key=f"del_mat_{_mid}", help="이 행 삭제"):
                             if delete_material_serial_row(_mid):
                                 load_material_serials.clear()
                                 st.session_state["_del_mgr_toast"] = " 자재 시리얼 삭제 완료"; st.rerun()
@@ -6914,7 +6914,7 @@ elif curr_l == "마스터 관리":
                         sr[4].caption(str(row.get('조립수','')))
                         sr[5].caption(str(row.get('출하계획','')))
                         _sid = row.get('id')
-                        if _sid and sr[6].button("", key=f"del_sch_{_sid}", help="이 행 삭제"):
+                        if _sid and sr[6].button("삭제", key=f"del_sch_{_sid}", help="이 행 삭제"):
                             if delete_schedule(int(_sid)):
                                 _clear_schedule_cache()
                                 st.session_state.schedule_db = load_schedule()
@@ -6981,7 +6981,7 @@ elif curr_l == "마스터 관리":
                         plr[5].markdown(f"<span style='color:{_inc_color};font-weight:bold;font-size:0.8rem;'>{'+' if _inc>0 else ''}{_inc}</span>", unsafe_allow_html=True)
                         plr[6].caption(row.get('변경사유',''))
                         _plid = row.get('id')
-                        if _plid and plr[7].button("", key=f"del_plog_{_plid}", help="이 행 삭제"):
+                        if _plid and plr[7].button("삭제", key=f"del_plog_{_plid}", help="이 행 삭제"):
                             if delete_plan_change_log_row(_plid):
                                 _clear_plan_cache()
                                 st.session_state["_del_mgr_toast"] = " 계획 변경 이력 삭제 완료"; st.rerun()
@@ -7043,7 +7043,7 @@ elif curr_l == "마스터 관리":
                         slr[4].caption(row.get('변경사유',''))
                         slr[5].caption(row.get('작업자',''))
                         _slid = row.get('id')
-                        if _slid and slr[6].button("", key=f"del_slog_{_slid}", help="이 행 삭제"):
+                        if _slid and slr[6].button("삭제", key=f"del_slog_{_slid}", help="이 행 삭제"):
                             if delete_schedule_change_log_row(_slid):
                                 _clear_schedule_cache()
                                 st.session_state["_del_mgr_toast"] = " 일정 변경 이력 삭제 완료"; st.rerun()
@@ -7106,7 +7106,7 @@ elif curr_l == "마스터 관리":
                         ppr[2].write(f"{int(row.get('계획수량', 0)):,} EA")
                         _p_ban = row.get('반', '')
                         _p_wol = row.get('월', '')
-                        if ppr[3].button("", key=f"del_plan_{_pi}", help="이 행 삭제"):
+                        if ppr[3].button("삭제", key=f"del_plan_{_pi}", help="이 행 삭제"):
                             if delete_production_plan_row(_p_ban, _p_wol):
                                 _clear_plan_cache()
                                 st.session_state.production_plan = load_production_plan()
