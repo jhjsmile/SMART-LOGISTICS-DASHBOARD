@@ -2510,7 +2510,7 @@ elif curr_l == "조립 라인":
                     "자재시리얼": scan_input.strip()
                 })
             else:
-                st.toast(f" 이미 추가된 자재 S/N: {scan_input.strip()}", icon="")
+                st.toast(f" 이미 추가된 자재 S/N: {scan_input.strip()}")
             st.session_state["_autofocus_after_rerun"] = f"{_scan_sn_key}_{st.session_state[_scan_counter_key] + 1}"
             st.session_state[_scan_counter_key] += 1
             st.rerun()
@@ -2576,7 +2576,7 @@ elif curr_l == "조립 라인":
                 st.session_state[_msn_cnt_key] += 1
                 _clear_production_cache()
                 st.session_state.production_db = load_realtime_ledger()
-                st.toast(f" 등록 완료: {sn_val}", icon="")
+                st.toast(f" 등록 완료: {sn_val}")
                 st.rerun()
 
         _start_col, _ = st.columns([1, 2])
@@ -2640,7 +2640,7 @@ elif curr_l == "조립 라인":
                     if not _already:
                         st.session_state[_add_mat_list_key].append({"자재명": add_sel_mat_name, "자재시리얼": add_scan_input.strip()})
                     else:
-                        st.toast(f" 이미 추가된 자재 S/N: {add_scan_input.strip()}", icon="")
+                        st.toast(f" 이미 추가된 자재 S/N: {add_scan_input.strip()}")
                     st.session_state["_autofocus_after_rerun"] = f"add_scan_sn_{curr_g}_{st.session_state[_add_scan_cnt_key] + 1}"
                     st.session_state[_add_scan_cnt_key] += 1
                     _rerun("asm_mat")
@@ -2683,7 +2683,7 @@ elif curr_l == "조립 라인":
                                 st.session_state[_add_mat_sn_cnt_key] += 1
                                 st.session_state[_add_scan_cnt_key] = 0
                                 st.cache_data.clear()
-                                st.toast(f" {len(valid_add_mats)}개 자재 시리얼 추가 완료", icon="")
+                                st.toast(f" {len(valid_add_mats)}개 자재 시리얼 추가 완료")
                                 _rerun("asm_mat")
                         else:
                             st.warning("추가할 자재 시리얼을 입력해주세요.")
@@ -3069,7 +3069,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                     if not any(m["자재시리얼"] == ql_scan_input.strip() for m in st.session_state[_ql_mat_list_key]):
                         st.session_state[_ql_mat_list_key].append({"자재명": ql_sel_mat, "자재시리얼": ql_scan_input.strip()})
                     else:
-                        st.toast(f" 이미 추가된 S/N: {ql_scan_input.strip()}", icon="")
+                        st.toast(f" 이미 추가된 S/N: {ql_scan_input.strip()}")
                     st.session_state["_autofocus_after_rerun"] = f"ql_scan_{curr_g}_{curr_l}_{st.session_state[_ql_scan_cnt_key] + 1}"
                     st.session_state[_ql_scan_cnt_key] += 1
                     _rerun("chk_mat")
@@ -3115,7 +3115,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 st.session_state[_ql_sn_cnt_key] += 1
                                 st.session_state[_ql_scan_cnt_key] = 0
                                 st.cache_data.clear()
-                                st.toast(f" {len(valid_ql_mats)}개 자재 시리얼 추가 완료", icon="")
+                                st.toast(f" {len(valid_ql_mats)}개 자재 시리얼 추가 완료")
                                 _rerun("chk_mat")
                         else:
                             st.warning("추가할 자재 시리얼을 입력해주세요.")
@@ -4557,7 +4557,7 @@ elif curr_l == "생산 지표 관리":
                             if success_cnt > 0:
                                 st.toast(f" 등록 완료: {success_cnt}건  |  건너뜀(중복): {skip_cnt}건" + (f"  |  실패: {fail_cnt}건" if fail_cnt else ""))
                             if fail_rows:
-                                st.toast("등록 실패 행:\n" + "\n".join(fail_rows), icon="")
+                                st.toast("등록 실패 행:\n" + "\n".join(fail_rows))
                             st.rerun()
                 else:
                     st.warning("파싱된 일정이 없습니다. 파일 형식을 확인해주세요.")
@@ -5709,7 +5709,7 @@ elif curr_l == "불량 공정":
                                             비고=f"자재교체:{_mat_name} {_target_sn}→{_rep_sn}"
                                         )
                                         _prod_update(row['시리얼'], _upd)
-                                        st.toast(f" 자재 시리얼 교체 완료: {_target_sn} → {_rep_sn}", icon="")
+                                        st.toast(f" 자재 시리얼 교체 완료: {_target_sn} → {_rep_sn}")
                                         _rerun(f"def_wait_{g}")
                                 else:
                                     # 메인 시리얼 교체 (기존 로직)
@@ -5745,7 +5745,7 @@ elif curr_l == "불량 공정":
                                             비고=f"교체투입 (구S/N:{_target_sn})"
                                         )
                                         st.session_state.production_db = load_realtime_ledger()
-                                        st.toast(f" 교체 완료: {_target_sn} → {_rep_sn}", icon="")
+                                        st.toast(f" 교체 완료: {_target_sn} → {_rep_sn}")
                                         _rerun(f"def_wait_{g}")
                             else:
                                 _upd = {
@@ -6431,7 +6431,7 @@ elif curr_l == "마스터 관리":
                                     "username", confirm_target).execute()
                                 st.toast(f" [{confirm_target}] 계정 삭제 완료")
                             except Exception as _e:
-                                st.toast(f"메모리 삭제 완료, DB 삭제 실패: {_e}", icon="")
+                                st.toast(f"메모리 삭제 완료, DB 삭제 실패: {_e}")
                             st.session_state["del_user_confirm"] = False
                             st.session_state["del_user_target"] = ""
                             st.rerun()
@@ -6505,7 +6505,7 @@ elif curr_l == "마스터 관리":
                 if save_app_setting(ss_key, final):
                     st.toast(f" {label} 저장 완료 ({len(deduped)}개 항목) — DB 반영됨")
                 else:
-                    st.toast(f" {label} 저장 완료 ({len(deduped)}개 항목) — DB 저장 실패, 앱 재시작 시 초기화될 수 있습니다.", icon="")
+                    st.toast(f" {label} 저장 완료 ({len(deduped)}개 항목) — DB 저장 실패, 앱 재시작 시 초기화될 수 있습니다.")
                 st.rerun()
             if ec2.button(f"↩ 기본값 복원", key=f"dd_reset_{tab_key}", use_container_width=True):
                 default_val = _DD_DEFAULTS.get(ss_key, [])
@@ -6537,9 +6537,9 @@ elif curr_l == "마스터 관리":
                     st.session_state[_SS] = current
                     ok = save_app_setting(_SS, current)
                     if ok:
-                        st.toast(" 삭제 완료", icon="")
+                        st.toast(" 삭제 완료")
                     else:
-                        st.toast(" DB 저장 실패 — 앱 재시작 시 복원될 수 있습니다", icon="")
+                        st.toast(" DB 저장 실패 — 앱 재시작 시 복원될 수 있습니다")
                     st.rerun()
             else:
                 st.info("등록된 자재명이 없습니다. 아래에서 추가하세요.")
@@ -6557,9 +6557,9 @@ elif curr_l == "마스터 관리":
                     st.session_state[_SS] = current
                     ok = save_app_setting(_SS, current)
                     if ok:
-                        st.toast(f" '{val}' 추가 완료", icon="")
+                        st.toast(f" '{val}' 추가 완료")
                     else:
-                        st.toast(" DB 저장 실패 — 앱 재시작 시 복원될 수 있습니다", icon="")
+                        st.toast(" DB 저장 실패 — 앱 재시작 시 복원될 수 있습니다")
                     st.rerun()
                 elif val in current:
                     st.warning(f"'{val}'은 이미 등록된 자재명입니다.")
@@ -6580,7 +6580,7 @@ elif curr_l == "마스터 관리":
                     ok = save_app_setting(_SS, [])
                     st.session_state["_mat_clear_confirm"] = False
                     if not ok:
-                        st.toast(" DB 저장 실패 — 앱 재시작 시 복원될 수 있습니다", icon="")
+                        st.toast(" DB 저장 실패 — 앱 재시작 시 복원될 수 있습니다")
                     st.rerun()
                 if cc2.button("취소", key="mat_clear_no", use_container_width=True):
                     st.session_state["_mat_clear_confirm"] = False; st.rerun()
