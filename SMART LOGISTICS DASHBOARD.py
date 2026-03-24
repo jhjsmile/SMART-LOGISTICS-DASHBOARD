@@ -165,8 +165,12 @@ except Exception as _rt_err:
     pass  # secrets 없는 환경(로컬 테스트 등)에서는 무시
 
 # ── 폴링 트리거 (Realtime 폴백 / 탭 wake-up 대비) ────────────────
-# Realtime이 정상 동작할 때는 이 rerun에서 캐시 히트만 함 → 사실상 무비용
-_refresh_count = st_autorefresh(interval=AUTO_REFRESH_INTERVAL_MS, key="pms_auto_refresh")
+# 마스터 관리 페이지는 자동 새로고침 제외 (입력 중 끊김 방지)
+_on_master_page = st.session_state.get("current_line") == "마스터 관리"
+_refresh_count = st_autorefresh(
+    interval=86400000 if _on_master_page else AUTO_REFRESH_INTERVAL_MS,
+    key="pms_auto_refresh"
+)
 if _refresh_count:
     st.session_state["_last_refresh_count"] = _refresh_count
 
