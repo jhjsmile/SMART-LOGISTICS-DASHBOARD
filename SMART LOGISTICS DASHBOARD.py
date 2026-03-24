@@ -2275,28 +2275,29 @@ elif curr_l == "조립 라인":
 
     # ── 모델/품목별 수량 카운트 + 생산 이력 ─────────────────────────
     if not f_df.empty:
-        with st.expander(f" {curr_g} 조립 라인 수량 현황  ·  {len(f_df)}건", expanded=_xp("asm_cnt"), key="_xp_asm_cnt"):
-            grp = f_df.groupby(['모델','품목코드'])
-            count_rows = []
-            for (model, pn), gdf in grp:
-                total  = len(gdf)
-                done   = len(gdf[gdf['상태'].isin(['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료'])])
-                wip    = len(gdf[gdf['상태'].isin(['조립중','수리 완료(재투입)'])])
-                defect = len(gdf[gdf['상태'].str.contains('불량|부적합', na=False)])
-                count_rows.append((model, pn, total, done, wip, defect))
+        if curr_g != "제조2반":
+            with st.expander(f" {curr_g} 조립 라인 수량 현황  ·  {len(f_df)}건", expanded=_xp("asm_cnt"), key="_xp_asm_cnt"):
+                grp = f_df.groupby(['모델','품목코드'])
+                count_rows = []
+                for (model, pn), gdf in grp:
+                    total  = len(gdf)
+                    done   = len(gdf[gdf['상태'].isin(['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료'])])
+                    wip    = len(gdf[gdf['상태'].isin(['조립중','수리 완료(재투입)'])])
+                    defect = len(gdf[gdf['상태'].str.contains('불량|부적합', na=False)])
+                    count_rows.append((model, pn, total, done, wip, defect))
 
-            for (model, pn, total, done, wip, defect) in count_rows:
-                pct = int(done / total * 100) if total > 0 else 0
-                with st.container(border=True):
-                    mc1, mc2 = st.columns([3, 1])
-                    mc1.markdown(f"**{model}**" + (f" `{pn}`" if pn else ""))
-                    mc2.markdown(f"완료율 **{pct}%**")
-                    st.progress(min(pct, 100) / 100)
-                    sc1, sc2, sc3, sc4 = st.columns(4)
-                    sc1.metric("전체", total)
-                    sc2.metric(" 완료", done)
-                    sc3.metric(" 작업중", wip)
-                    sc4.metric(" 불량", defect, delta=None if defect == 0 else f"{defect}건", delta_color="inverse")
+                for (model, pn, total, done, wip, defect) in count_rows:
+                    pct = int(done / total * 100) if total > 0 else 0
+                    with st.container(border=True):
+                        mc1, mc2 = st.columns([3, 1])
+                        mc1.markdown(f"**{model}**" + (f" `{pn}`" if pn else ""))
+                        mc2.markdown(f"완료율 **{pct}%**")
+                        st.progress(min(pct, 100) / 100)
+                        sc1, sc2, sc3, sc4 = st.columns(4)
+                        sc1.metric("전체", total)
+                        sc2.metric(" 완료", done)
+                        sc3.metric(" 작업중", wip)
+                        sc4.metric(" 불량", defect, delta=None if defect == 0 else f"{defect}건", delta_color="inverse")
 
         with st.expander(f" {curr_g} 생산 이력  ·  {len(db_g)}건", expanded=_xp("asm_hist"), key="_xp_asm_hist"):
             _asm_chk_key = f"asm_checked_{curr_g}"
