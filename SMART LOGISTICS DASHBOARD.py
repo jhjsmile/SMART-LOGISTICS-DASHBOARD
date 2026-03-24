@@ -423,9 +423,11 @@ st.markdown("""
     .stButton > button[kind="primary"]:hover {
         background-color: #e07a18 !important;
     }
-    /* ── 최신 Streamlit 버튼 선택자 강제 적용 ── */
+    /* ── Streamlit 버튼 선택자 (구버전 baseButton-* + 신버전 stBaseButton-* 동시 지원) ── */
     button[data-testid="baseButton-secondary"],
-    button[data-testid="baseButton-secondaryFormSubmit"] {
+    button[data-testid="baseButton-secondaryFormSubmit"],
+    button[data-testid="stBaseButton-secondary"],
+    button[data-testid="stBaseButton-secondaryFormSubmit"] {
         background-color: #eceff1 !important;
         border: 1px solid #78909c !important;
         color: #1a242c !important;
@@ -433,13 +435,17 @@ st.markdown("""
         border-radius: 4px !important;
     }
     button[data-testid="baseButton-secondary"]:hover,
-    button[data-testid="baseButton-secondaryFormSubmit"]:hover {
+    button[data-testid="baseButton-secondaryFormSubmit"]:hover,
+    button[data-testid="stBaseButton-secondary"]:hover,
+    button[data-testid="stBaseButton-secondaryFormSubmit"]:hover {
         background-color: #cfd8dc !important;
         border-color: #546e7a !important;
         color: #1a242c !important;
     }
     button[data-testid="baseButton-primary"],
-    button[data-testid="baseButton-primaryFormSubmit"] {
+    button[data-testid="baseButton-primaryFormSubmit"],
+    button[data-testid="stBaseButton-primary"],
+    button[data-testid="stBaseButton-primaryFormSubmit"] {
         background-color: #f4922a !important;
         border: 1px solid #e07a18 !important;
         color: #ffffff !important;
@@ -447,9 +453,16 @@ st.markdown("""
         border-radius: 4px !important;
     }
     button[data-testid="baseButton-primary"]:hover,
-    button[data-testid="baseButton-primaryFormSubmit"]:hover {
+    button[data-testid="baseButton-primaryFormSubmit"]:hover,
+    button[data-testid="stBaseButton-primary"]:hover,
+    button[data-testid="stBaseButton-primaryFormSubmit"]:hover {
         background-color: #e07a18 !important;
         color: #ffffff !important;
+    }
+    /* disabled 버튼 — 흐리게 표시, 텍스트 색은 유지 */
+    button:disabled, button[disabled] {
+        opacity: 0.45 !important;
+        cursor: not-allowed !important;
     }
     /* 모든 버튼 텍스트 색 강제 (최후 방어) */
     .stButton button p,
@@ -469,6 +482,7 @@ st.markdown("""
     [data-testid="stDownloadButton"] > button:hover {
         background-color: #cfd8dc !important;
         border-color: #546e7a !important;
+        color: #1a242c !important;
     }
 
     /* 컨테이너 border */
@@ -6159,8 +6173,8 @@ elif curr_l == "마스터 관리":
         _pending_reqs = load_access_requests(status="pending")
         _pending_cnt  = len(_pending_reqs)
         _req_label    = f" 계정 신청 관리 ({_pending_cnt}건 대기 중)" if _pending_cnt > 0 else " 계정 신청 관리"
-        with st.expander(_req_label, expanded=(_pending_cnt > 0)):
-            _req_tabs = st.tabs(["⏳ 대기 중", " 승인됨", " 반려됨"])
+        with st.expander(_req_label, expanded=(_pending_cnt > 0), key="master_req_expander"):
+            _req_tabs = st.tabs(["⏳ 대기 중", " 승인됨", " 반려됨"], key="master_req_tabs")
 
             def _render_requests(req_df: pd.DataFrame, tab_status: str):
                 if req_df.empty:
@@ -6246,7 +6260,7 @@ elif curr_l == "마스터 관리":
 
         with ac1:
             #  개선: 탭으로 기본 생성과 개별 권한 관리 분리
-            user_tab1, user_tab2, user_tab3 = st.tabs([" 계정 생성", " 개별 권한 관리", " 계정 삭제"])
+            user_tab1, user_tab2, user_tab3 = st.tabs([" 계정 생성", " 개별 권한 관리", " 계정 삭제"], key="master_user_tabs")
             
             with user_tab1:
                 with st.form("user_mgmt"):
@@ -6478,7 +6492,7 @@ elif curr_l == "마스터 관리":
         st.caption("각 항목을 한 줄에 하나씩 입력하세요. '(선택)'과 '기타 (직접 입력)'은 자동 유지됩니다.")
 
         dd_tab1, dd_tab2, dd_tab3, dd_tab4 = st.tabs([
-            " OQC 부적합 사유", " 불량 원인", " 수리 조치", " 자재명"])
+            " OQC 부적합 사유", " 불량 원인", " 수리 조치", " 자재명"], key="master_dd_tabs")
 
         def _render_dropdown_editor(ss_key: str, label: str, tab_key: str):
             """드롭박스 편집 공통 렌더러"""
