@@ -24,10 +24,25 @@ def get_now_kst_str() -> str:
 # UI 헬퍼
 # =================================================================
 
-def _inject_autofocus(label: str = None):
-    """스캔 입력 후 재렌더 시 지정 라벨의 text input에 자동 포커스 (JS 주입)."""
+def _inject_autofocus(label: str = None, placeholder: str = None):
+    """스캔 입력 후 재렌더 시 text input에 자동 포커스 (JS 주입).
+    placeholder 지정 시 placeholder 속성으로 탐색 (가장 정확).
+    label 지정 시 aria-label로 탐색.
+    둘 다 없으면 페이지의 첫 번째 활성 text input에 포커스.
+    """
     import streamlit.components.v1 as components
-    if label:
+    if placeholder:
+        safe = placeholder.replace('"', '\\"')
+        js = (
+            f'<script>(function(){{'
+            f'function f(){{'
+            f'var inp=window.parent.document.querySelector(\'input[placeholder="{safe}"]\');'
+            f'if(inp&&!inp.disabled&&!inp.readOnly&&inp.offsetParent!==null)'
+            f'{{inp.focus();return true;}}return false;}}'
+            f'if(!f()){{setTimeout(function(){{if(!f())setTimeout(f,300);}},100);}}'
+            f'}})();</script>'
+        )
+    elif label:
         safe = label.replace('"', '\\"')
         js = (
             f'<script>(function(){{'
