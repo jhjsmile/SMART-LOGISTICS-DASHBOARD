@@ -2376,11 +2376,10 @@ elif curr_l == "조립 라인":
                 r[3].caption(row['품목코드'])
                 _asm_mc = len(_asm_bulk_mats[_asm_bulk_mats['메인시리얼'] == row['시리얼']]) if not _asm_bulk_mats.empty else 0
                 _asm_tog_key = f"mat_tog_{row['시리얼']}_{curr_g}_asm"
-                if r[4].button(row['시리얼'], key=f"sntog_asm_{idx}_{_asm_cb_ver}",
+                _asm_btn_lbl = f"{row['시리얼']}\n자재 {_asm_mc}개" if _asm_mc > 0 else row['시리얼']
+                if r[4].button(_asm_btn_lbl, key=f"sntog_asm_{idx}_{_asm_cb_ver}",
                                use_container_width=True, help="클릭하여 자재 시리얼 조회"):
                     st.session_state[_asm_tog_key] = not st.session_state.get(_asm_tog_key, False)
-                if _asm_mc > 0:
-                    r[4].markdown(f"<style>div[data-testid='stButton']+div{{margin-top:-18px}}</style><p style='font-size:0.7rem;color:#0D9488;margin:0;text-align:center;line-height:1;'>자재 {_asm_mc}개</p>", unsafe_allow_html=True)
                 if is_actionable:
                     if r[5].button("완료", key=f"ok_{idx}", use_container_width=True, type="primary"):
                         _upd = {'상태':'검사대기','시간':get_now_kst_str()}
@@ -2912,11 +2911,10 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 r[3].caption(row['품목코드'])
                 _hist_mc = len(_hist_bulk_mats[_hist_bulk_mats['메인시리얼'] == row['시리얼']]) if not _hist_bulk_mats.empty else 0
                 _hist_tog_key = f"mat_tog_{row['시리얼']}_{curr_g}_{curr_l}"
-                if r[4].button(row['시리얼'], key=f"sntog_hist_{idx}_{_hcb_ver}",
+                _hist_btn_lbl = f"{row['시리얼']}\n자재 {_hist_mc}개" if _hist_mc > 0 else row['시리얼']
+                if r[4].button(_hist_btn_lbl, key=f"sntog_hist_{idx}_{_hcb_ver}",
                                use_container_width=True, help="클릭하여 자재 시리얼 조회"):
                     st.session_state[_hist_tog_key] = not st.session_state.get(_hist_tog_key, False)
-                if _hist_mc > 0:
-                    r[4].markdown(f"<style>div[data-testid='stButton']+div{{margin-top:-18px}}</style><p style='font-size:0.7rem;color:#0D9488;margin:0;text-align:center;line-height:1;'>자재 {_hist_mc}개</p>", unsafe_allow_html=True)
                 if is_act:
                     btn_lbl = "합격" if curr_l == "검사 라인" else "완료"
                     _act_b1, _act_b2 = r[5].columns(2)
