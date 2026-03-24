@@ -2825,10 +2825,12 @@ elif curr_l in ["검사 라인", "포장 라인"]:
 
     with st.expander(f" {curr_g} {curr_l} 이력" + (f"  ·  {_hist_cnt}건" if _hist_cnt else "  ·  없음"), expanded=_xp("chk_hist"), key="_xp_chk_hist"):
         if not f_df.empty:
-            _hsrch_key = f"hsrch_{curr_g}_{curr_l}"
+            _hsrch_key = f"hsrch_{curr_g}_{curr_l}_{st.session_state[_hsrch_cnt]}"
             hs1, hs2 = st.columns([3, 3])
             _sn_search_qp = hs1.text_input(" 시리얼 스캔/검색",
                 placeholder="스캔 또는 입력 → 자동 체크", key=_hsrch_key)
+            if st.session_state.pop("_autofocus_after_rerun", None) == _hsrch_key:
+                _inject_autofocus()
 
             f_df_view = f_df
             if _sn_search_qp.strip():
@@ -2837,12 +2839,12 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 if _search_result.empty:
                     hs1.warning(f"**'{_sn_search_qp.strip()}'** — 해당 시리얼이 없습니다.")
                 else:
-                    f_df_view = _search_result
                     # 자동 체크는 처리 가능 상태(actionable)인 항목만 적용
-                    _hcb_ver_now = st.session_state[_hsrch_cnt]
                     for _hi in _search_result[_search_result['상태'].isin(["검사중","포장중","수리 완료(재투입)"])].index:
                         st.session_state[_hck_key][str(_hi)] = True
-                        st.session_state[f"hck_{curr_g}_{curr_l}_{_hi}_{_hcb_ver_now}"] = True
+                    st.session_state["_autofocus_after_rerun"] = f"hsrch_{curr_g}_{curr_l}_{st.session_state[_hsrch_cnt] + 1}"
+                    st.session_state[_hsrch_cnt] += 1  # 키 변경 → 입력 초기화 후 전체 목록 표시
+                    _rerun("chk_hist")
 
             _h_checked = [k for k,v in st.session_state[_hck_key].items() if v]
             if _h_checked:
