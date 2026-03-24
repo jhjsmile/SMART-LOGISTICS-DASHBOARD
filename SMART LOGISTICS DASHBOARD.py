@@ -2380,7 +2380,7 @@ elif curr_l == "조립 라인":
                                use_container_width=True, help="클릭하여 자재 시리얼 조회"):
                     st.session_state[_asm_tog_key] = not st.session_state.get(_asm_tog_key, False)
                 if _asm_mc > 0:
-                    r[4].markdown(f"<p style='font-size:0.7rem;color:#0D9488;margin:0;text-align:center;line-height:1;'>자재 {_asm_mc}개</p>", unsafe_allow_html=True)
+                    r[4].markdown(f"<p style='font-size:0.7rem;color:#0D9488;margin:-8px 0 0 0;text-align:center;line-height:1;'>자재 {_asm_mc}개</p>", unsafe_allow_html=True)
                 if is_actionable:
                     if r[5].button("완료", key=f"ok_{idx}", use_container_width=True, type="primary"):
                         _upd = {'상태':'검사대기','시간':get_now_kst_str()}
@@ -2916,7 +2916,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                use_container_width=True, help="클릭하여 자재 시리얼 조회"):
                     st.session_state[_hist_tog_key] = not st.session_state.get(_hist_tog_key, False)
                 if _hist_mc > 0:
-                    r[4].markdown(f"<p style='font-size:0.7rem;color:#0D9488;margin:0;text-align:center;line-height:1;'>자재 {_hist_mc}개</p>", unsafe_allow_html=True)
+                    r[4].markdown(f"<p style='font-size:0.7rem;color:#0D9488;margin:-8px 0 0 0;text-align:center;line-height:1;'>자재 {_hist_mc}개</p>", unsafe_allow_html=True)
                 if is_act:
                     btn_lbl = "합격" if curr_l == "검사 라인" else "완료"
                     _act_b1, _act_b2 = r[5].columns(2)
