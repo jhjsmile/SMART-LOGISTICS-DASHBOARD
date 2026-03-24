@@ -1876,6 +1876,11 @@ _xp_page_sig_now = f"{curr_l}||{curr_g}"
 if st.session_state.get("_xp_page_sig") != _xp_page_sig_now:
     for _xp_k in [k for k in st.session_state if k.startswith("_xp_") and k != "_xp_page_sig"]:
         del st.session_state[_xp_k]
+    # 페이지 이동 시 스캔 체크 상태 초기화
+    for _ck_k in [k for k in st.session_state if k.startswith((
+        "wait_ck_", "hist_ck_", "asm_checked_", "oqc_in_ck_", "oqc_ck_"
+    ))]:
+        st.session_state[_ck_k] = {}
     st.session_state["_xp_page_sig"] = _xp_page_sig_now
 # ─────────────────────────────────────────────────────────────────────
 
