@@ -813,14 +813,17 @@ with st.sidebar:
 # → Realtime이 백그라운드에서 전체 캐시 갱신
 
 def _prod_update(sn: str, data: dict) -> None:
-    """단일 행 옵티미스틱 업데이트 + 캐시 초기화."""
-    _clear_production_cache()
+    """단일 행 옵티미스틱 업데이트.
+    인메모리 업데이트 성공 시 캐시 무효화 불필요 — Realtime 구독이 DB 변경을
+    감지해 자동으로 캐시를 초기화함. 시리얼이 메모리에 없을 때만 DB 재조회."""
     _db = st.session_state.get("production_db", pd.DataFrame())
     if _db.empty or "시리얼" not in _db.columns:
+        _clear_production_cache()
         st.session_state.production_db = load_realtime_ledger()
         return
     _mask = _db["시리얼"] == sn
     if not _mask.any():
+        _clear_production_cache()
         st.session_state.production_db = load_realtime_ledger()
         return
     for col, val in data.items():
@@ -829,12 +832,12 @@ def _prod_update(sn: str, data: dict) -> None:
 
 
 def _prod_bulk_update(updates: list) -> None:
-    """다중 행 옵티미스틱 업데이트 + 캐시 초기화.
+    """다중 행 옵티미스틱 업데이트.
     updates: [{"sn": ..., "data": {...}}, ...]
-    """
-    _clear_production_cache()
+    인메모리 업데이트 성공 시 캐시 무효화 불필요 — Realtime 구독이 처리."""
     _db = st.session_state.get("production_db", pd.DataFrame())
     if _db.empty or "시리얼" not in _db.columns:
+        _clear_production_cache()
         st.session_state.production_db = load_realtime_ledger()
         return
     for item in updates:
@@ -6680,15 +6683,20 @@ elif curr_l == "마스터 관리":
                     if _rb_col2.button(" 상태 변경 실행", key="rollback_exec", type="primary", use_container_width=True):
                         _prev_s = _rb_row['상태']
                         _upd = {'상태': _rb_target, '라인': _rb_new_line, '시간': get_now_kst_str()}
-                        if update_row(_cached_sn, _upd):
-                            insert_audit_log(
+                        # update_row + insert_audit_log 병렬 실행으로 DB 대기 시간 단축
+                        from concurrent.futures import ThreadPoolExecutor
+                        with ThreadPoolExecutor(max_workers=2) as _ex:
+                            _f_upd = _ex.submit(update_row, _cached_sn, _upd)
+                            _ex.submit(insert_audit_log,
                                 시리얼=_cached_sn, 모델=_rb_row.get('모델',''), 반=_rb_row.get('반',''),
                                 이전상태=_prev_s, 이후상태=_rb_target,
                                 작업자=st.session_state.user_id,
                                 비고=f"관리자 수동 상태 변경 (라인: {_rb_cur_line}→{_rb_new_line})"
                             )
+                            _ok = _f_upd.result()
+                        if _ok:
                             _prod_update(_cached_sn, _upd)
-                            st.session_state.pop("_rb_sn_cache", None)
+                            # 검색 결과 유지 → rerun 후 변경된 상태 즉시 확인 가능
                             st.toast(f" [{_cached_sn}] {_prev_s} → {_rb_target} / 라인: {_rb_cur_line} → {_rb_new_line}")
                             st.rerun()
                         else:
