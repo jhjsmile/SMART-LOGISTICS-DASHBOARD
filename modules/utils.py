@@ -26,42 +26,44 @@ def get_now_kst_str() -> str:
 
 def _inject_autofocus(label: str = None, placeholder: str = None):
     """스캔 입력 후 재렌더 시 text input에 자동 포커스 (JS 주입).
-    placeholder 지정 시 placeholder 속성으로 탐색 (가장 정확).
-    label 지정 시 aria-label로 탐색.
-    둘 다 없으면 페이지의 첫 번째 활성 text input에 포커스.
+    iframe 위치 기준으로 가장 가까운 입력란에 포커스 (동일 label/placeholder가
+    여러 섹션에 존재할 때 첫 번째 요소가 아닌 올바른 요소를 선택).
+    placeholder 지정 시 placeholder 속성으로 후보 필터링.
+    label 지정 시 aria-label로 후보 필터링.
+    둘 다 없으면 모든 활성 text input 중 가장 가까운 것에 포커스.
     """
     import streamlit.components.v1 as components
     if placeholder:
         safe = placeholder.replace('"', '\\"')
-        js = (
-            f'<script>(function(){{'
-            f'function f(){{'
-            f'var inp=window.parent.document.querySelector(\'input[placeholder="{safe}"]\');'
-            f'if(inp&&!inp.disabled&&!inp.readOnly&&inp.offsetParent!==null)'
-            f'{{inp.focus();return true;}}return false;}}'
-            f'if(!f()){{setTimeout(function(){{if(!f())setTimeout(f,300);}},100);}}'
-            f'}})();</script>'
-        )
+        selector = f'input[placeholder="{safe}"]'
     elif label:
         safe = label.replace('"', '\\"')
-        js = (
-            f'<script>(function(){{'
-            f'function f(){{'
-            f'var inp=window.parent.document.querySelector(\'input[aria-label="{safe}"]\');'
-            f'if(inp&&!inp.disabled&&!inp.readOnly&&inp.offsetParent!==null)'
-            f'{{inp.focus();return true;}}return false;}}'
-            f'if(!f()){{setTimeout(function(){{if(!f())setTimeout(f,300);}},100);}}'
-            f'}})();</script>'
-        )
+        selector = f'input[aria-label="{safe}"]'
     else:
-        js = (
-            "<script>(function(){function f(){var els=window.parent.document"
-            ".querySelectorAll('input[type=text]');for(var i=0;i<els.length;i++)"
-            "{var e=els[i];if(!e.disabled&&!e.readOnly&&e.offsetParent!==null)"
-            "{e.focus();return true;}}return false;}"
-            "if(!f()){setTimeout(function(){if(!f())setTimeout(f,300);},100);}})();"
-            "</script>"
-        )
+        selector = 'input[type="text"]'
+    js = (
+        f'<script>(function(){{'
+        f'function f(){{'
+        f'var pdoc=window.parent.document;'
+        f'var inputs=pdoc.querySelectorAll(\'{selector}\');'
+        f'if(!inputs.length)return false;'
+        f'var ifr=window.frameElement;'
+        f'if(ifr){{'
+        f'var ir=ifr.getBoundingClientRect();'
+        f'var best=null,bestD=Infinity;'
+        f'for(var i=0;i<inputs.length;i++){{'
+        f'var inp=inputs[i];'
+        f'if(inp.disabled||inp.readOnly||inp.offsetParent===null)continue;'
+        f'var r=inp.getBoundingClientRect();'
+        f'var d=Math.abs(r.bottom-ir.top)+Math.abs(r.left-ir.left);'
+        f'if(d<bestD){{bestD=d;best=inp;}}}}'
+        f'if(best){{best.focus();return true;}}}}'
+        f'var inp=inputs[0];'
+        f'if(inp&&!inp.disabled&&!inp.readOnly&&inp.offsetParent!==null)'
+        f'{{inp.focus();return true;}}return false;}}'
+        f'if(!f()){{setTimeout(function(){{if(!f())setTimeout(f,300);}},100);}}'
+        f'}})();</script>'
+    )
     components.html(js, height=0, scrolling=False)
 
 
