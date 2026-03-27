@@ -6047,7 +6047,10 @@ elif curr_l == "수리 현황 리포트":
 # ── 마스터 관리 ──────────────────────────────────────────────────
 elif curr_l == "마스터 관리":
     st.markdown("<h2 class='centered-title'>⚙️ 시스템 마스터 데이터 관리</h2>", unsafe_allow_html=True)
-    _master_url = st.secrets.get("master_admin_url", "")
+    try:
+        _master_url = st.secrets["master_admin_url"]
+    except Exception:
+        _master_url = ""
     if _master_url:
         st.info("마스터 관리는 별도 앱에서 운영됩니다.")
         st.link_button("⚙️ 마스터 관리 앱 열기", _master_url, use_container_width=False, type="primary")
