@@ -6050,7 +6050,10 @@ elif curr_l == "마스터 관리":
     try:
         _master_url = st.secrets["master_admin_url"]
     except Exception:
-        _master_url = ""
+        try:
+            _master_url = st.secrets["theme"]["master_admin_url"]
+        except Exception:
+            _master_url = "https://smart-logistics-dashboard-byzejtmxwn3arn5kd9pmgy.streamlit.app/"
     if _master_url:
         st.info("마스터 관리는 별도 앱에서 운영됩니다.")
         st.link_button("⚙️ 마스터 관리 앱 열기", _master_url, use_container_width=False, type="primary")
