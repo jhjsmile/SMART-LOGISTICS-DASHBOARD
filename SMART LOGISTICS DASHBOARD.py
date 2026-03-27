@@ -2561,13 +2561,17 @@ elif curr_l == "조립 라인":
         sc2.caption(" 스캐너로 스캔하면 Enter가 자동 입력됩니다")
 
         if scan_input.strip():
+            import time as _time
             _scanned = scan_input.strip()
-            # 렉으로 인한 중복 실행 방지: 직전 처리된 값과 동일하면 스킵
-            if _scanned == st.session_state[_scan_processed_key]:
-                st.session_state[_scan_processed_key] = ""
+            _scan_ts_key  = f"scan_ts_{curr_g}"
+            _last_ts  = st.session_state.get(_scan_ts_key, 0)
+            _last_val = st.session_state.get(_scan_processed_key, "")
+            # 2초 이내 동일 값 → 중복 스킵 (렉/스캐너 이중 전송 방지)
+            if _scanned == _last_val and (_time.monotonic() - _last_ts) < 5.0:
                 st.session_state[_scan_counter_key] += 1
                 st.rerun()
             st.session_state[_scan_processed_key] = _scanned
+            st.session_state[_scan_ts_key] = _time.monotonic()
             already = any(m["자재시리얼"] == _scanned
                          for m in st.session_state[_mat_list_key])
             if not already:
