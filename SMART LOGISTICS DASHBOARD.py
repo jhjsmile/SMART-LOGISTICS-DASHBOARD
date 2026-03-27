@@ -3202,7 +3202,7 @@ elif curr_l == "생산 현황 리포트":
     if not df_rpt.empty:
         # ── KPI ──────────────────────────────────────────────────────
         _rpt_done    = df_rpt[(df_rpt['라인'] == '포장 라인') & (df_rpt['상태'] == '완료')]
-        _rpt_ing     = df_rpt[df_rpt['상태'].isin(['조립중','검사대기','검사중','OQC대기','OQC중','포장중','출하승인'])]
+        _rpt_ing     = df_rpt[df_rpt['상태'].isin(ACTIVE_STATES)]
         _rpt_defect  = df_rpt[df_rpt['상태'].str.contains('불량|부적합', na=False)]
         kp1, kp2, kp3, kp4 = st.columns(4)
         kp1.metric(" 총 투입",      f"{len(df_rpt)} EA")
@@ -3717,6 +3717,10 @@ elif curr_l == "생산 지표 관리":
     else:
         db_f = db_all
 
+    # KPI/실적용: production_history 포함 (완료 후 아카이브된 제품까지 반영)
+    db_kpi = load_production_history(date_from, date_to_d)
+    db_kpi_f = db_kpi[db_kpi['반'] == ban_filter] if (not db_kpi.empty and ban_filter != "전체") else db_kpi
+
     if not sch_all.empty:
         sch_f = sch_all[(sch_all['날짜'] >= date_from) & (sch_all['날짜'] <= plan_date_to)]
         if ban_filter != "전체": sch_f = sch_f[sch_f['반'] == ban_filter]
@@ -3731,14 +3735,14 @@ elif curr_l == "생산 지표 관리":
         if df.empty: return 0
         return int(df[col].apply(lambda x: int(float(x)) if str(x) not in ('','nan') else 0).sum())
 
-    total_in   = len(db_f) if not db_f.empty else 0
-    total_done = len(db_f[(db_f['라인']=='포장 라인') & (db_f['상태']=='완료')]) if not db_f.empty else 0
-    total_wip  = len(db_f[db_f['상태'].isin(ACTIVE_STATES)]) if not db_f.empty else 0
+    total_in   = len(db_kpi_f) if not db_kpi_f.empty else 0
+    total_done = len(db_kpi_f[(db_kpi_f['라인']=='포장 라인') & (db_kpi_f['상태']=='완료')]) if not db_kpi_f.empty else 0
+    total_wip  = len(db_kpi_f[db_kpi_f['상태'].isin(ACTIVE_STATES)]) if not db_kpi_f.empty else 0
     # 불량 기준: 현재 불량/부적합 상태 OR 수리 이력 있는 제품 (모델별 불량 분석과 동일 기준)
-    total_ng   = len(db_f[
-        db_f['상태'].str.contains('불량|부적합', na=False) |
-        (db_f['수리'].astype(str).str.strip() != '')
-    ]) if not db_f.empty else 0
+    total_ng   = len(db_kpi_f[
+        db_kpi_f['상태'].str.contains('불량|부적합', na=False) |
+        (db_kpi_f['수리'].astype(str).str.strip() != '')
+    ]) if not db_kpi_f.empty else 0
     plan_qty   = _qty(sch_f_asm)
     achieve_pct = round(total_done / plan_qty * 100, 1) if plan_qty > 0 else 0
     defect_pct  = round(total_ng / total_in * 100, 1) if total_in > 0 else 0
@@ -3778,7 +3782,7 @@ elif curr_l == "생산 지표 관리":
         st.markdown("<div class='db-section' style='background:#2471a3;'> 반별 달성률</div>", unsafe_allow_html=True)
         bc = st.columns(3)
         for bi, ban in enumerate(PRODUCTION_GROUPS):
-            bdb  = db_f[db_f['반']==ban] if not db_f.empty else pd.DataFrame()
+            bdb  = db_kpi[db_kpi['반']==ban] if not db_kpi.empty else pd.DataFrame()
             bsch = sch_f_asm[sch_f_asm['반']==ban] if not sch_f_asm.empty else pd.DataFrame()
             b_plan = _qty(bsch)
             b_done = len(bdb[(bdb['라인']=='포장 라인')&(bdb['상태']=='완료')]) if not bdb.empty else 0
@@ -3859,15 +3863,15 @@ elif curr_l == "생산 지표 관리":
 
     with ng_col:
         st.markdown("<div class='db-section' style='background:#c0392b;'> 모델별 불량 분석</div>", unsafe_allow_html=True)
-        if not db_f.empty:
+        if not db_kpi_f.empty:
             # 불량 판단 기준:
             #  ① 현재 상태가 불량/부적합 이거나
             #  ② 수리 컬럼이 채워진 경우 (수리 이력 = 불량이 있었던 제품)
             _ng_mask = (
-                db_f['상태'].str.contains('불량|부적합', na=False) |
-                (db_f['수리'].astype(str).str.strip() != '')
+                db_kpi_f['상태'].str.contains('불량|부적합', na=False) |
+                (db_kpi_f['수리'].astype(str).str.strip() != '')
             )
-            _ng_df_src = db_f.copy()
+            _ng_df_src = db_kpi_f.copy()
             _ng_df_src['_has_ng'] = _ng_mask
             ng_df = _ng_df_src.groupby('모델').agg(
                 투입=('시리얼','count'),
