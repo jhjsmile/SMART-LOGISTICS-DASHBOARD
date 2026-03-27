@@ -2546,6 +2546,9 @@ elif curr_l == "조립 라인":
         _scan_counter_key = f"scan_cnt_{curr_g}"
         if _scan_counter_key not in st.session_state:
             st.session_state[_scan_counter_key] = 0
+        _scan_processed_key = f"scan_proc_{curr_g}"
+        if _scan_processed_key not in st.session_state:
+            st.session_state[_scan_processed_key] = ""
         _scan_field_key = f"{_scan_sn_key}_{st.session_state[_scan_counter_key]}"
 
         scan_input = sc2.text_input(
@@ -2558,15 +2561,22 @@ elif curr_l == "조립 라인":
         sc2.caption(" 스캐너로 스캔하면 Enter가 자동 입력됩니다")
 
         if scan_input.strip():
-            already = any(m["자재시리얼"] == scan_input.strip()
+            _scanned = scan_input.strip()
+            # 렉으로 인한 중복 실행 방지: 직전 처리된 값과 동일하면 스킵
+            if _scanned == st.session_state[_scan_processed_key]:
+                st.session_state[_scan_processed_key] = ""
+                st.session_state[_scan_counter_key] += 1
+                st.rerun()
+            st.session_state[_scan_processed_key] = _scanned
+            already = any(m["자재시리얼"] == _scanned
                          for m in st.session_state[_mat_list_key])
             if not already:
                 st.session_state[_mat_list_key].append({
                     "자재명": sel_mat_name,
-                    "자재시리얼": scan_input.strip()
+                    "자재시리얼": _scanned
                 })
             else:
-                st.toast(f" 이미 추가된 자재 S/N: {scan_input.strip()}")
+                st.toast(f" 이미 추가된 자재 S/N: {_scanned}")
             st.session_state["_autofocus_after_rerun"] = f"{_scan_sn_key}_{st.session_state[_scan_counter_key] + 1}"
             st.session_state[_scan_counter_key] += 1
             st.rerun()
