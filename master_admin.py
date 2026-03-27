@@ -566,6 +566,12 @@ if not st.session_state.admin_authenticated:
             if st.form_submit_button("인증", use_container_width=True):
                 master_hash = get_master_pw_hash()
                 if master_hash is None:
+                    # get_master_pw_hash() 실패 시 secrets 직접 접근
+                    try:
+                        master_hash = st.secrets["master_admin_pw_hash"]
+                    except Exception:
+                        pass
+                if master_hash is None:
                     st.error("마스터 비밀번호가 설정되지 않았습니다.")
                 elif verify_pw(pw, master_hash):
                     st.session_state.admin_authenticated = True
