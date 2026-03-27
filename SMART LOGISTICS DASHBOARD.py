@@ -703,8 +703,9 @@ st.markdown("""
     }
 
     function isSearchInput(el) {
-        var t = getLabelText(el);
-        return !!t && _SEARCH_RE.test(t);
+        var t = getLabelText(el) || '';
+        var ph = el.getAttribute('placeholder') || '';
+        return _SEARCH_RE.test(t) || _SEARCH_RE.test(ph);
     }
 
     function cleanValue(el) {
@@ -2752,8 +2753,10 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     prev = "조립 라인" if curr_l == "검사 라인" else "OQC 라인"
 
     db_s = st.session_state.production_db
-    wait_status = "검사대기" if curr_l == "검사 라인" else "출하승인"
-    wait_list = db_s[(db_s['반']==curr_g)&(db_s['상태']==wait_status)]
+    if curr_l == "검사 라인":
+        wait_list = db_s[(db_s['반']==curr_g)&(db_s['상태'].isin(['검사대기','수리 완료(재투입)']))]
+    else:
+        wait_list = db_s[(db_s['반']==curr_g)&(db_s['상태']=='출하승인')]
     _wait_cnt = len(wait_list)
     DEFECT_CAUSES = st.session_state.get('dropdown_defect_cause', ['(선택)', '기타 (직접 입력)'])
 
@@ -2792,7 +2795,6 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 if wba2.button(" 일괄 입고", key=f"wait_bulk_{curr_g}_{curr_l}",
                                type="primary", use_container_width=True):
                     _next_s = '검사중' if curr_l == '검사 라인' else '포장중'
-                    _prev_s = '검사대기' if curr_l == '검사 라인' else '출하승인'
                     _ops = []
                     for wi in w_checked:
                         wi_int = int(wi)
@@ -2803,7 +2805,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 '작업자': st.session_state.user_id}
                             _ops.append({"sn": _wr['시리얼'], "data": _upd,
                                 "audit": {"시리얼": _wr['시리얼'], "모델": _wr['모델'],
-                                         "반": curr_g, "이전상태": _prev_s, "이후상태": _next_s,
+                                         "반": curr_g, "이전상태": _wr['상태'], "이후상태": _next_s,
                                          "작업자": st.session_state.user_id}})
                     st.session_state[_wck_key] = {}
                     st.session_state[_wscan_cnt] += 1  # 체크박스 키 리셋
@@ -3349,7 +3351,7 @@ elif curr_l == "검사 라인":
     DEFECT_CAUSES = st.session_state.get('dropdown_defect_cause', ['(선택)', '기타 (직접 입력)'])
 
     # ── KPI ─────────────────────────────────────────────────────────
-    qc_wait = len(db_qc[db_qc['상태'] == '검사대기'])
+    qc_wait = len(db_qc[db_qc['상태'].isin(['검사대기', '수리 완료(재투입)'])])
     qc_ing  = len(db_qc[db_qc['상태'] == '검사중'])
     qc_pass = len(db_qc[db_qc['상태'] == 'OQC대기'])
     qc_ng   = len(db_qc[db_qc['상태'] == '불량 처리 중'])
@@ -3362,8 +3364,8 @@ elif curr_l == "검사 라인":
     st.divider()
 
     # ── 검사 대기 목록 ───────────────────────────────────────────────
-    st.markdown("<div class='section-title'> 검사 대기 (조립 완료 제품)</div>", unsafe_allow_html=True)
-    wait_df = db_qc[db_qc['상태'] == '검사대기'].sort_values('시간', ascending=False)
+    st.markdown("<div class='section-title'> 검사 대기</div>", unsafe_allow_html=True)
+    wait_df = db_qc[db_qc['상태'].isin(['검사대기', '수리 완료(재투입)'])].sort_values('시간', ascending=False)
 
     if not wait_df.empty:
         hh = st.columns([2, 2, 2, 1.5])
@@ -3380,7 +3382,7 @@ elif curr_l == "검사 라인":
                     '라인': '검사 라인', '작업자': st.session_state.user_id}
                 update_row(row['시리얼'], _upd)
                 insert_audit_log(시리얼=row['시리얼'], 모델=row['모델'], 반=curr_g,
-                    이전상태='검사대기', 이후상태='검사중', 작업자=st.session_state.user_id)
+                    이전상태=row['상태'], 이후상태='검사중', 작업자=st.session_state.user_id)
                 _prod_update(row['시리얼'], _upd)
                 st.rerun()
     else:
