@@ -2567,7 +2567,7 @@ elif curr_l == "조립 라인":
             _last_ts  = st.session_state.get(_scan_ts_key, 0)
             _last_val = st.session_state.get(_scan_processed_key, "")
             # 2초 이내 동일 값 → 중복 스킵 (렉/스캐너 이중 전송 방지)
-            if _scanned == _last_val and (_time.monotonic() - _last_ts) < 2.0:
+            if _scanned == _last_val and (_time.monotonic() - _last_ts) < 5.0:
                 st.session_state[_scan_counter_key] += 1
                 st.rerun()
             st.session_state[_scan_processed_key] = _scanned
