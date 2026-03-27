@@ -1669,12 +1669,12 @@ if st.sidebar.button(" 로그아웃", use_container_width=True):
 def _do_batch_entry(sn_list, curr_line):
     """sn_list의 시리얼들을 일괄 입고 처리"""
     _next_status = '검사중' if curr_line == '검사 라인' else '포장중'
-    _prev_status = '검사대기' if curr_line == '검사 라인' else '출하승인'
     db = st.session_state.production_db
     for sn in sn_list:
         _row = db[db['시리얼'] == sn]
-        _model = _row.iloc[0]['모델'] if not _row.empty else ''
-        _ban   = _row.iloc[0]['반']   if not _row.empty else ''
+        _model    = _row.iloc[0]['모델'] if not _row.empty else ''
+        _ban      = _row.iloc[0]['반']   if not _row.empty else ''
+        _prev_status = _row.iloc[0]['상태'] if not _row.empty else ('검사대기' if curr_line == '검사 라인' else '출하승인')
         update_row(sn, {'시간': get_now_kst_str(), '라인': curr_line,
                         '상태': _next_status, '작업자': st.session_state.user_id})
         insert_audit_log(시리얼=sn, 모델=_model, 반=_ban,
@@ -2837,13 +2837,12 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                     unsafe_allow_html=True)
                         if wr3.button(" 입고", key=f"in_{widx}", use_container_width=True):
                             _next_s = '검사중' if curr_l == '검사 라인' else '포장중'
-                            _prev_s = '검사대기' if curr_l == '검사 라인' else '출하승인'
                             _upd = {'시간': get_now_kst_str(),
                                 '라인': curr_l, '상태': _next_s,
                                 '작업자': st.session_state.user_id}
                             update_row(wrow['시리얼'], _upd)
                             insert_audit_log(시리얼=wrow['시리얼'], 모델=wrow['모델'],
-                                반=curr_g, 이전상태=_prev_s, 이후상태=_next_s,
+                                반=curr_g, 이전상태=wrow['상태'], 이후상태=_next_s,
                                 작업자=st.session_state.user_id)
                             st.session_state[_wck_key].pop(str(widx), None)
                             _prod_update(wrow['시리얼'], _upd)
