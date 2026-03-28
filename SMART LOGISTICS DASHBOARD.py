@@ -80,7 +80,7 @@ from modules.database import (
 )
 from modules.calendar_view import (
     show_inline_day_panel, render_calendar_weekly, render_calendar_monthly,
-    _xp, _rerun,
+    _xp, _rerun, clear_cal,
 )
 from modules.kpi_dashboard import render_kpi_dashboard
 
