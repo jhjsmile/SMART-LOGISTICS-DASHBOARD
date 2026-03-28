@@ -4022,6 +4022,7 @@ elif curr_l == "생산 지표 관리":
             ng_df['불량률'] = (ng_df['불량'] / ng_df['투입'] * 100).round(1)
             ng_df = ng_df[ng_df['불량'] > 0].sort_values('불량률', ascending=False)
             if not ng_df.empty:
+                import plotly.graph_objects as go
                 _ng_sorted = ng_df.sort_values('불량', ascending=False).reset_index(drop=True)
                 _ng_sorted['누적비중(%)'] = (_ng_sorted['불량'].cumsum() / _ng_sorted['불량'].sum() * 100).round(1)
                 _bar_clrs = ['#c0392b' if v > 10 else '#d68910' if v > 5 else '#e8c97a' for v in _ng_sorted['불량률']]
