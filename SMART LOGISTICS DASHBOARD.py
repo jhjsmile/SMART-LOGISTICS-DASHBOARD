@@ -780,6 +780,20 @@ st.markdown("""
             }
         }, 50);
     }, true);
+
+    /* ── 드랍박스 키보드 억제 ────────────────────────────────────────
+       selectbox 내부 input에 inputmode=none 적용 → 드랍박스 탭 시
+       소프트 키보드 미표시. "직접 입력" 텍스트 필드는 제외. */
+    function suppressSelectboxKeyboard() {
+        document.querySelectorAll('[data-testid="stSelectbox"] input').forEach(function(el) {
+            el.setAttribute('inputmode', 'none');
+        });
+    }
+    suppressSelectboxKeyboard();
+    var _sbObs = new MutationObserver(function() {
+        suppressSelectboxKeyboard();
+    });
+    _sbObs.observe(document.body, { childList: true, subtree: true });
 })();
 </script>
 """, unsafe_allow_html=True)
