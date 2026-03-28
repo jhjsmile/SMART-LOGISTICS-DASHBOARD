@@ -3837,10 +3837,13 @@ elif curr_l == "생산 지표 관리":
 
     with left_col:
         st.markdown("<div class='db-section' style='background:#2471a3;'> 반별 달성률</div>", unsafe_allow_html=True)
+        # ban_filter와 무관하게 전체 반 계획 수량 필요 → 날짜만 필터링한 별도 변수 사용
+        _sch_f_all = sch_all[(sch_all['날짜'] >= date_from) & (sch_all['날짜'] <= plan_date_to)] if not sch_all.empty else sch_all
+        _sch_f_asm_all = _sch_f_all[_sch_f_all['카테고리'] == '조립계획'] if not _sch_f_all.empty else _sch_f_all
         bc = st.columns(3)
         for bi, ban in enumerate(PRODUCTION_GROUPS):
             bdb  = db_kpi[db_kpi['반']==ban] if not db_kpi.empty else pd.DataFrame()
-            bsch = sch_f_asm[sch_f_asm['반']==ban] if not sch_f_asm.empty else pd.DataFrame()
+            bsch = _sch_f_asm_all[_sch_f_asm_all['반']==ban] if not _sch_f_asm_all.empty else pd.DataFrame()
             b_plan = _qty(bsch)
             b_done = len(bdb[(bdb['라인']=='포장 라인')&(bdb['상태']=='완료')]) if not bdb.empty else 0
             b_wip  = len(bdb[bdb['상태'].isin(ACTIVE_STATES)]) if not bdb.empty else 0
