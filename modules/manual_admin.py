@@ -1,20 +1,27 @@
 import streamlit as st
 
 
+def _html(html: str):
+    try:
+        st.html(html)
+    except AttributeError:
+        st.markdown(html, unsafe_allow_html=True)
+
+
 def _section(icon, title, color="#1B3A5C"):
-    st.markdown(f"""
-    <div style='background:{color};color:#fff;padding:8px 16px;border-radius:8px 8px 0 0;
-                font-weight:700;font-size:1.0rem;margin-top:16px;'>
-        {icon} {title}
-    </div>""", unsafe_allow_html=True)
+    _html(
+        f"<div style='background:{color};color:#fff;padding:8px 16px;"
+        f"border-radius:8px 8px 0 0;font-weight:700;font-size:1.0rem;margin-top:16px;'>"
+        f"{icon} {title}</div>"
+    )
 
 
 def _box(html_content, bg="#f8f6f2"):
-    st.markdown(f"""
-    <div style='background:{bg};border:1px solid #ddd5c0;border-radius:0 0 8px 8px;
-                padding:14px 18px;font-size:0.92rem;line-height:1.75;margin-bottom:4px;'>
-        {html_content}
-    </div>""", unsafe_allow_html=True)
+    _html(
+        f"<div style='background:{bg};border:1px solid #ddd5c0;border-radius:0 0 8px 8px;"
+        f"padding:14px 18px;font-size:0.92rem;line-height:1.75;margin-bottom:4px;'>"
+        f"{html_content.strip()}</div>"
+    )
 
 
 def render_admin_manual():
