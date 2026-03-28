@@ -2150,48 +2150,12 @@ if curr_l == "현황판":
 
     st.divider()
 
-    # 반별 현황 카드
-    st.markdown("<div class='section-title'> 반별 생산 현황</div>", unsafe_allow_html=True)
-    cards_html = "<div style='display:flex; gap:16px; width:100%; box-sizing:border-box;'>"
-    for g in PRODUCTION_GROUPS:
-        gdf  = db_all[db_all['반'] == g]
-        완료 = len(gdf[(gdf['라인']=='포장 라인')&(gdf['상태']=='완료')])
-        재공 = len(gdf[gdf['상태'].isin(['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)'])])
-        불량 = len(gdf[gdf['상태'].str.contains('불량|부적합',na=False)])
-        투입 = len(gdf)
-        cards_html += (
-            f"<div style='flex:1; background:#fffdf8; border:1px solid #e0d8c8; border-radius:14px; padding:20px; box-sizing:border-box; min-width:0;'>"
-            f"<div style='font-size:clamp(1rem,1.5vw,1.2rem); font-weight:bold; margin-bottom:14px; color:#3d3530;'> {g}</div>"
-            f"<div style='background:#f5f0e8; border-radius:10px; padding:14px; text-align:center; margin-bottom:12px;'>"
-            f"<div style='font-size:clamp(0.65rem,1vw,0.85rem); color:#8a7f72; font-weight:bold; margin-bottom:6px;'>총 투입</div>"
-            f"<div style='font-size:clamp(1.5rem,3vw,2.5rem); color:#5a96c8; font-weight:bold;'>{투입} EA</div></div>"
-            f"<div style='display:flex; gap:8px;'>"
-            f"<div style='flex:1; background:#f5f0e8; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
-            f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#8a7f72; font-weight:bold;'> 완료</div>"
-            f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#4da875; font-weight:bold;'>{완료}</div></div>"
-            f"<div style='flex:1; background:#f5f0e8; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
-            f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#8a7f72; font-weight:bold;'> 작업중</div>"
-            f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#5a96c8; font-weight:bold;'>{재공}</div></div>"
-            f"<div style='flex:1; background:#f5f0e8; border-radius:10px; padding:12px 4px; text-align:center; min-width:0;'>"
-            f"<div style='font-size:clamp(0.6rem,0.9vw,0.78rem); color:#8a7f72; font-weight:bold;'> 불량</div>"
-            f"<div style='font-size:clamp(1.2rem,2.5vw,2rem); color:#c8605a; font-weight:bold;'>{불량}</div></div>"
-            f"</div></div>"
-        )
-    cards_html += "</div>"
-    st.markdown(cards_html, unsafe_allow_html=True)
-
-    if db_all.empty:
-        st.info("등록된 생산 데이터가 없습니다.")
-
-    st.divider()
-
-    # 캘린더
+    # 캘린더 (월별)
     st.markdown("<div class='section-title'> 생산 일정 캘린더</div>", unsafe_allow_html=True)
     if st.session_state.user_role in CALENDAR_EDIT_ROLES and check_perm("생산 지표 관리", "edit"):
         st.caption(" 날짜 버튼 클릭 → 일정 상세/추가/수정/삭제")
     else:
         st.caption(" 조회만 가능합니다.")
-    render_calendar_weekly()
     render_calendar_monthly()
 
     # ── 일정 상세 인라인 패널 (날짜 클릭 시 캘린더 바로 아래 표시) ──
