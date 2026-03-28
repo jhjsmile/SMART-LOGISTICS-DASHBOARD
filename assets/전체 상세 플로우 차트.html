@@ -133,17 +133,21 @@ flowchart LR
     R --> M1[Master\n최고 관리자]
     R --> M2[Admin\n관리자]
     R --> M3[Control Tower\n관제탑]
-    R --> M4[팀장\n제조1·2·3반]
+    R --> M4[Assembly Team\n제조 1·2·3반]
+    R --> M5[QC / Packing Team\n검사·포장 담당]
+    R --> M6[OQC Team\n출하 품질팀]
+    R --> M7[Schedule Manager\n일정 관리자]
 
-    M1 & M2 & M3 & M4 --> NAV[📋 페이지 네비게이션]
+    M1 & M2 & M3 & M4 & M5 & M6 & M7 --> NAV[📋 페이지 네비게이션\n역할별 접근 제한]
 
-    NAV --> P1[🏠 대시보드\nKPI 현황]
-    NAV --> P2[🏭 생산 라인\n4개 공정]
-    NAV --> P3[📅 일정 캘린더\n주간·월간]
+    NAV --> P1[🏠 생산 통합 현황판\nKPI·게이지·병목 감지]
+    NAV --> P2[🏭 생산 라인\n조립·검사·OQC·포장]
+    NAV --> P3[📅 일정 캘린더\n주간·월간·인라인 편집]
     NAV --> P4[📦 마스터 데이터\n모델·P/N 관리]
-    NAV --> P5[📊 리포트\n감사 로그·불량 분석]
-    NAV --> P6[⚙️ 관리자 패널\n사용자 권한 관리]
-    NAV --> P7[📖 사용자 매뉴얼\n임베디드 PDF]
+    NAV --> P5[📊 생산 지표 관리\n파레토·달성률·계획 입력]
+    NAV --> P6[📋 리포트\n생산·수리·OQC 현황]
+    NAV --> P7[⚙️ 마스터 관리\n사용자·권한 관리]
+    NAV --> P8[📖 매뉴얼\n작업자·관리자]
 
     style U fill:#fef9c3,stroke:#eab308
     style NAV fill:#dbeafe,stroke:#3b82f6
@@ -154,6 +158,7 @@ flowchart LR
     style P5 fill:#dcfce7,stroke:#22c55e
     style P6 fill:#dcfce7,stroke:#22c55e
     style P7 fill:#dcfce7,stroke:#22c55e
+    style P8 fill:#dcfce7,stroke:#22c55e
   </div>
 </div>
 
@@ -255,22 +260,30 @@ flowchart LR
 
     SB --> T1[users\n사용자·역할·권한]
     SB --> T2[production\n생산 원장 실시간]
-    SB --> T3[production_schedule\n일별 생산 계획]
-    SB --> T4[production_plan\n생산 계획 문서]
-    SB --> T5[model_master\n제품 모델 설정]
-    SB --> T6[material_serials\n자재 시리얼 추적]
-    SB --> T7[audit_log\n전체 활동 로그]
-    SB --> T8[schedule_change_log\n일정 변경 이력]
+    SB --> T3[production_history\n완료 30일↑ 아카이브]
+    SB --> T4[production_schedule\n일별 생산 계획]
+    SB --> T5[production_plan\n월별 생산 계획 문서]
+    SB --> T6[model_master\n제품 모델 설정]
+    SB --> T7[material_serials\n자재 시리얼 추적]
+    SB --> T8[audit_log\n전체 활동 로그]
+    SB --> T9[schedule_change_log\n일정 변경 이력]
+    SB --> T10[plan_change_log\n계획 변경 이력]
+    SB --> T11[help_requests\n관리자 호출 기록]
+    SB --> T12[access_requests\n계정 발급 요청]
 
     style SB fill:#fce7f3,stroke:#ec4899
     style T1 fill:#fef9c3,stroke:#eab308
     style T2 fill:#dcfce7,stroke:#22c55e
     style T3 fill:#dcfce7,stroke:#22c55e
     style T4 fill:#dcfce7,stroke:#22c55e
-    style T5 fill:#dbeafe,stroke:#3b82f6
+    style T5 fill:#dcfce7,stroke:#22c55e
     style T6 fill:#dbeafe,stroke:#3b82f6
-    style T7 fill:#ffedd5,stroke:#f97316
+    style T7 fill:#dbeafe,stroke:#3b82f6
     style T8 fill:#ffedd5,stroke:#f97316
+    style T9 fill:#ffedd5,stroke:#f97316
+    style T10 fill:#ffedd5,stroke:#f97316
+    style T11 fill:#ede9fe,stroke:#8b5cf6
+    style T12 fill:#ede9fe,stroke:#8b5cf6
   </div>
 </div>
 
@@ -279,14 +292,17 @@ flowchart LR
   <h2>⑦ 코드 모듈 아키텍처 (modules/)</h2>
   <div class="mermaid">
 flowchart TD
-    MAIN[📄 SMART LOGISTICS DASHBOARD.py\n메인 애플리케이션]
+    MAIN[📄 SMART LOGISTICS DASHBOARD.py\n메인 애플리케이션 — 라우팅·세션·사이드바]
 
     MAIN --> AUTH[modules/auth.py\n인증·세션·권한 관리\nbcrypt 해시 검증]
     MAIN --> DBM[modules/database.py\nSupabase 쿼리·연결\n캐시·페이지네이션]
     MAIN --> RT[modules/realtime.py\nWebSocket 구독\n변경 감지·캐시 무효화]
     MAIN --> UT[modules/utils.py\n공통 유틸리티\n데이터 처리·포맷팅]
-
-    MAIN --> SQL[📄 SQL DB VERSION.py\nDB 스키마 대안 버전]
+    MAIN --> STY[modules/styles.py\nCSS 테마·JS 인젝션\n전광판 스타일]
+    MAIN --> CAL[modules/calendar_view.py\n캘린더 렌더링\n일정 추가·수정·삭제]
+    MAIN --> KPI[modules/kpi_dashboard.py\n생산 지표 관리\n달성률·파레토·계획 입력]
+    MAIN --> MW[modules/manual_worker.py\n작업자 매뉴얼\n공정별 사용법]
+    MAIN --> MA[modules/manual_admin.py\n관리자 매뉴얼\nKPI·권한·시스템 안내]
 
     AUTH --> DB[(Supabase)]
     DBM --> DB
@@ -297,7 +313,11 @@ flowchart TD
     style DBM fill:#fce7f3,stroke:#ec4899
     style RT fill:#ede9fe,stroke:#8b5cf6
     style UT fill:#dcfce7,stroke:#22c55e
-    style SQL fill:#ffedd5,stroke:#f97316
+    style STY fill:#f1f5f9,stroke:#94a3b8
+    style CAL fill:#e0f2fe,stroke:#0284c7
+    style KPI fill:#fef3c7,stroke:#d97706
+    style MW fill:#f0fdf4,stroke:#16a34a
+    style MA fill:#fdf4ff,stroke:#9333ea
     style DB fill:#fce7f3,stroke:#ec4899
   </div>
 </div>
