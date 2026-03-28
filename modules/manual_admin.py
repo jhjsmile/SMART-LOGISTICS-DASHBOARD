@@ -130,24 +130,138 @@ def render_admin_manual():
 
     # ── 4. 생산 지표(KPI) 관리 ──────────────────────────────────
     with st.expander(" 4. 생산 지표(KPI) 분석"):
-        _section("", "KPI 대시보드 활용", "#1B3A5C")
+        _section("", "핵심 지표 카드 — 보는 방법", "#1B3A5C")
         _box("""
-        <b>필터 옵션</b>
+        <p style='margin:0 0 8px;'>화면 상단 5개 카드가 선택한 기간·반 기준 핵심 수치를 요약합니다.</p>
+        <table style='width:100%;border-collapse:collapse;font-size:0.88rem;'>
+          <tr style='background:#1B3A5C;color:#ffffff;'>
+            <th style='padding:6px 10px;text-align:left;'>카드</th>
+            <th style='padding:6px 10px;text-align:left;'>의미 및 판단 기준</th>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;'>계획</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>등록된 조립 계획 수량 — 기준점. 이 숫자를 목표로 생산합니다.</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;'>생산 완료</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>포장까지 완료된 실제 출고 가능 수량 (아카이브 포함)</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;color:#d68910;'>달성률</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>완료 ÷ 계획 × 100%. <b>100% 이상</b>이 목표. 월말에 100% 미달 시 미달 원인 분석 필요.</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;'>진행 중</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>현재 각 공정을 통과 중인 WIP(Work In Progress) 수량</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;font-weight:700;color:#c0392b;'>불량률</td>
+            <td style='padding:6px 10px;'><b>3% 이하</b> 유지가 목표. 5% 초과 시 품질 긴급 점검 필요.</td>
+          </tr>
+        </table>""")
+
+        _section("", "반별 달성률 게이지 — 보는 방법", "#2471a3")
+        _box("""
+        <p style='margin:0 0 8px;'>각 반의 이번달 계획 대비 완료 실적을 게이지 바와 % 숫자로 보여줍니다.</p>
+        <table style='width:100%;border-collapse:collapse;font-size:0.88rem;'>
+          <tr style='background:#2471a3;color:#ffffff;'>
+            <th style='padding:6px 10px;text-align:left;'>색상 / 수치</th>
+            <th style='padding:6px 10px;text-align:left;'>상태</th>
+            <th style='padding:6px 10px;text-align:left;'>관리자 행동</th>
+          </tr>
+          <tr style='background:#e8f5e9;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;color:#1e8449;'>● 초록 100% 이상</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>계획 달성 완료</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>정상 유지</td>
+          </tr>
+          <tr style='background:#fff3d4;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;color:#d68910;'>● 주황 70~99%</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>지연 중 — 만회 가능</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>병목 공정 점검, 투입 속도 확인</td>
+          </tr>
+          <tr style='background:#fef2f2;'>
+            <td style='padding:6px 10px;font-weight:700;color:#c0392b;'>● 빨강 70% 미만</td>
+            <td style='padding:6px 10px;'>심각한 지연</td>
+            <td style='padding:6px 10px;'>원인 즉시 파악 — 인력·설비·자재 점검</td>
+          </tr>
+        </table>
+        <p style='margin:8px 0 0;background:#e0f2fe;padding:6px 10px;border-radius:5px;color:#0C4A6E;'>
+           <b>0% + 계획 0대</b>로 표시되는 반은 해당 월 조립 계획이 미등록 상태입니다. 일정 관리에서 등록하세요.
+        </p>""")
+
+        _section("", "공정 흐름 병목 감지 — 보는 방법", "#7a6f65")
+        _box("""
+        <p style='margin:0 0 8px;'>조립 → 검사 → 포장 각 공정의 진행 중 수량을 비교해 <b>어느 공정에 제품이 쌓이고 있는지</b> 자동 감지합니다.</p>
+        <table style='width:100%;border-collapse:collapse;font-size:0.88rem;'>
+          <tr style='background:#5a4f45;color:#ffffff;'>
+            <th style='padding:6px 10px;text-align:left;'>표시</th>
+            <th style='padding:6px 10px;text-align:left;'>의미</th>
+            <th style='padding:6px 10px;text-align:left;'>조치</th>
+          </tr>
+          <tr style='background:#fde8e7;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;color:#c0392b;'> 병목! (빨강)</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>전체 공정 중 가장 많이 쌓인 공정 (70% 이상 집중)</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>해당 라인 인력 보강 또는 우선 처리</td>
+          </tr>
+          <tr style='background:#fff3d4;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;color:#d68910;'> 주의 (주황)</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>적체가 진행 중 (40~69% 수준)</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>추이 모니터링, 이상 시 선제 대응</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;font-weight:700;color:#2471a3;'>표시 없음 (정상)</td>
+            <td style='padding:6px 10px;'>공정 흐름 원활</td>
+            <td style='padding:6px 10px;'>정상 유지</td>
+          </tr>
+        </table>
+        <p style='margin:8px 0 0;background:#fff3d4;padding:6px 10px;border-radius:5px;color:#7a5c00;'>
+           <b>대기 N대</b>는 이전 공정에서 완료됐으나 다음 공정으로 아직 이동하지 않은 대기 수량입니다. 대기가 많으면 전달이 지연되고 있는 것입니다.
+        </p>""")
+
+        _section("", "모델별 불량 파레토 차트 — 보는 방법", "#c0392b")
+        _box("""
+        <p style='margin:0 0 8px;'>어떤 모델에서 불량이 집중되는지 파악하고, 전체 불량의 80%를 유발하는 핵심 원인을 찾는 차트입니다.</p>
         <ul style='margin:4px 0 10px;padding-left:1.4em;'>
-          <li>기간: 오늘 / 이번 주 / 이번 달</li>
-          <li>반: 전체 / 제조1반 / 제조2반 / 제조3반</li>
+          <li><b>막대 (왼쪽 축)</b>: 모델별 불량률(%) — 높을수록 품질 문제가 심각</li>
+          <li><b>꺾은선 (오른쪽 축)</b>: 누적 불량 비중(%) — 왼쪽 모델부터 누적</li>
+          <li><b>점선 80% 기준선</b>: 이 선에 닿는 지점까지의 모델이 <b>전체 불량의 80%를 차지</b>하는 핵심 불량 모델</li>
         </ul>
-        <b>주요 확인 지표</b>
+        <p style='margin:0 0 6px;color:#7F1D1D;background:#fef2f2;padding:6px 10px;border-radius:5px;'>
+           <b>파레토 법칙 (80/20 법칙)</b>: 소수 모델이 대부분의 불량을 유발합니다. 80% 선 왼쪽 모델을 집중 관리하면 전체 불량을 효과적으로 줄일 수 있습니다.
+        </p>
+        <table style='width:100%;border-collapse:collapse;font-size:0.88rem;margin-top:8px;'>
+          <tr style='background:#c0392b;color:#ffffff;'>
+            <th style='padding:6px 10px;text-align:left;'>막대 색상</th>
+            <th style='padding:6px 10px;text-align:left;'>불량률 기준</th>
+            <th style='padding:6px 10px;text-align:left;'>조치</th>
+          </tr>
+          <tr style='background:#fde8e7;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;color:#c0392b;'>● 빨강</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>불량률 10% 초과</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>즉시 원인 분석 및 라인 점검</td>
+          </tr>
+          <tr style='background:#fff3d4;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;color:#d68910;'>● 주황</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>불량률 5~10%</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>원인 파악 후 개선 계획 수립</td>
+          </tr>
+          <tr style='background:#fffde7;'>
+            <td style='padding:6px 10px;font-weight:700;color:#b7950b;'>● 노랑</td>
+            <td style='padding:6px 10px;'>불량률 5% 이하</td>
+            <td style='padding:6px 10px;'>모니터링 유지</td>
+          </tr>
+        </table>""")
+
+        _section("", "모델별 생산 현황 (메인 현황판) — 보는 방법", "#2B7CB5")
+        _box("""
+        <p style='margin:0 0 8px;'>메인 현황판 하단에 위치하며, 현재 시스템에 등록된 <b>모든 모델의 실시간 진행 상태</b>를 한 표로 보여줍니다.</p>
         <ul style='margin:4px 0 10px;padding-left:1.4em;'>
-          <li><b>투입·완료·진행·불량</b> 수량 카드 (production_history 기준, 아카이브 포함)</li>
-          <li><b>반별 달성률</b>: 각 반의 계획 대비 완료 실적 (반 필터 선택 시 전체 반 달성률 동시 표시)</li>
-          <li><b>공정 흐름 표</b>: 각 단계별 적체 수량 → 병목 지점 파악</li>
-          <li><b>불량 분석 차트</b>: 라인별·모델별 불량 분포</li>
-          <li><b>FPY(First Pass Yield)</b>: 전체 품질 수준 지표</li>
-          <li><b>월별 달성률 추이</b>: 계획 대비 실적 그래프</li>
+          <li><b>진행률 막대</b>: 완료 ÷ 투입 × 100% — 짧으면 아직 많이 남은 것</li>
+          <li><b>불량 셀 빨간 배경</b>: 해당 모델에 불량이 발생 중임을 즉시 인지</li>
+          <li>여러 모델 혼류 생산 시 <b>어느 모델이 지연되는지</b> 빠르게 파악 가능</li>
         </ul>
         <p style='margin:0;background:#e0f2fe;padding:6px 10px;border-radius:5px;color:#0C4A6E;'>
-           공정 흐름 표에서 특정 단계 수량이 급증하면 해당 공정에 병목이 발생한 것입니다.
+           이 표는 production_db(현재 진행 중) 기준입니다. 완료 후 아카이브된 수량은 포함되지 않습니다.
         </p>""")
 
     # ── 5. 수리 현황 리포트 & 감사 로그 ─────────────────────────

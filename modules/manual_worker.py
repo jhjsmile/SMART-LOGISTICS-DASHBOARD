@@ -55,12 +55,72 @@ def render_worker_manual():
         <ul style='margin:4px 0 10px;padding-left:1.4em;'>
           <li><b>실시간 차트</b>: 반별·공정별 진행 현황 막대 그래프, 전체 상태 비중 파이 차트, 반별 총 투입 차트</li>
           <li><b>전체 생산 요약 카드</b>: 총 투입 / 최종 완료 / 작업 중 / 불량 이슈 수량 (실시간)</li>
-          <li><b>반별 상세 보기 토글</b>: 이번달 기준 반별 실제 총 투입·누적 완료·진행 중·불량 카드 (ON/OFF 선택)</li>
+          <li><b>반별 상세 보기 토글</b>: 이번달 기준 반별 달성률 게이지 + 투입·완료·진행 중·불량 카드 (ON/OFF)</li>
+          <li><b>모델별 생산 현황</b>: 현재 라인에 올라간 모델별 투입·진행·완료·불량·진행률 한눈에 확인</li>
           <li><b>생산 일정 달력</b>: 월별 캘린더에서 당일 포함 향후 일정 확인 가능</li>
         </ul>
         <p style='margin:0;color:#1B5E20;background:#e8f5e9;padding:6px 10px;border-radius:5px;'>
            데이터는 실시간으로 갱신됩니다. 화면이 오래됐다고 느껴지면 브라우저를 새로 고침하세요.
         </p>""")
+
+        _section("", "반별 달성률 게이지 — 보는 방법", "#2B7CB5")
+        _box("""
+        <p style='margin:0 0 8px;'>각 반 카드 상단의 게이지 바와 % 숫자로 <b>이번 달 계획 대비 완료 실적</b>을 나타냅니다.</p>
+        <table style='width:100%;border-collapse:collapse;font-size:0.88rem;'>
+          <tr style='background:#1B3A5C;color:#ffffff;'>
+            <th style='padding:6px 10px;text-align:left;'>색상</th>
+            <th style='padding:6px 10px;text-align:left;'>의미</th>
+            <th style='padding:6px 10px;text-align:left;'>행동 기준</th>
+          </tr>
+          <tr style='background:#e8f5e9;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;color:#1e8449;'>● 초록 (100% 이상)</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>계획 달성 완료</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>정상 — 유지</td>
+          </tr>
+          <tr style='background:#fff3d4;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;color:#d68910;'>● 주황 (70~99%)</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>계획 대비 다소 지연</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>속도 향상 필요</td>
+          </tr>
+          <tr style='background:#fef2f2;'>
+            <td style='padding:6px 10px;font-weight:700;color:#c0392b;'>● 빨강 (70% 미만)</td>
+            <td style='padding:6px 10px;'>계획 대비 크게 지연</td>
+            <td style='padding:6px 10px;'>관리자에게 즉시 보고</td>
+          </tr>
+        </table>
+        <p style='margin:8px 0 0;color:#7a5c00;background:#fff3d4;padding:6px 10px;border-radius:5px;'>
+           계획이 등록되지 않은 반은 <b>계획 미등록</b>으로 표시됩니다. 관리자에게 일정 등록을 요청하세요.
+        </p>""")
+
+        _section("", "모델별 생산 현황 — 보는 방법", "#2B7CB5")
+        _box("""
+        <p style='margin:0 0 8px;'>현재 라인에서 진행 중인 <b>모든 모델의 실시간 현황</b>을 표로 보여줍니다.</p>
+        <table style='width:100%;border-collapse:collapse;font-size:0.88rem;'>
+          <tr style='background:#1B3A5C;color:#ffffff;'>
+            <th style='padding:6px 10px;text-align:left;'>컬럼</th>
+            <th style='padding:6px 10px;text-align:left;'>의미</th>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;'>투입</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>현재 시스템에 등록된 해당 모델 전체 수량</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;color:#d68910;'>진행중</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>조립~출하 각 공정을 거치고 있는 수량</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;color:#1e8449;'>완료</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>포장까지 완료된 최종 완성 수량</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;font-weight:700;color:#c0392b;'>불량</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>현재 불량·부적합 상태인 수량 (빨간 배경 = 주의)</td>
+          </tr>
+          <tr style='background:#f0f4f8;'>
+            <td style='padding:6px 10px;font-weight:700;'>진행률</td>
+            <td style='padding:6px 10px;'>완료 ÷ 투입 × 100% — 막대 길이로 시각화</td>
+          </tr>
+        </table>""")
 
     # ── 3. 생산 상태 흐름도 ──────────────────────────────────────
     with st.expander(" 3. 생산 상태 흐름도"):
