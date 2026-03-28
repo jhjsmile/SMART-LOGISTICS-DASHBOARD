@@ -2148,6 +2148,19 @@ if curr_l == "현황판":
                     unsafe_allow_html=True
                 )
 
+    st.divider()
+
+    # 캘린더 (월별)
+    st.markdown("<div class='section-title'> 생산 일정 캘린더</div>", unsafe_allow_html=True)
+    if st.session_state.user_role in CALENDAR_EDIT_ROLES and check_perm("생산 지표 관리", "edit"):
+        st.caption(" 날짜 버튼 클릭 → 일정 상세/추가/수정/삭제")
+    else:
+        st.caption(" 조회만 가능합니다.")
+    render_calendar_monthly()
+
+    # ── 일정 상세 인라인 패널 (날짜 클릭 시 캘린더 바로 아래 표시) ──
+    if st.session_state.get("cal_action") in ("view_day", "add", "edit"):
+        show_inline_day_panel()
 
 # ── 조립 라인 ────────────────────────────────────────────────────
 elif curr_l == "조립 라인":
