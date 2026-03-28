@@ -2265,7 +2265,7 @@ elif curr_l == "조립 라인":
     _ASM_DEFECT_CAUSES = st.session_state.get('dropdown_defect_cause', ['(선택)', '기타 (직접 입력)'])
 
     # ──  오늘의 목표 달성 현황 ─────────────────────────────────
-    _plan_qty = int(today_sch['조립수'].apply(lambda x: int(float(x)) if str(x) not in ('','nan','None') else 0).sum()) if not today_sch.empty else 0
+    _plan_qty = int(pd.to_numeric(today_sch['조립수'], errors='coerce').fillna(0).sum()) if not today_sch.empty else 0
     _done_today = len(f_df[
         f_df['시간'].astype(str).str.startswith(today_str) &
         f_df['상태'].isin(['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료'])
@@ -3768,7 +3768,7 @@ elif curr_l == "생산 지표 관리":
 
     def _qty(df, col='조립수'):
         if df.empty: return 0
-        return int(df[col].apply(lambda x: int(float(x)) if str(x) not in ('','nan') else 0).sum())
+        return int(pd.to_numeric(df[col], errors='coerce').fillna(0).sum())
 
     total_in   = len(db_kpi_f) if not db_kpi_f.empty else 0
     total_done = len(db_kpi_f[(db_kpi_f['라인']=='포장 라인') & (db_kpi_f['상태']=='완료')]) if not db_kpi_f.empty else 0
@@ -4087,7 +4087,7 @@ elif curr_l == "생산 지표 관리":
                     x=bdf['월'], y=bdf['계획'],
                     marker_color=BAN_CLR_LIGHT.get(ban, "#ccc"),
                     opacity=0.6, offsetgroup=ban,
-                    text=bdf['계획'].apply(lambda v: f"{v:,}" if v > 0 else ""),
+                    text=bdf['계획'].map(lambda v: f"{v:,}" if v > 0 else ""),
                     textposition='outside', textfont=dict(size=9)
                 ))
                 fig_plan.add_trace(go.Bar(
@@ -4095,7 +4095,7 @@ elif curr_l == "생산 지표 관리":
                     x=bdf['월'], y=bdf['실적'],
                     marker_color=BAN_CLR.get(ban, "#888"),
                     offsetgroup=ban + "_실적",
-                    text=bdf['실적'].apply(lambda v: f"{v:,}" if v > 0 else ""),
+                    text=bdf['실적'].map(lambda v: f"{v:,}" if v > 0 else ""),
                     textposition='outside', textfont=dict(size=9)
                 ))
             fig_plan.update_layout(
@@ -4119,7 +4119,7 @@ elif curr_l == "생산 지표 관리":
                     mode='lines+markers+text',
                     line=dict(color=BAN_CLR.get(ban, "#888"), width=2),
                     marker=dict(size=7),
-                    text=bdf['달성률(%)'].apply(lambda v: f"{v}%" if v > 0 else ""),
+                    text=bdf['달성률(%)'].map(lambda v: f"{v}%" if v > 0 else ""),
                     textposition='top center', textfont=dict(size=9)
                 ))
             # 100% 기준선
@@ -5238,34 +5238,34 @@ elif curr_l == "OQC 라인":
         import plotly.graph_objects as go
         import pandas as _pd2
 
-        # ── 부적합 사유 추출 (부적합 판정 이력 + 차트 ② 공통 사용) ────
-        def _extract_reason_nc(r):
-            oqc판정 = str(r.get('OQC판정', ''))
-            if 'OQC 부적합' in oqc판정 and '사유: ' in oqc판정:
-                return oqc판정.split('사유: ', 1)[-1].strip()
-            # 구 방식 호환 (이전 데이터)
-            수리 = str(r.get('수리', ''))
-            증상 = str(r.get('증상', ''))
-            if 'OQC 부적합 판정' in 수리 and '사유: ' in 수리:
-                return 수리.split('사유: ', 1)[-1].strip()
-            if '부적합사유:' in 증상:
-                return 증상.split('부적합사유:', 1)[-1].strip().rstrip(')')
-            return 증상 if 증상 not in ('', 'nan') else '미기재'
-
+        # ── 부적합 사유 추출 (벡터화) ────────────────────────────────
         _fail_nc = oqc_chart_df[oqc_chart_df['상태'] == '부적합(OQC)'].copy()
-        _fail_nc['부적합 사유'] = _fail_nc.apply(_extract_reason_nc, axis=1)
+        if not _fail_nc.empty:
+            _oqc_col  = _fail_nc['OQC판정'].astype(str)
+            _rep_col  = _fail_nc['수리'].astype(str)
+            _sym_col  = _fail_nc['증상'].astype(str)
+            _c1 = _oqc_col.str.contains('OQC 부적합', na=False) & _oqc_col.str.contains('사유: ', na=False)
+            _c2 = _rep_col.str.contains('OQC 부적합 판정', na=False) & _rep_col.str.contains('사유: ', na=False)
+            _c3 = _sym_col.str.contains('부적합사유:', na=False)
+            _from_oqc = _oqc_col.str.split('사유: ', n=1).str[-1].str.strip()
+            _from_rep = _rep_col.str.split('사유: ', n=1).str[-1].str.strip()
+            _from_sym = _sym_col.str.split('부적합사유:', n=1).str[-1].str.strip().str.rstrip(')')
+            _fallback = _sym_col.replace({'': '미기재', 'nan': '미기재'})
+            _fail_nc['부적합 사유'] = _from_oqc.where(_c1, _from_rep.where(_c2, _from_sym.where(_c3, _fallback)))
 
         # ── 부적합 판정 이력 (OQC) — audit_log 기준 ──────────────────
         # 서버 필터로 'OQC 부적합 - 사유:' 비고만 조회 (행 수 제한 없음)
         _fail_audit = load_oqc_fail_audit_log().copy()
 
-        # 비고에서 사유 파싱: "OQC 부적합 - 사유: {reason}" 형식
-        def _extract_audit_reason(bigo):
-            s = str(bigo)
-            if '사유:' in s:
-                return s.split('사유:')[-1].strip()
-            return s if s not in ('', 'nan') else '미기재'
-        _fail_audit['부적합 사유'] = _fail_audit['비고'].apply(_extract_audit_reason)
+        # 비고에서 사유 파싱: "OQC 부적합 - 사유: {reason}" 형식 (벡터화)
+        _bigo = _fail_audit['비고'].astype(str)
+        _has_reason = _bigo.str.contains('사유:', na=False)
+        _fail_audit['부적합 사유'] = (
+            _bigo.str.split('사유:').str[-1].str.strip().where(
+                _has_reason,
+                _bigo.replace({'': '미기재', 'nan': '미기재'})
+            )
+        )
 
         with st.expander(f" 부적합 판정 이력 (OQC)  ·  {len(_fail_audit)}건",
                          expanded=_xp("oqc_nonconf"), key="_xp_oqc_nonconf"):
@@ -5418,20 +5418,17 @@ elif curr_l == "OQC 라인":
             oqc_done_chart = oqc_chart_df[oqc_chart_df['상태'].isin(['출하승인','부적합(OQC)'])].copy()
             if not oqc_done_chart.empty and '시간' in oqc_done_chart.columns:
                 oqc_done_chart['월'] = oqc_done_chart['시간'].str[:7]
-                monthly = oqc_done_chart.groupby('월').apply(
-                    lambda x: round(len(x[x['상태']=='출하승인']) / len(x) * 100, 1)
-                    if len(x) > 0 else 0
+                _m_agg = oqc_done_chart.groupby('월')['상태'].agg(
+                    전체='count',
+                    출하승인=lambda s: (s == '출하승인').sum()
                 ).reset_index()
-                monthly.columns = ['월','합격률(%)']
+                _m_agg['합격률(%)'] = (_m_agg['출하승인'] / _m_agg['전체'].clip(lower=1) * 100).round(1)
+                monthly = _m_agg[['월', '합격률(%)']]
                 _y_min = max(0, monthly['합격률(%)'].min() - 10) if not monthly.empty else 0
-                # 월 레이블: "2026-03" → "26년 3월" 형식
-                def _fmt_month(m):
-                    try:
-                        parts = m.split('-')
-                        return f"{parts[0][2:]}년 {int(parts[1])}월"
-                    except:
-                        return m
-                monthly['월_표시'] = monthly['월'].apply(_fmt_month)
+                # 월 레이블: "2026-03" → "26년 3월" 형식 (벡터화)
+                _m_parts = monthly['월'].str.split('-')
+                monthly = monthly.copy()
+                monthly['월_표시'] = _m_parts.str[0].str[2:] + '년 ' + _m_parts.str[1].str.lstrip('0') + '월'
                 fig3 = go.Figure()
                 fig3.add_trace(go.Scatter(
                     x=monthly['월_표시'], y=monthly['합격률(%)'],
@@ -5439,7 +5436,7 @@ elif curr_l == "OQC 라인":
                     line=dict(color='#4da875', width=2.5),
                     marker=dict(size=9, color='#4da875',
                                 line=dict(color='white', width=2)),
-                    text=monthly['합격률(%)'].apply(lambda v: f"{v}%"),
+                    text=(monthly['합격률(%)'].astype(str) + '%'),
                     textposition='top center',
                     textfont=dict(size=11, color='#2d6a4f'),
                     hovertemplate='%{x}<br>합격률: %{y}%<extra></extra>'
@@ -5471,14 +5468,13 @@ elif curr_l == "OQC 라인":
 
         # ④ 모델별 부적합률 테이블
         if not oqc_done_chart.empty:
-            model_grp = oqc_done_chart.groupby('모델').apply(
-                lambda x: _pd2.Series({
-                    '전체': len(x),
-                    '출하승인': len(x[x['상태']=='출하승인']),
-                    '부적합':   len(x[x['상태']=='부적합(OQC)']),
-                    '부적합률(%)': round(len(x[x['상태']=='부적합(OQC)'])/len(x)*100,1) if len(x)>0 else 0
-                })
-            ).reset_index().sort_values('부적합률(%)', ascending=False)
+            _mg = oqc_done_chart.groupby('모델')['상태'].agg(
+                전체='count',
+                출하승인=lambda s: (s == '출하승인').sum(),
+                부적합=lambda s: (s == '부적합(OQC)').sum()
+            ).reset_index()
+            _mg['부적합률(%)'] = (_mg['부적합'] / _mg['전체'].clip(lower=1) * 100).round(1)
+            model_grp = _mg.sort_values('부적합률(%)', ascending=False)
             st.dataframe(model_grp, use_container_width=True, hide_index=True)
     else:
         st.info("OQC 데이터가 쌓이면 차트가 표시됩니다.")
