@@ -339,6 +339,7 @@ def delete_production_row_by_sn(시리얼: str) -> bool:
 # 앱 설정
 # =================================================================
 
+@st.cache_data(ttl=300)
 def load_app_setting(key: str):
     try:
         import json as _j
