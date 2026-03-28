@@ -2127,9 +2127,21 @@ if curr_l == "현황판":
         _mth_to   = _today.strftime('%Y-%m-%d')
         _hist = load_production_history(_mth_from, _mth_to)
 
+        # 이번달 조립 계획 수량 (달성률 게이지용)
+        _sch_db  = st.session_state.get('schedule_db', pd.DataFrame())
+        _mth_str = _today.strftime('%Y-%m')
+        if not _sch_db.empty:
+            _mth_sch = _sch_db[
+                _sch_db['날짜'].astype(str).str.startswith(_mth_str) &
+                (_sch_db['카테고리'] == '조립계획')
+            ]
+        else:
+            _mth_sch = pd.DataFrame()
+
+        _BAN_CLR_CARD = {"제조1반": "#2471a3", "제조2반": "#1e8449", "제조3반": "#6c3483"}
         _ban_cols = st.columns(len(PRODUCTION_GROUPS))
         for _bi, _g in enumerate(PRODUCTION_GROUPS):
-            _h = _hist[_hist['반'] == _g] if not _hist.empty else __import__('pandas').DataFrame()
+            _h = _hist[_hist['반'] == _g] if not _hist.empty else pd.DataFrame()
             _d = db_all[db_all['반'] == _g]
 
             _총투입   = len(_h)
@@ -2137,30 +2149,95 @@ if curr_l == "현황판":
             _진행중   = len(_d[_d['상태'].isin(ACTIVE_STATES)])
             _불량     = len(_d[_d['상태'].str.contains('불량|부적합', na=False)])
 
+            # 이번달 달성률
+            _bp_rows  = _mth_sch[_mth_sch['반'] == _g] if not _mth_sch.empty else pd.DataFrame()
+            _ban_plan = int(pd.to_numeric(_bp_rows['조립수'], errors='coerce').fillna(0).sum()) if not _bp_rows.empty else 0
+            _달성률   = round(_누적완료 / _ban_plan * 100, 1) if _ban_plan > 0 else 0
+            _gauge_w  = min(int(_달성률), 100)
+            _gauge_c  = "#1e8449" if _달성률 >= 100 else "#d68910" if _달성률 >= 70 else "#c0392b"
+            _pct_txt  = f"{_달성률}%" if _ban_plan > 0 else "계획 미등록"
+            _clr      = _BAN_CLR_CARD.get(_g, "#888")
+
             with _ban_cols[_bi]:
                 st.markdown(
-                    f"<div style='background:#fffdf8; border:1px solid #e0d8c8; border-radius:14px; padding:16px; box-sizing:border-box;'>"
-                    f"<div style='font-size:clamp(0.9rem,1.3vw,1.1rem); font-weight:bold; margin-bottom:12px; color:#3d3530;'> {_g}</div>"
-                    f"<div style='display:grid; grid-template-columns:1fr 1fr; gap:8px;'>"
-                    f"<div style='background:#f5f0e8; border-radius:10px; padding:10px 6px; text-align:center;'>"
-                    f"<div style='font-size:clamp(0.58rem,0.85vw,0.75rem); color:#8a7f72; font-weight:bold; margin-bottom:4px;'>실제 총 투입</div>"
-                    f"<div style='font-size:clamp(1.2rem,2.2vw,1.8rem); color:#5a96c8; font-weight:bold;'>{_총투입}</div>"
-                    f"<div style='font-size:0.62rem; color:#b0a898; margin-top:2px;'>이번달 기준</div></div>"
-                    f"<div style='background:#f5f0e8; border-radius:10px; padding:10px 6px; text-align:center;'>"
-                    f"<div style='font-size:clamp(0.58rem,0.85vw,0.75rem); color:#8a7f72; font-weight:bold; margin-bottom:4px;'>누적 최종 완료</div>"
-                    f"<div style='font-size:clamp(1.2rem,2.2vw,1.8rem); color:#4da875; font-weight:bold;'>{_누적완료}</div>"
-                    f"<div style='font-size:0.62rem; color:#b0a898; margin-top:2px;'>이번달 기준</div></div>"
-                    f"<div style='background:#f5f0e8; border-radius:10px; padding:10px 6px; text-align:center;'>"
-                    f"<div style='font-size:clamp(0.58rem,0.85vw,0.75rem); color:#8a7f72; font-weight:bold; margin-bottom:4px;'>현재 진행 중</div>"
-                    f"<div style='font-size:clamp(1.2rem,2.2vw,1.8rem); color:#e8a838; font-weight:bold;'>{_진행중}</div>"
-                    f"<div style='font-size:0.62rem; color:#b0a898; margin-top:2px;'>실시간</div></div>"
-                    f"<div style='background:#f5f0e8; border-radius:10px; padding:10px 6px; text-align:center;'>"
-                    f"<div style='font-size:clamp(0.58rem,0.85vw,0.75rem); color:#8a7f72; font-weight:bold; margin-bottom:4px;'>불량·부적합</div>"
-                    f"<div style='font-size:clamp(1.2rem,2.2vw,1.8rem); color:#c8605a; font-weight:bold;'>{_불량}</div>"
-                    f"<div style='font-size:0.62rem; color:#b0a898; margin-top:2px;'>실시간</div></div>"
+                    f"<div style='background:#fffdf8;border:1.5px solid {_clr}44;border-radius:14px;padding:14px 16px;box-sizing:border-box;'>"
+                    f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;'>"
+                    f"<div style='font-size:clamp(0.85rem,1.2vw,1rem);font-weight:bold;color:{_clr};'>{_g}</div>"
+                    f"<div style='font-size:clamp(1rem,1.8vw,1.35rem);font-weight:bold;color:{_gauge_c};'>{_pct_txt}</div>"
+                    f"</div>"
+                    f"<div style='background:#e8e2d8;border-radius:99px;height:6px;margin-bottom:10px;overflow:hidden;'>"
+                    f"<div style='background:{_gauge_c};width:{_gauge_w}%;height:100%;border-radius:99px;'></div>"
+                    f"</div>"
+                    f"<div style='display:grid;grid-template-columns:1fr 1fr;gap:6px;'>"
+                    f"<div style='background:#f0f4f8;border-radius:8px;padding:8px 6px;text-align:center;'>"
+                    f"<div style='font-size:0.62rem;color:#8a7f72;font-weight:bold;margin-bottom:3px;'>이번달 투입</div>"
+                    f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:#5a96c8;font-weight:bold;'>{_총투입}</div></div>"
+                    f"<div style='background:#f0f4f8;border-radius:8px;padding:8px 6px;text-align:center;'>"
+                    f"<div style='font-size:0.62rem;color:#8a7f72;font-weight:bold;margin-bottom:3px;'>누적 완료</div>"
+                    f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:#4da875;font-weight:bold;'>{_누적완료}</div></div>"
+                    f"<div style='background:#f0f4f8;border-radius:8px;padding:8px 6px;text-align:center;'>"
+                    f"<div style='font-size:0.62rem;color:#8a7f72;font-weight:bold;margin-bottom:3px;'>진행 중</div>"
+                    f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:#e8a838;font-weight:bold;'>{_진행중}</div></div>"
+                    f"<div style='background:{'#fde8e7' if _불량 > 0 else '#f0f4f8'};border-radius:8px;padding:8px 6px;text-align:center;'>"
+                    f"<div style='font-size:0.62rem;color:#8a7f72;font-weight:bold;margin-bottom:3px;'>불량·부적합</div>"
+                    f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:{'#c8605a' if _불량 > 0 else '#aaa'};font-weight:bold;'>{_불량}</div></div>"
                     f"</div></div>",
                     unsafe_allow_html=True
                 )
+
+    st.divider()
+
+    # ── 모델별 생산 현황 (혼류 대응) ─────────────────────────────────
+    if not db_all.empty:
+        st.markdown("<div class='section-title'> 모델별 생산 현황</div>", unsafe_allow_html=True)
+        _m_total  = db_all.groupby(['반', '모델']).size().rename('투입')
+        _m_active = db_all[db_all['상태'].isin(ACTIVE_STATES)].groupby(['반', '모델']).size().rename('진행중')
+        _m_done   = db_all[(db_all['라인'] == '포장 라인') & (db_all['상태'] == '완료')].groupby(['반', '모델']).size().rename('완료')
+        _m_ng     = db_all[db_all['상태'].str.contains('불량|부적합', na=False)].groupby(['반', '모델']).size().rename('불량')
+        _mdl_df   = pd.concat([_m_total, _m_active, _m_done, _m_ng], axis=1).fillna(0).astype(int).reset_index()
+        _mdl_df   = _mdl_df[_mdl_df['투입'] > 0].sort_values(['반', '투입'], ascending=[True, False]).reset_index(drop=True)
+
+        if not _mdl_df.empty:
+            _BAN_HDR = {"제조1반": "#2471a3", "제조2반": "#1e8449", "제조3반": "#6c3483"}
+            _tbl = (
+                "<div style='overflow-x:auto;'>"
+                "<table style='width:100%;border-collapse:collapse;font-size:0.82rem;'>"
+                "<tr style='background:#1B3A5C;color:#fff;font-weight:700;'>"
+                "<th style='padding:7px 10px;text-align:left;'>반</th>"
+                "<th style='padding:7px 10px;text-align:left;'>모델</th>"
+                "<th style='padding:7px 10px;text-align:center;'>투입</th>"
+                "<th style='padding:7px 10px;text-align:center;'>진행중</th>"
+                "<th style='padding:7px 10px;text-align:center;'>완료</th>"
+                "<th style='padding:7px 10px;text-align:center;'>불량</th>"
+                "<th style='padding:7px 10px;text-align:left;min-width:120px;'>진행률</th>"
+                "</tr>"
+            )
+            for _ri, _mr in _mdl_df.iterrows():
+                _bg = "#f8f9fa" if _ri % 2 == 0 else "#ffffff"
+                _hc = _BAN_HDR.get(_mr['반'], "#888")
+                _ng_bg = "background:#fde8e7;" if _mr['불량'] > 0 else ""
+                _ng_cl = "color:#c0392b;font-weight:bold;" if _mr['불량'] > 0 else "color:#aaa;"
+                _pct  = round(_mr['완료'] / max(_mr['투입'], 1) * 100)
+                _pc   = "#1e8449" if _pct >= 80 else "#d68910" if _pct >= 50 else "#c0392b"
+                _tbl += (
+                    f"<tr style='background:{_bg};'>"
+                    f"<td style='padding:6px 10px;'><span style='background:{_hc}22;color:{_hc};font-weight:700;"
+                    f"padding:2px 8px;border-radius:5px;font-size:0.78rem;'>{_mr['반'][:3]}</span></td>"
+                    f"<td style='padding:6px 10px;font-weight:600;'>{_mr['모델']}</td>"
+                    f"<td style='padding:6px 10px;text-align:center;'>{_mr['투입']}</td>"
+                    f"<td style='padding:6px 10px;text-align:center;color:#d68910;font-weight:600;'>{_mr['진행중']}</td>"
+                    f"<td style='padding:6px 10px;text-align:center;color:#1e8449;font-weight:600;'>{_mr['완료']}</td>"
+                    f"<td style='padding:6px 10px;text-align:center;{_ng_bg}'><span style='{_ng_cl}'>{_mr['불량']}</span></td>"
+                    f"<td style='padding:6px 12px;'>"
+                    f"<div style='display:flex;align-items:center;gap:6px;'>"
+                    f"<div style='flex:1;background:#e8e2d8;border-radius:99px;height:5px;overflow:hidden;'>"
+                    f"<div style='background:{_pc};width:{_pct}%;height:100%;border-radius:99px;'></div></div>"
+                    f"<span style='font-size:0.75rem;color:{_pc};font-weight:700;min-width:32px;'>{_pct}%</span>"
+                    f"</div></td>"
+                    f"</tr>"
+                )
+            _tbl += "</table></div>"
+            st.markdown(_tbl, unsafe_allow_html=True)
 
     st.divider()
 
@@ -3857,38 +3934,64 @@ elif curr_l == "생산 지표 관리":
 </div>""", unsafe_allow_html=True)
 
     with right_col:
-        st.markdown("<div class='db-section' style='background:#7a6f65;'> 공정 흐름</div>", unsafe_allow_html=True)
+        st.markdown("<div class='db-section' style='background:#7a6f65;'> 공정 흐름 (병목 감지)</div>", unsafe_allow_html=True)
         lines_info = [
             ("", "조립", "#7eb8e8"),
             ("", "검사", "#7ec8a0"),
             ("", "포장", "#c8a07e"),
         ]
         line_names_full = ["조립 라인", "검사 라인", "포장 라인"]
+
+        # 각 라인 데이터 선계산
+        _proc_data = []
+        for _pi, (_em, _nm, _cl) in enumerate(lines_info):
+            _ldf   = db_f[db_f['라인'] == line_names_full[_pi]] if not db_f.empty else pd.DataFrame()
+            _l_tot  = len(_ldf)
+            _l_done = len(_ldf[_ldf['상태'] == '완료']) if not _ldf.empty else 0
+            _l_wip  = len(_ldf[_ldf['상태'].isin(['조립중','검사중','포장중','수리 완료(재투입)'])]) if not _ldf.empty else 0
+            _l_ng   = len(_ldf[_ldf['상태'].str.contains('불량|부적합', na=False)]) if not _ldf.empty else 0
+            _l_wait = len(db_f[(db_f['라인'] == line_names_full[_pi-1]) & (db_f['상태'] == '완료')]) if _pi > 0 and not db_f.empty else 0
+            _proc_data.append((_em, _nm, _cl, _l_tot, _l_done, _l_wip, _l_ng, _l_wait))
+
+        # 최대 wip 기준 병목 강도 계산
+        _max_wip = max(d[5] for d in _proc_data) if _proc_data else 1
+
         proc_html = "<div style='display:flex;align-items:stretch;gap:0;'>"
-        for pi, (emoji, name, clr) in enumerate(lines_info):
-            ldf    = db_f[db_f['라인']==line_names_full[pi]] if not db_f.empty else pd.DataFrame()
-            l_tot  = len(ldf)
-            l_done = len(ldf[ldf['상태']=='완료']) if not ldf.empty else 0
-            l_wip  = len(ldf[ldf['상태'].isin(['조립중','검사중','포장중','수리 완료(재투입)'])]) if not ldf.empty else 0
-            l_ng   = len(ldf[ldf['상태'].str.contains('불량|부적합',na=False)]) if not ldf.empty else 0
-            l_wait = len(db_f[(db_f['라인']==line_names_full[pi-1])&(db_f['상태']=='완료')]) if pi>0 and not db_f.empty else 0
-            btl_flag = "" if l_wip > 5 else ""
-            wip_clr = "#c0392b" if l_wip > 5 else "#2471a3"
+        for _pi, (_em, _nm, _cl, _l_tot, _l_done, _l_wip, _l_ng, _l_wait) in enumerate(_proc_data):
+            _wip_ratio = _l_wip / max(_max_wip, 1)
+            if _wip_ratio >= 0.7 and _l_wip > 0:
+                btl_flag = " 병목!"
+                btl_hdr  = "#c0392b"
+                wip_clr  = "#c0392b"
+                _card_bg = "#fde8e730"
+                _card_bd = "#c0392b88"
+            elif _wip_ratio >= 0.4 and _l_wip > 0:
+                btl_flag = " 주의"
+                btl_hdr  = "#d68910"
+                wip_clr  = "#d68910"
+                _card_bg = f"{_cl}18"
+                _card_bd = "#d6891088"
+            else:
+                btl_flag = ""
+                btl_hdr  = _cl
+                wip_clr  = "#2471a3"
+                _card_bg = f"{_cl}18"
+                _card_bd = f"{_cl}55"
 
             proc_html += f"""
-<div class='proc-card' style='flex:1;background:{clr}18;border:1.5px solid {clr}55;border-radius:10px;'>
-  <div class='proc-name' style='color:{clr[:-2] if len(clr)>7 else clr};'>{emoji} {name} {btl_flag}</div>
+<div class='proc-card' style='flex:1;background:{_card_bg};border:1.5px solid {_card_bd};border-radius:10px;'>
+  <div class='proc-name' style='color:{btl_hdr};font-weight:700;'>{_em} {_nm}{btl_flag}</div>
   <div class='proc-row'>
-    <div class='proc-chip'><div class='proc-chip-lbl'>투입</div><div class='proc-chip-val'>{l_tot}</div></div>
-    <div class='proc-chip'><div class='proc-chip-lbl'>완료</div><div class='proc-chip-val' style='color:#1e8449;'>{l_done}</div></div>
+    <div class='proc-chip'><div class='proc-chip-lbl'>투입</div><div class='proc-chip-val'>{_l_tot}</div></div>
+    <div class='proc-chip'><div class='proc-chip-lbl'>완료</div><div class='proc-chip-val' style='color:#1e8449;'>{_l_done}</div></div>
   </div>
   <div class='proc-row' style='margin-top:4px;'>
-    <div class='proc-chip'><div class='proc-chip-lbl'>진행</div><div class='proc-chip-val' style='color:{wip_clr};'>{l_wip}</div></div>
-    <div class='proc-chip'><div class='proc-chip-lbl'>불량</div><div class='proc-chip-val' style='color:{"#c0392b" if l_ng>0 else "#aaa"};'>{l_ng}</div></div>
+    <div class='proc-chip'><div class='proc-chip-lbl'>진행</div><div class='proc-chip-val' style='color:{wip_clr};font-weight:{"700" if _wip_ratio>=0.4 else "400"};'>{_l_wip}</div></div>
+    <div class='proc-chip'><div class='proc-chip-lbl'>불량</div><div class='proc-chip-val' style='color:{"#c0392b" if _l_ng>0 else "#aaa"};'>{_l_ng}</div></div>
   </div>
-  {"<div style='font-size:0.6rem;color:#888;margin-top:4px;'> 대기 "+str(l_wait)+"대</div>" if pi>0 else ""}
+  {"<div style='font-size:0.6rem;color:#888;margin-top:4px;'> 대기 "+str(_l_wait)+"대</div>" if _pi>0 else ""}
 </div>"""
-            if pi < 2:
+            if _pi < 2:
                 proc_html += "<div class='proc-arrow'>▶</div>"
         proc_html += "</div>"
         st.markdown(proc_html, unsafe_allow_html=True)
@@ -3919,19 +4022,38 @@ elif curr_l == "생산 지표 관리":
             ng_df['불량률'] = (ng_df['불량'] / ng_df['투입'] * 100).round(1)
             ng_df = ng_df[ng_df['불량'] > 0].sort_values('불량률', ascending=False)
             if not ng_df.empty:
-                max_pct = ng_df['불량률'].max() or 1
-                ng_html = ""
-                for row in ng_df.to_dict('records'):
-                    bar_w = int(row['불량률'] / max_pct * 100)
-                    bar_c = "#c0392b" if row['불량률'] > 10 else "#d68910" if row['불량률'] > 5 else "#e8c97a"
-                    ng_html += f"""
-<div class='ng-row'>
-  <div class='ng-model'>{row['모델']}</div>
-  <div class='ng-bar-wrap'><div class='ng-bar' style='width:{bar_w}%;background:{bar_c};'></div></div>
-  <div class='ng-pct' style='color:{bar_c};'>{row['불량률']}%</div>
-  <div class='ng-cnt'>{int(row['불량'])}건</div>
-</div>"""
-                st.markdown(ng_html, unsafe_allow_html=True)
+                _ng_sorted = ng_df.sort_values('불량', ascending=False).reset_index(drop=True)
+                _ng_sorted['누적비중(%)'] = (_ng_sorted['불량'].cumsum() / _ng_sorted['불량'].sum() * 100).round(1)
+                _bar_clrs = ['#c0392b' if v > 10 else '#d68910' if v > 5 else '#e8c97a' for v in _ng_sorted['불량률']]
+                fig_ng = go.Figure()
+                fig_ng.add_trace(go.Bar(
+                    x=_ng_sorted['모델'], y=_ng_sorted['불량률'],
+                    marker_color=_bar_clrs, name='불량률(%)',
+                    text=(_ng_sorted['불량률'].astype(str) + '%'),
+                    textposition='outside', textfont=dict(size=9),
+                    yaxis='y'
+                ))
+                fig_ng.add_trace(go.Scatter(
+                    x=_ng_sorted['모델'], y=_ng_sorted['누적비중(%)'],
+                    mode='lines+markers', name='누적 비중(%)',
+                    line=dict(color='#2c3e50', width=2),
+                    marker=dict(size=6),
+                    yaxis='y2'
+                ))
+                fig_ng.add_hline(y=80, line_dash='dash', line_color='#aaa',
+                                 line_width=1, yref='y2',
+                                 annotation_text='80%', annotation_font_size=9,
+                                 annotation_position='top right')
+                fig_ng.update_layout(
+                    height=240, template='plotly_white',
+                    margin=dict(t=10, b=30, l=30, r=40),
+                    legend=dict(orientation='h', y=-0.25, font=dict(size=9)),
+                    yaxis=dict(title='불량률(%)', side='left', showgrid=False),
+                    yaxis2=dict(title='누적(%)', side='right', overlaying='y',
+                                range=[0, 115], showgrid=False),
+                    plot_bgcolor='white'
+                )
+                st.plotly_chart(fig_ng, use_container_width=True)
             else:
                 st.success(" 불량 없음")
         else:
