@@ -3906,7 +3906,7 @@ elif curr_l == "생산 지표 관리":
             b_pct  = round(b_done / b_plan * 100, 1) if b_plan > 0 else 0
             clr    = BAN_COLORS_D.get(ban, "#888")
             bar_w  = min(int(b_pct), 100)
-            pct_clr = "#1e8449" if b_pct >= 100 else "#d68910" if b_pct >= 70 else "#c0392b"
+            pct_clr = "#d68910"
 
             with bc[bi]:
                 st.markdown(f"""
