@@ -2104,6 +2104,50 @@ if curr_l == "현황판":
     col3.markdown(f"<div class='stat-box'><div class='stat-label'> 작업 중</div><div class='stat-value'>{in_prog}</div></div>", unsafe_allow_html=True)
     col4.markdown(f"<div class='stat-box'><div class='stat-label'> 불량 이슈</div><div class='stat-value'>{defects}</div></div>", unsafe_allow_html=True)
 
+    # 반별 상세 보기 토글
+    _show_ban_detail = st.toggle("반별 상세 보기", value=True, key="dash_ban_detail")
+    if _show_ban_detail:
+        from datetime import date as _date
+        _today    = _date.today()
+        _mth_from = _today.strftime('%Y-%m-01')
+        _mth_to   = _today.strftime('%Y-%m-%d')
+        _hist = load_production_history(_mth_from, _mth_to)
+
+        _ban_cols = st.columns(len(PRODUCTION_GROUPS))
+        for _bi, _g in enumerate(PRODUCTION_GROUPS):
+            _h = _hist[_hist['반'] == _g] if not _hist.empty else __import__('pandas').DataFrame()
+            _d = db_all[db_all['반'] == _g]
+
+            _총투입   = len(_h)
+            _누적완료 = int(len(_h[(_h['라인'] == '포장 라인') & (_h['상태'] == '완료')])) if not _h.empty else 0
+            _진행중   = len(_d[_d['상태'].isin(ACTIVE_STATES)])
+            _불량     = len(_d[_d['상태'].str.contains('불량|부적합', na=False)])
+
+            with _ban_cols[_bi]:
+                st.markdown(
+                    f"<div style='background:#fffdf8; border:1px solid #e0d8c8; border-radius:14px; padding:16px; box-sizing:border-box;'>"
+                    f"<div style='font-size:clamp(0.9rem,1.3vw,1.1rem); font-weight:bold; margin-bottom:12px; color:#3d3530;'> {_g}</div>"
+                    f"<div style='display:grid; grid-template-columns:1fr 1fr; gap:8px;'>"
+                    f"<div style='background:#f5f0e8; border-radius:10px; padding:10px 6px; text-align:center;'>"
+                    f"<div style='font-size:clamp(0.58rem,0.85vw,0.75rem); color:#8a7f72; font-weight:bold; margin-bottom:4px;'>실제 총 투입</div>"
+                    f"<div style='font-size:clamp(1.2rem,2.2vw,1.8rem); color:#5a96c8; font-weight:bold;'>{_총투입}</div>"
+                    f"<div style='font-size:0.62rem; color:#b0a898; margin-top:2px;'>이번달 기준</div></div>"
+                    f"<div style='background:#f5f0e8; border-radius:10px; padding:10px 6px; text-align:center;'>"
+                    f"<div style='font-size:clamp(0.58rem,0.85vw,0.75rem); color:#8a7f72; font-weight:bold; margin-bottom:4px;'>누적 최종 완료</div>"
+                    f"<div style='font-size:clamp(1.2rem,2.2vw,1.8rem); color:#4da875; font-weight:bold;'>{_누적완료}</div>"
+                    f"<div style='font-size:0.62rem; color:#b0a898; margin-top:2px;'>이번달 기준</div></div>"
+                    f"<div style='background:#f5f0e8; border-radius:10px; padding:10px 6px; text-align:center;'>"
+                    f"<div style='font-size:clamp(0.58rem,0.85vw,0.75rem); color:#8a7f72; font-weight:bold; margin-bottom:4px;'>현재 진행 중</div>"
+                    f"<div style='font-size:clamp(1.2rem,2.2vw,1.8rem); color:#e8a838; font-weight:bold;'>{_진행중}</div>"
+                    f"<div style='font-size:0.62rem; color:#b0a898; margin-top:2px;'>실시간</div></div>"
+                    f"<div style='background:#f5f0e8; border-radius:10px; padding:10px 6px; text-align:center;'>"
+                    f"<div style='font-size:clamp(0.58rem,0.85vw,0.75rem); color:#8a7f72; font-weight:bold; margin-bottom:4px;'>불량·부적합</div>"
+                    f"<div style='font-size:clamp(1.2rem,2.2vw,1.8rem); color:#c8605a; font-weight:bold;'>{_불량}</div>"
+                    f"<div style='font-size:0.62rem; color:#b0a898; margin-top:2px;'>실시간</div></div>"
+                    f"</div></div>",
+                    unsafe_allow_html=True
+                )
+
     st.divider()
 
     # 반별 현황 카드
