@@ -1788,7 +1788,6 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     _wait_cnt = len(wait_list)
     DEFECT_CAUSES = st.session_state.get('dropdown_defect_cause', ['(선택)', '기타 (직접 입력)'])
 
-    notify_new_arrivals(_wait_cnt, f"notif_{curr_g}_{curr_l}", f"{curr_g} {curr_l}")
 
     _wck_key     = f"wait_ck_{curr_g}_{curr_l}"
     _wscan_cnt   = f"wscan_cnt_{curr_g}_{curr_l}"
@@ -2684,7 +2683,6 @@ elif curr_l == "OQC 라인":
     oqc_pass  = len(db_oqc[db_oqc['상태'] == '출하승인'])
     oqc_fail  = len(db_oqc[db_oqc['상태'] == '부적합(OQC)'])
 
-    notify_new_arrivals(oqc_wait, f"notif_oqc_{oqc_ban}", f"OQC 라인 ({oqc_ban})")
 
     # 반 색상 배지
     if oqc_ban != "전체":
