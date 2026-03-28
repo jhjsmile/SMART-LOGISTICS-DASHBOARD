@@ -3867,8 +3867,7 @@ elif curr_l == "생산 지표 관리":
     kpi_data = [
         ("계획",    f"{plan_qty:,}", "대", "#5b6abf"),   # 인디고 — 고정 목표
         ("생산 완료", f"{total_done:,}", "대", "#1e8449"),  # 초록
-        ("달성률",  f"{achieve_pct}", "%",
-            "#1e8449" if achieve_pct >= 100 else "#d68910" if achieve_pct >= 70 else "#c0392b"),
+        ("달성률",  f"{achieve_pct}", "%", "#d68910"),
         ("진행 중", f"{total_wip:,}", "대", "#0891b2"),   # 청록 — 계획(인디고)과 구분
         ("불량률",  f"{defect_pct}", "%",
             "#c0392b" if defect_pct > 3 else "#d68910" if defect_pct > 0 else "#6b7280"),  # 0%=회색(달성률 초록과 구분)
