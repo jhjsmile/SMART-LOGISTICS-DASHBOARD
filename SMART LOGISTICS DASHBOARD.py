@@ -5418,12 +5418,12 @@ elif curr_l == "OQC 라인":
             oqc_done_chart = oqc_chart_df[oqc_chart_df['상태'].isin(['출하승인','부적합(OQC)'])].copy()
             if not oqc_done_chart.empty and '시간' in oqc_done_chart.columns:
                 oqc_done_chart['월'] = oqc_done_chart['시간'].str[:7]
-                _m_agg = oqc_done_chart.groupby('월')['상태'].agg(
-                    전체='count',
-                    출하승인=lambda s: (s == '출하승인').sum()
-                ).reset_index()
-                _m_agg['합격률(%)'] = (_m_agg['출하승인'] / _m_agg['전체'].clip(lower=1) * 100).round(1)
-                monthly = _m_agg[['월', '합격률(%)']]
+                # oqc_done_chart는 이미 ['출하승인','부적합(OQC)'] 필터됨 → 전체=투입, 출하승인=합격
+                _m_total = oqc_done_chart.groupby('월').size()
+                _m_pass  = oqc_done_chart[oqc_done_chart['상태'] == '출하승인'].groupby('월').size()
+                _m_pass  = _m_pass.reindex(_m_total.index, fill_value=0)
+                monthly  = (_m_pass / _m_total.clip(lower=1) * 100).round(1).reset_index()
+                monthly.columns = ['월', '합격률(%)']
                 _y_min = max(0, monthly['합격률(%)'].min() - 10) if not monthly.empty else 0
                 # 월 레이블: "2026-03" → "26년 3월" 형식 (벡터화)
                 _m_parts = monthly['월'].str.split('-')
@@ -5468,13 +5468,12 @@ elif curr_l == "OQC 라인":
 
         # ④ 모델별 부적합률 테이블
         if not oqc_done_chart.empty:
-            _mg = oqc_done_chart.groupby('모델')['상태'].agg(
-                전체='count',
-                출하승인=lambda s: (s == '출하승인').sum(),
-                부적합=lambda s: (s == '부적합(OQC)').sum()
-            ).reset_index()
-            _mg['부적합률(%)'] = (_mg['부적합'] / _mg['전체'].clip(lower=1) * 100).round(1)
-            model_grp = _mg.sort_values('부적합률(%)', ascending=False)
+            _mg_total = oqc_done_chart.groupby('모델').size().rename('전체')
+            _mg_pass  = oqc_done_chart[oqc_done_chart['상태'] == '출하승인'].groupby('모델').size().rename('출하승인')
+            _mg_fail  = oqc_done_chart[oqc_done_chart['상태'] == '부적합(OQC)'].groupby('모델').size().rename('부적합')
+            model_grp = pd.concat([_mg_total, _mg_pass, _mg_fail], axis=1).fillna(0).astype(int).reset_index()
+            model_grp['부적합률(%)'] = (model_grp['부적합'] / model_grp['전체'].clip(lower=1) * 100).round(1)
+            model_grp = model_grp.sort_values('부적합률(%)', ascending=False)
             st.dataframe(model_grp, use_container_width=True, hide_index=True)
     else:
         st.info("OQC 데이터가 쌓이면 차트가 표시됩니다.")
