@@ -3998,7 +3998,7 @@ elif curr_l == "생산 중단 일지":
     _is_admin_stop = st.session_state.user_role in ["master", "admin"]
     _is_readonly_stop = st.session_state.user_role in ["control_tower"]
 
-    _STOP_TYPES = ["설비 고장", "자재 부족", "품질 이슈", "안전 사고", "정전/유틸리티", "작업자 부족", "기타"]
+    _STOP_TYPES = ["설비 고장", "자재 부족", "품질 이슈", "안전 사고", "정전/유틸리티", "작업자 부족", "작업 불량", "관리자 작업지도 불량", "기타"]
     _STOP_LINES = ["조립 라인", "검사 라인", "OQC 라인", "포장 라인", "전체 라인"]
 
     _st_tab1, _st_tab2 = st.tabs(["📝 일지 등록", "📋 일지 조회"])
