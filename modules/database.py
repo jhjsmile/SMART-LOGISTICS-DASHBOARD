@@ -107,6 +107,7 @@ def _clear_all_cache() -> None:
     _clear_plan_cache()
     _clear_master_cache()
     _clear_audit_cache()
+    _clear_stoppage_cache()
 
 
 def clear_cache_for_tables(tables: set) -> None:
@@ -127,6 +128,8 @@ def clear_cache_for_tables(tables: set) -> None:
         _clear_access_request_cache()
     if "material_serial" in tables:
         load_material_serials.clear()
+    if "production_stoppage_log" in tables:
+        _clear_stoppage_cache()
 
 
 # =================================================================
@@ -884,3 +887,46 @@ def delete_plan_change_log_row(row_id) -> bool:
         return True
     except Exception as e:
         st.error(f"계획변경이력 행 삭제 실패: {e}"); return False
+
+
+# ── 생산 중단 일지 ────────────────────────────────────────────────
+
+def _clear_stoppage_cache() -> None:
+    load_stoppage_log.clear()
+
+@st.cache_data(ttl=60)
+def load_stoppage_log(date_from: str = "", date_to: str = "") -> pd.DataFrame:
+    try:
+        q = get_supabase().table("production_stoppage_log").select("*").order("등록시간", desc=True)
+        if date_from:
+            q = q.gte("날짜", date_from)
+        if date_to:
+            q = q.lte("날짜", date_to)
+        res = q.limit(1000).execute()
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    except Exception as e:
+        st.error(f"생산 중단 일지 로드 실패: {e}"); return pd.DataFrame()
+
+def insert_stoppage_log(row: dict) -> bool:
+    try:
+        get_supabase().table("production_stoppage_log").insert(row).execute()
+        _clear_stoppage_cache()
+        return True
+    except Exception as e:
+        st.error(f"생산 중단 일지 등록 실패: {e}"); return False
+
+def update_stoppage_log(row_id: int, data: dict) -> bool:
+    try:
+        get_supabase().table("production_stoppage_log").update(data).eq("id", row_id).execute()
+        _clear_stoppage_cache()
+        return True
+    except Exception as e:
+        st.error(f"생산 중단 일지 수정 실패: {e}"); return False
+
+def delete_stoppage_log_row(row_id: int) -> bool:
+    try:
+        get_supabase().table("production_stoppage_log").delete().eq("id", row_id).execute()
+        _clear_stoppage_cache()
+        return True
+    except Exception as e:
+        st.error(f"생산 중단 일지 삭제 실패: {e}"); return False
