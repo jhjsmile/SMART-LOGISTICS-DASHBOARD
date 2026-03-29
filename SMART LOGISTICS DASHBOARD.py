@@ -4225,7 +4225,11 @@ elif curr_l == "생산 중단 일지":
                         with st.form(f"stop_edit_form_{_rid}"):
                             st.markdown("**✏️ 일지 수정**")
                             _ef1, _ef2 = st.columns(2)
-                            _e_date = _ef1.date_input("날짜", value=date.fromisoformat(_sr.get("날짜", str(date.today()))), key=f"e_date_{_rid}")
+                            try:
+                                _e_date_val = date.fromisoformat(_sr["날짜"]) if _sr.get("날짜") else date.today()
+                            except Exception:
+                                _e_date_val = date.today()
+                            _e_date = _ef1.date_input("날짜", value=_e_date_val, key=f"e_date_{_rid}")
                             _e_ban  = _ef2.selectbox("반", PRODUCTION_GROUPS,
                                 index=PRODUCTION_GROUPS.index(_sr.get("반")) if _sr.get("반") in PRODUCTION_GROUPS else 0,
                                 key=f"e_ban_{_rid}")
