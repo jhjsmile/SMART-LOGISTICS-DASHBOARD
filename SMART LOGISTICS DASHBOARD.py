@@ -4113,21 +4113,74 @@ elif curr_l == "생산 중단 일지":
 
                     with _dc2:
                         if _is_admin_stop:
+                            _rid = _sr.get("id")
+                            _edit_sk = f"stop_edit_mode_{_rid}"
+                            if _edit_sk not in st.session_state:
+                                st.session_state[_edit_sk] = False
                             # 종료 시간 입력 (진행 중인 경우)
                             if _is_ongoing:
-                                _end_key = f"stop_end_edit_{_sr.get('id')}"
+                                _end_key = f"stop_end_edit_{_rid}"
                                 _new_end = st.text_input("종료 시간 (HH:MM)", key=_end_key, placeholder="10:30")
-                                if st.button(" 종료 처리", key=f"stop_close_{_sr.get('id')}", use_container_width=True):
+                                if st.button(" 종료 처리", key=f"stop_close_{_rid}", use_container_width=True):
                                     if _new_end.strip():
-                                        if update_stoppage_log(int(_sr["id"]), {"종료시간": _new_end.strip()}):
+                                        if update_stoppage_log(int(_rid), {"종료시간": _new_end.strip()}):
                                             st.success("종료 처리되었습니다.")
                                             st.rerun()
                                     else:
                                         st.warning("종료 시간을 입력하세요.")
-                            if st.button(" 삭제", key=f"stop_del_{_sr.get('id')}", use_container_width=True):
-                                if delete_stoppage_log_row(int(_sr["id"])):
+                            _eb1, _eb2 = st.columns(2)
+                            if _eb1.button(" 수정", key=f"stop_edit_btn_{_rid}", use_container_width=True):
+                                st.session_state[_edit_sk] = not st.session_state[_edit_sk]
+                                st.rerun()
+                            if _eb2.button(" 삭제", key=f"stop_del_{_rid}", use_container_width=True):
+                                if delete_stoppage_log_row(int(_rid)):
                                     st.success("삭제되었습니다.")
                                     st.rerun()
+
+                    # 수정 폼 (토글)
+                    if _is_admin_stop and st.session_state.get(f"stop_edit_mode_{_sr.get('id')}", False):
+                        _rid = _sr.get("id")
+                        st.divider()
+                        with st.form(f"stop_edit_form_{_rid}"):
+                            st.markdown("**✏️ 일지 수정**")
+                            _ef1, _ef2 = st.columns(2)
+                            _e_date = _ef1.date_input("날짜", value=date.fromisoformat(_sr.get("날짜", str(date.today()))), key=f"e_date_{_rid}")
+                            _e_ban  = _ef2.selectbox("반", PRODUCTION_GROUPS,
+                                index=PRODUCTION_GROUPS.index(_sr.get("반")) if _sr.get("반") in PRODUCTION_GROUPS else 0,
+                                key=f"e_ban_{_rid}")
+                            _ef3, _ef4 = st.columns(2)
+                            _e_line = _ef3.selectbox("라인", _STOP_LINES,
+                                index=_STOP_LINES.index(_sr.get("라인")) if _sr.get("라인") in _STOP_LINES else 0,
+                                key=f"e_line_{_rid}")
+                            _e_type = _ef4.selectbox("중단 유형", _STOP_TYPES,
+                                index=_STOP_TYPES.index(_sr.get("중단유형")) if _sr.get("중단유형") in _STOP_TYPES else 0,
+                                key=f"e_type_{_rid}")
+                            _ef5, _ef6 = st.columns(2)
+                            _e_start  = _ef5.text_input("시작시간", value=_sr.get("시작시간", ""), key=f"e_start_{_rid}")
+                            _e_end    = _ef6.text_input("종료시간", value=_sr.get("종료시간", "") or "", key=f"e_end_{_rid}")
+                            _e_cause  = st.text_area("중단 원인", value=_sr.get("중단원인", ""), height=70, key=f"e_cause_{_rid}")
+                            _e_action = st.text_area("조치 사항", value=_sr.get("조치사항", "") or "", height=70, key=f"e_action_{_rid}")
+                            _esave, _ecancel = st.columns(2)
+                            _submitted_edit = _esave.form_submit_button(" 저장", type="primary", use_container_width=True)
+                            _cancel_edit    = _ecancel.form_submit_button(" 취소", use_container_width=True)
+                        if _submitted_edit:
+                            _upd = {
+                                "날짜":     str(_e_date),
+                                "반":       _e_ban,
+                                "라인":     _e_line,
+                                "중단유형": _e_type,
+                                "시작시간": _e_start.strip(),
+                                "종료시간": _e_end.strip() if _e_end.strip() else None,
+                                "중단원인": _e_cause.strip(),
+                                "조치사항": _e_action.strip(),
+                            }
+                            if update_stoppage_log(int(_rid), _upd):
+                                st.session_state[f"stop_edit_mode_{_rid}"] = False
+                                st.success("수정되었습니다.")
+                                st.rerun()
+                        if _cancel_edit:
+                            st.session_state[f"stop_edit_mode_{_rid}"] = False
+                            st.rerun()
 
 elif curr_l == "플로우차트":
     # ══════════════════════════════════════════════════════════
