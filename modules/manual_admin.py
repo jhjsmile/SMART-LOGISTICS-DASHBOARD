@@ -511,13 +511,28 @@ def render_admin_manual():
     with st.expander(" 14. 생산 중단 일지"):
         _section("", "생산 중단 일지 개요", "#6B3A2A")
         _box("""
-        생산 현장에서 발생하는 라인 중단 이벤트를 기록·추적하는 메뉴입니다.<br>
-        <b>접근 권한</b>: 모든 역할 (컨트롤 타워는 조회만 가능)
-        <ul style='margin:6px 0 0;padding-left:1.4em;'>
-          <li><b>조립·검사·포장·OQC 담당자</b> — 자신의 라인 중단 일지 등록</li>
-          <li><b>관리자·마스터</b> — 전체 조회, 수정, 삭제, 완료 처리</li>
-          <li><b>컨트롤 타워</b> — 전체 조회만 가능</li>
-        </ul>""")
+        생산 현장에서 발생하는 라인 중단 이벤트를 기록·추적하는 메뉴입니다.<br><br>
+        <b>접근 권한</b>
+        <table style='width:100%;border-collapse:collapse;font-size:0.88rem;margin-top:6px;'>
+          <tr style='background:#6B3A2A;color:#fff;'>
+            <th style='padding:7px 10px;text-align:left;'>역할</th>
+            <th style='padding:7px 10px;text-align:left;'>등록</th>
+            <th style='padding:7px 10px;text-align:left;'>조회</th>
+            <th style='padding:7px 10px;text-align:left;'>수정·삭제·완료 처리</th>
+          </tr>
+          <tr style='background:#f8f4f0;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'> 마스터 관리자 · 관리자</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>✅</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>✅</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>✅</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;'>그 외 모든 역할</td>
+            <td style='padding:6px 10px;'>—</td>
+            <td style='padding:6px 10px;'>✅ (조회만)</td>
+            <td style='padding:6px 10px;'>—</td>
+          </tr>
+        </table>""")
 
         _section("", "일지 등록 항목", "#6B3A2A")
         _box("""
