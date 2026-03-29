@@ -4128,11 +4128,10 @@ elif curr_l == "생산 중단 일지":
                                             st.rerun()
                                     else:
                                         st.warning("종료 시간을 입력하세요.")
-                            _eb1, _eb2 = st.columns(2)
-                            if _eb1.button(" 수정", key=f"stop_edit_btn_{_rid}", use_container_width=True):
+                            if st.button(" 수정", key=f"stop_edit_btn_{_rid}", use_container_width=True):
                                 st.session_state[_edit_sk] = not st.session_state[_edit_sk]
                                 st.rerun()
-                            if _eb2.button(" 삭제", key=f"stop_del_{_rid}", use_container_width=True):
+                            if st.button(" 삭제", key=f"stop_del_{_rid}", use_container_width=True):
                                 if delete_stoppage_log_row(int(_rid)):
                                     st.success("삭제되었습니다.")
                                     st.rerun()
