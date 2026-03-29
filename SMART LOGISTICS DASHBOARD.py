@@ -4024,6 +4024,11 @@ elif curr_l == "생산 중단 일지":
                 _stop_cause  = st.text_area("중단 원인", placeholder="구체적인 중단 원인을 입력하세요.", height=80, key="stop_cause_ta")
                 _stop_action = st.text_area("조치 사항", placeholder="취해진 조치 또는 향후 조치 계획을 입력하세요.", height=80, key="stop_action_ta")
 
+                st.markdown("<p style='font-size:0.85rem;font-weight:700;color:#5a4f45;margin:8px 0 4px 0;'> 조치 수량</p>", unsafe_allow_html=True)
+                _sf7, _sf8 = st.columns(2)
+                _stop_semi  = _sf7.number_input("반제품 수량", min_value=0, value=0, step=1, key="stop_semi_qty")
+                _stop_final = _sf8.number_input("완제품 수량", min_value=0, value=0, step=1, key="stop_final_qty")
+
                 _submitted_stop = st.form_submit_button(" 등록", type="primary", use_container_width=True)
 
             if _submitted_stop:
@@ -4033,16 +4038,18 @@ elif curr_l == "생산 중단 일지":
                     st.warning("중단 시작 시간을 입력하세요.")
                 else:
                     _stop_row = {
-                        "날짜":     str(_stop_date),
-                        "반":       _stop_ban,
-                        "라인":     _stop_line,
-                        "중단유형": _stop_type,
-                        "시작시간": _stop_start.strip(),
-                        "종료시간": _stop_end.strip() if _stop_end.strip() else None,
-                        "중단원인": _stop_cause.strip(),
-                        "조치사항": _stop_action.strip(),
-                        "작성자":   st.session_state.user_id,
-                        "등록시간": get_now_kst_str(),
+                        "날짜":       str(_stop_date),
+                        "반":         _stop_ban,
+                        "라인":       _stop_line,
+                        "중단유형":   _stop_type,
+                        "시작시간":   _stop_start.strip(),
+                        "종료시간":   _stop_end.strip() if _stop_end.strip() else None,
+                        "중단원인":   _stop_cause.strip(),
+                        "조치사항":   _stop_action.strip(),
+                        "반제품수량": int(_stop_semi),
+                        "완제품수량": int(_stop_final),
+                        "작성자":     st.session_state.user_id,
+                        "등록시간":   get_now_kst_str(),
                     }
                     if insert_stoppage_log(_stop_row):
                         st.success(" 생산 중단 일지가 등록되었습니다.")
@@ -4051,19 +4058,40 @@ elif curr_l == "생산 중단 일지":
     with _st_tab2:
         st.markdown("<div class='section-title'> 중단 일지 조회</div>", unsafe_allow_html=True)
 
-        _sv1, _sv2, _sv3 = st.columns([3, 1.5, 1.5])
-        _sv_drange = _sv1.date_input(
-            "조회 기간",
-            value=(date.today() - timedelta(days=30), date.today()),
-            key="stop_view_date"
-        )
-        _sv_ban  = _sv2.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="stop_view_ban")
-        _sv_type = _sv3.selectbox("유형 필터", ["전체"] + _STOP_TYPES, key="stop_view_type")
+        # 기간 프리셋
+        _sv_preset_opts = ["직접 입력", "오늘", "이번 주", "이번 달", "지난 달", "전체"]
+        _svp1, _svp2, _svp3 = st.columns([2, 1.5, 1.5])
+        _sv_preset = _svp1.selectbox("조회 기간", _sv_preset_opts, key="stop_view_preset")
+        _sv_ban    = _svp2.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="stop_view_ban")
+        _sv_type   = _svp3.selectbox("유형 필터", ["전체"] + _STOP_TYPES, key="stop_view_type")
 
-        if isinstance(_sv_drange, (list, tuple)) and len(_sv_drange) == 2:
-            _sv_from, _sv_to = str(_sv_drange[0]), str(_sv_drange[1])
-        else:
-            _sv_from = _sv_to = str(date.today())
+        _today = date.today()
+        if _sv_preset == "오늘":
+            _sv_from = _sv_to = str(_today)
+        elif _sv_preset == "이번 주":
+            _sv_from = str(_today - timedelta(days=_today.weekday()))
+            _sv_to   = str(_today)
+        elif _sv_preset == "이번 달":
+            _sv_from = _today.strftime("%Y-%m-01")
+            _sv_to   = str(_today)
+        elif _sv_preset == "지난 달":
+            _first_this = _today.replace(day=1)
+            _last_prev  = _first_this - timedelta(days=1)
+            _sv_from = _last_prev.strftime("%Y-%m-01")
+            _sv_to   = str(_last_prev)
+        elif _sv_preset == "전체":
+            _sv_from = ""
+            _sv_to   = ""
+        else:  # 직접 입력
+            _sv_drange = st.date_input(
+                "날짜 범위 선택",
+                value=(_today - timedelta(days=30), _today),
+                key="stop_view_date"
+            )
+            if isinstance(_sv_drange, (list, tuple)) and len(_sv_drange) == 2:
+                _sv_from, _sv_to = str(_sv_drange[0]), str(_sv_drange[1])
+            else:
+                _sv_from = _sv_to = str(_today)
 
         _stop_df = load_stoppage_log(_sv_from, _sv_to)
 
@@ -4110,6 +4138,14 @@ elif curr_l == "생산 중단 일지":
                         st.write(_sr.get("중단원인", ""))
                         st.markdown(f"**조치 사항**")
                         st.write(_sr.get("조치사항", "") or "—")
+                        _semi_q  = _sr.get("반제품수량", 0) or 0
+                        _final_q = _sr.get("완제품수량", 0) or 0
+                        if int(_semi_q) > 0 or int(_final_q) > 0:
+                            st.markdown(
+                                f"<p style='font-size:0.82rem;color:#5a4f45;margin:6px 0 0 0;'>"
+                                f" <b>조치 수량</b> &nbsp;·&nbsp; 반제품 <b>{int(_semi_q)}</b>개 &nbsp;/&nbsp; 완제품 <b>{int(_final_q)}</b>개</p>",
+                                unsafe_allow_html=True
+                            )
 
                     with _dc2:
                         if _is_admin_stop:
@@ -4159,19 +4195,24 @@ elif curr_l == "생산 중단 일지":
                             _e_end    = _ef6.text_input("종료시간", value=_sr.get("종료시간", "") or "", key=f"e_end_{_rid}")
                             _e_cause  = st.text_area("중단 원인", value=_sr.get("중단원인", ""), height=70, key=f"e_cause_{_rid}")
                             _e_action = st.text_area("조치 사항", value=_sr.get("조치사항", "") or "", height=70, key=f"e_action_{_rid}")
+                            _ef7, _ef8 = st.columns(2)
+                            _e_semi  = _ef7.number_input("반제품 수량", min_value=0, value=int(_sr.get("반제품수량", 0) or 0), step=1, key=f"e_semi_{_rid}")
+                            _e_final = _ef8.number_input("완제품 수량", min_value=0, value=int(_sr.get("완제품수량", 0) or 0), step=1, key=f"e_final_{_rid}")
                             _esave, _ecancel = st.columns(2)
                             _submitted_edit = _esave.form_submit_button(" 저장", type="primary", use_container_width=True)
                             _cancel_edit    = _ecancel.form_submit_button(" 취소", use_container_width=True)
                         if _submitted_edit:
                             _upd = {
-                                "날짜":     str(_e_date),
-                                "반":       _e_ban,
-                                "라인":     _e_line,
-                                "중단유형": _e_type,
-                                "시작시간": _e_start.strip(),
-                                "종료시간": _e_end.strip() if _e_end.strip() else None,
-                                "중단원인": _e_cause.strip(),
-                                "조치사항": _e_action.strip(),
+                                "날짜":       str(_e_date),
+                                "반":         _e_ban,
+                                "라인":       _e_line,
+                                "중단유형":   _e_type,
+                                "시작시간":   _e_start.strip(),
+                                "종료시간":   _e_end.strip() if _e_end.strip() else None,
+                                "중단원인":   _e_cause.strip(),
+                                "조치사항":   _e_action.strip(),
+                                "반제품수량": int(_e_semi),
+                                "완제품수량": int(_e_final),
                             }
                             if update_stoppage_log(int(_rid), _upd):
                                 st.session_state[f"stop_edit_mode_{_rid}"] = False
