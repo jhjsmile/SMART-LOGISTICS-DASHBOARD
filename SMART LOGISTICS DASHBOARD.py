@@ -77,6 +77,8 @@ from modules.database import (
     insert_plan_change_log, load_plan_change_log,
     delete_all_plan_change_log, delete_plan_change_log_row,
     check_login_lockout, record_login_failure, clear_login_attempts,
+    insert_stoppage_log, load_stoppage_log,
+    update_stoppage_log, delete_stoppage_log_row,
 )
 from modules.calendar_view import (
     show_inline_day_panel, render_calendar_weekly, render_calendar_monthly,
@@ -211,14 +213,14 @@ def _load_manual_pdf_b64() -> str:
 _MANUAL_PDF_B64 = _load_manual_pdf_b64()
 
 ROLES = {
-    "master":           ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼", "플로우차트"],
-    "admin":            ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼", "플로우차트"],
-    "control_tower":    ["생산 지표 관리", "생산 현황 리포트", "수리 현황 리포트", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼", "플로우차트"],
-    "assembly_team":    ["조립 라인", "작업자 매뉴얼", "플로우차트"],
-    "qc_team":          ["검사 라인", "불량 공정", "작업자 매뉴얼", "플로우차트"],
-    "packing_team":     ["포장 라인", "작업자 매뉴얼", "플로우차트"],
-    "schedule_manager": ["생산 지표 관리", "작업자 매뉴얼", "플로우차트"],
-    "oqc_team":         ["OQC 라인", "작업자 매뉴얼", "플로우차트"],
+    "master":           ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "생산 중단 일지", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼", "플로우차트"],
+    "admin":            ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "생산 중단 일지", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼", "플로우차트"],
+    "control_tower":    ["생산 지표 관리", "생산 현황 리포트", "수리 현황 리포트", "생산 중단 일지", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼", "플로우차트"],
+    "assembly_team":    ["조립 라인", "생산 중단 일지", "작업자 매뉴얼", "플로우차트"],
+    "qc_team":          ["검사 라인", "불량 공정", "생산 중단 일지", "작업자 매뉴얼", "플로우차트"],
+    "packing_team":     ["포장 라인", "생산 중단 일지", "작업자 매뉴얼", "플로우차트"],
+    "schedule_manager": ["생산 지표 관리", "생산 중단 일지", "작업자 매뉴얼", "플로우차트"],
+    "oqc_team":         ["OQC 라인", "생산 중단 일지", "작업자 매뉴얼", "플로우차트"],
 }
 
 ROLE_LABELS = {
@@ -724,6 +726,13 @@ for p in ["생산 현황 리포트", "수리 현황 리포트"]:
             st.session_state.current_line  = p
             st.session_state.production_db = load_realtime_ledger()
             st.rerun()
+
+if "생산 중단 일지" in allowed_nav:
+    if st.sidebar.button(" 생산 중단 일지", key="fnav_stoppage", use_container_width=True,
+        type="primary" if st.session_state.current_line == "생산 중단 일지" else "secondary"):
+        clear_cal()
+        st.session_state.current_line = "생산 중단 일지"
+        st.rerun()
 
 if "마스터 관리" in allowed_nav:
     st.sidebar.divider()
@@ -3979,6 +3988,146 @@ elif curr_l == "작업자 매뉴얼":
 elif curr_l == "관리자 매뉴얼":
     from modules.manual_admin import render_admin_manual
     render_admin_manual()
+
+elif curr_l == "생산 중단 일지":
+    # ══════════════════════════════════════════════════════════
+    #  생산 중단 일지
+    # ══════════════════════════════════════════════════════════
+    st.markdown("<h2 class='centered-title'> 생산 중단 일지</h2>", unsafe_allow_html=True)
+
+    _is_admin_stop = st.session_state.user_role in ["master", "admin"]
+    _is_readonly_stop = st.session_state.user_role in ["control_tower"]
+
+    _STOP_TYPES = ["설비 고장", "자재 부족", "품질 이슈", "안전 사고", "정전/유틸리티", "작업자 부족", "기타"]
+    _STOP_LINES = ["조립 라인", "검사 라인", "OQC 라인", "포장 라인", "전체 라인"]
+
+    _st_tab1, _st_tab2 = st.tabs(["📝 일지 등록", "📋 일지 조회"])
+
+    with _st_tab1:
+        if _is_readonly_stop:
+            st.info("컨트롤 타워 권한은 조회만 가능합니다.")
+        else:
+            st.markdown("<div class='section-title'> 생산 중단 일지 등록</div>", unsafe_allow_html=True)
+            with st.form("stoppage_form", clear_on_submit=True):
+                _sf1, _sf2 = st.columns(2)
+                _stop_date = _sf1.date_input("중단 날짜", value=date.today(), key="stop_date_input")
+                _stop_ban  = _sf2.selectbox("반", PRODUCTION_GROUPS, key="stop_ban_sel")
+
+                _sf3, _sf4 = st.columns(2)
+                _stop_line = _sf3.selectbox("라인", _STOP_LINES, key="stop_line_sel")
+                _stop_type = _sf4.selectbox("중단 유형", _STOP_TYPES, key="stop_type_sel")
+
+                _sf5, _sf6 = st.columns(2)
+                _stop_start = _sf5.text_input("중단 시작 시간 (HH:MM)", placeholder="예: 09:30", key="stop_start_t")
+                _stop_end   = _sf6.text_input("중단 종료 시간 (HH:MM)", placeholder="예: 10:15  (진행 중이면 공란)", key="stop_end_t")
+
+                _stop_cause  = st.text_area("중단 원인", placeholder="구체적인 중단 원인을 입력하세요.", height=80, key="stop_cause_ta")
+                _stop_action = st.text_area("조치 사항", placeholder="취해진 조치 또는 향후 조치 계획을 입력하세요.", height=80, key="stop_action_ta")
+
+                _submitted_stop = st.form_submit_button(" 등록", type="primary", use_container_width=True)
+
+            if _submitted_stop:
+                if not _stop_cause.strip():
+                    st.warning("중단 원인을 입력하세요.")
+                elif not _stop_start.strip():
+                    st.warning("중단 시작 시간을 입력하세요.")
+                else:
+                    _stop_row = {
+                        "날짜":     str(_stop_date),
+                        "반":       _stop_ban,
+                        "라인":     _stop_line,
+                        "중단유형": _stop_type,
+                        "시작시간": _stop_start.strip(),
+                        "종료시간": _stop_end.strip() if _stop_end.strip() else None,
+                        "중단원인": _stop_cause.strip(),
+                        "조치사항": _stop_action.strip(),
+                        "작성자":   st.session_state.user_id,
+                        "등록시간": get_now_kst_str(),
+                    }
+                    if insert_stoppage_log(_stop_row):
+                        st.success(" 생산 중단 일지가 등록되었습니다.")
+                        st.rerun()
+
+    with _st_tab2:
+        st.markdown("<div class='section-title'> 중단 일지 조회</div>", unsafe_allow_html=True)
+
+        _sv1, _sv2, _sv3 = st.columns([3, 1.5, 1.5])
+        _sv_drange = _sv1.date_input(
+            "조회 기간",
+            value=(date.today() - timedelta(days=30), date.today()),
+            key="stop_view_date"
+        )
+        _sv_ban  = _sv2.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="stop_view_ban")
+        _sv_type = _sv3.selectbox("유형 필터", ["전체"] + _STOP_TYPES, key="stop_view_type")
+
+        if isinstance(_sv_drange, (list, tuple)) and len(_sv_drange) == 2:
+            _sv_from, _sv_to = str(_sv_drange[0]), str(_sv_drange[1])
+        else:
+            _sv_from = _sv_to = str(date.today())
+
+        _stop_df = load_stoppage_log(_sv_from, _sv_to)
+
+        if not _stop_df.empty:
+            if _sv_ban != "전체":
+                _stop_df = _stop_df[_stop_df["반"] == _sv_ban]
+            if _sv_type != "전체":
+                _stop_df = _stop_df[_stop_df["중단유형"] == _sv_type]
+
+        # KPI 요약
+        _sv_kpi1, _sv_kpi2, _sv_kpi3, _sv_kpi4 = st.columns(4)
+        _sv_total = len(_stop_df) if not _stop_df.empty else 0
+        _sv_ongoing = len(_stop_df[_stop_df["종료시간"].isna() | (_stop_df["종료시간"] == "")]) if not _stop_df.empty else 0
+        _sv_equip = len(_stop_df[_stop_df["중단유형"] == "설비 고장"]) if not _stop_df.empty else 0
+        _sv_mat   = len(_stop_df[_stop_df["중단유형"] == "자재 부족"]) if not _stop_df.empty else 0
+        _sv_kpi1.markdown(f"<div class='stat-box'><div class='stat-label'> 총 건수</div><div class='stat-value'>{_sv_total}</div></div>", unsafe_allow_html=True)
+        _sv_kpi2.markdown(f"<div class='stat-box'><div class='stat-label'> 진행 중</div><div class='stat-value' style='color:{'#c0392b' if _sv_ongoing>0 else '#888'};'>{_sv_ongoing}</div></div>", unsafe_allow_html=True)
+        _sv_kpi3.markdown(f"<div class='stat-box'><div class='stat-label'> 설비 고장</div><div class='stat-value'>{_sv_equip}</div></div>", unsafe_allow_html=True)
+        _sv_kpi4.markdown(f"<div class='stat-box'><div class='stat-label'> 자재 부족</div><div class='stat-value'>{_sv_mat}</div></div>", unsafe_allow_html=True)
+
+        st.divider()
+
+        if _stop_df.empty:
+            st.info("조회된 중단 일지가 없습니다.")
+        else:
+            for _si, _sr in _stop_df.reset_index(drop=True).iterrows():
+                _is_ongoing = not _sr.get("종료시간") or str(_sr.get("종료시간", "")).strip() == ""
+                _badge_color = "#c0392b" if _is_ongoing else "#27ae60"
+                _badge_txt   = "진행 중" if _is_ongoing else "완료"
+                _duration_txt = f"{_sr.get('시작시간','')} ~ {_sr.get('종료시간','')}" if not _is_ongoing else f"{_sr.get('시작시간','')} ~ (진행 중)"
+
+                with st.expander(
+                    f"[{_sr.get('날짜','')}] {_sr.get('반','')} · {_sr.get('라인','')} · {_sr.get('중단유형','')}  ({_duration_txt})",
+                    expanded=False
+                ):
+                    _dc1, _dc2 = st.columns([3, 1])
+                    with _dc1:
+                        st.markdown(
+                            f"<span style='background:{_badge_color};color:#fff;border-radius:6px;padding:2px 10px;font-size:0.78rem;'>{_badge_txt}</span>"
+                            f"&nbsp;&nbsp;<span style='color:#888;font-size:0.82rem;'>작성자: {html_mod.escape(str(_sr.get('작성자','')))} &nbsp;·&nbsp; 등록: {str(_sr.get('등록시간',''))[:16]}</span>",
+                            unsafe_allow_html=True
+                        )
+                        st.markdown(f"**중단 원인**")
+                        st.write(_sr.get("중단원인", ""))
+                        st.markdown(f"**조치 사항**")
+                        st.write(_sr.get("조치사항", "") or "—")
+
+                    with _dc2:
+                        if _is_admin_stop:
+                            # 종료 시간 입력 (진행 중인 경우)
+                            if _is_ongoing:
+                                _end_key = f"stop_end_edit_{_sr.get('id')}"
+                                _new_end = st.text_input("종료 시간 (HH:MM)", key=_end_key, placeholder="10:30")
+                                if st.button(" 종료 처리", key=f"stop_close_{_sr.get('id')}", use_container_width=True):
+                                    if _new_end.strip():
+                                        if update_stoppage_log(int(_sr["id"]), {"종료시간": _new_end.strip()}):
+                                            st.success("종료 처리되었습니다.")
+                                            st.rerun()
+                                    else:
+                                        st.warning("종료 시간을 입력하세요.")
+                            if st.button(" 삭제", key=f"stop_del_{_sr.get('id')}", use_container_width=True):
+                                if delete_stoppage_log_row(int(_sr["id"])):
+                                    st.success("삭제되었습니다.")
+                                    st.rerun()
 
 elif curr_l == "플로우차트":
     # ══════════════════════════════════════════════════════════
