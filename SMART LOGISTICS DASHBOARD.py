@@ -4117,7 +4117,10 @@ elif curr_l == "생산 중단 일지":
         # KPI 요약
         _sv_kpi1, _sv_kpi2, _sv_kpi3, _sv_kpi4 = st.columns(4)
         _sv_total = len(_stop_df) if not _stop_df.empty else 0
-        _sv_ongoing = len(_stop_df[_stop_df["종료시간"].isna() | (_stop_df["종료시간"] == "")]) if not _stop_df.empty else 0
+        if not _stop_df.empty and "종료시간" in _stop_df.columns:
+            _sv_ongoing = len(_stop_df[_stop_df["종료시간"].isna() | (_stop_df["종료시간"] == "")])
+        else:
+            _sv_ongoing = 0
         _sv_equip = len(_stop_df[_stop_df["중단유형"] == "설비 고장"]) if not _stop_df.empty else 0
         _sv_mat   = len(_stop_df[_stop_df["중단유형"] == "자재 부족"]) if not _stop_df.empty else 0
         _sv_kpi1.markdown(f"<div class='stat-box'><div class='stat-label'> 총 건수</div><div class='stat-value'>{_sv_total}</div></div>", unsafe_allow_html=True)
@@ -4151,12 +4154,15 @@ elif curr_l == "생산 중단 일지":
                         st.write(_sr.get("중단원인", ""))
                         st.markdown(f"**조치 사항**")
                         st.write(_sr.get("조치사항", "") or "—")
-                        _semi_q  = _sr.get("반제품수량", 0) or 0
-                        _final_q = _sr.get("완제품수량", 0) or 0
-                        if int(_semi_q) > 0 or int(_final_q) > 0:
+                        def _safe_int(v):
+                            try: return int(v) if v and str(v) not in ("nan", "None") else 0
+                            except: return 0
+                        _semi_q  = _safe_int(_sr.get("반제품수량"))
+                        _final_q = _safe_int(_sr.get("완제품수량"))
+                        if _semi_q > 0 or _final_q > 0:
                             st.markdown(
                                 f"<p style='font-size:0.82rem;color:#5a4f45;margin:6px 0 0 0;'>"
-                                f" <b>조치 수량</b> &nbsp;·&nbsp; 반제품 <b>{int(_semi_q)}</b>개 &nbsp;/&nbsp; 완제품 <b>{int(_final_q)}</b>개</p>",
+                                f" <b>조치 수량</b> &nbsp;·&nbsp; 반제품 <b>{_semi_q}</b>개 &nbsp;/&nbsp; 완제품 <b>{_final_q}</b>개</p>",
                                 unsafe_allow_html=True
                             )
                         _rw_date = _sr.get("재작업예정일", "") or ""
@@ -4164,8 +4170,8 @@ elif curr_l == "생산 중단 일지":
                             _rw_done   = str(_sr.get("재작업완료", "")).strip() == "Y"
                             _rw_bc     = "#27ae60" if _rw_done else "#e67e22"
                             _rw_bt     = "재작업 완료" if _rw_done else "재작업 예정"
-                            _rw_semi   = int(_sr.get("재작업반제품", 0) or 0)
-                            _rw_final  = int(_sr.get("재작업완제품", 0) or 0)
+                            _rw_semi   = _safe_int(_sr.get("재작업반제품"))
+                            _rw_final  = _safe_int(_sr.get("재작업완제품"))
                             _rw_note   = html_mod.escape(str(_sr.get("재작업비고", "") or ""))
                             _rw_qty_txt = f"&nbsp;·&nbsp; 반제품 <b>{_rw_semi}</b>개 / 완제품 <b>{_rw_final}</b>개" if (_rw_semi > 0 or _rw_final > 0) else ""
                             _rw_note_txt = f"&nbsp;·&nbsp; {_rw_note}" if _rw_note else ""
@@ -4179,44 +4185,51 @@ elif curr_l == "생산 중단 일지":
 
                     with _dc2:
                         if _is_admin_stop:
-                            _rid = _sr.get("id")
-                            _edit_sk = f"stop_edit_mode_{_rid}"
-                            if _edit_sk not in st.session_state:
-                                st.session_state[_edit_sk] = False
-                            # 종료 시간 입력 (진행 중인 경우)
-                            if _is_ongoing:
-                                _end_key = f"stop_end_edit_{_rid}"
-                                _new_end = st.text_input("종료 시간 (HH:MM)", key=_end_key, placeholder="10:30")
-                                if st.button(" 종료 처리", key=f"stop_close_{_rid}", use_container_width=True):
-                                    if _new_end.strip():
-                                        if update_stoppage_log(int(_rid), {"종료시간": _new_end.strip()}):
-                                            st.success("종료 처리되었습니다.")
+                            _rid_raw = _sr.get("id")
+                            if _rid_raw is not None:
+                                _rid = int(_rid_raw)
+                                _edit_sk = f"stop_edit_mode_{_rid}"
+                                if _edit_sk not in st.session_state:
+                                    st.session_state[_edit_sk] = False
+                                # 종료 시간 입력 (진행 중인 경우)
+                                if _is_ongoing:
+                                    _end_key = f"stop_end_edit_{_rid}"
+                                    _new_end = st.text_input("종료 시간 (HH:MM)", key=_end_key, placeholder="10:30")
+                                    if st.button(" 종료 처리", key=f"stop_close_{_rid}", use_container_width=True):
+                                        if _new_end.strip():
+                                            if update_stoppage_log(_rid, {"종료시간": _new_end.strip()}):
+                                                st.success("종료 처리되었습니다.")
+                                                st.rerun()
+                                        else:
+                                            st.warning("종료 시간을 입력하세요.")
+                                _rw_date_dc2 = _sr.get("재작업예정일", "") or ""
+                                _rw_done_dc2 = str(_sr.get("재작업완료", "")).strip() == "Y"
+                                if _rw_date_dc2 and not _rw_done_dc2:
+                                    if st.button(" 재작업 완료", key=f"stop_rw_done_{_rid}", use_container_width=True, type="primary"):
+                                        if update_stoppage_log(_rid, {"재작업완료": "Y"}):
+                                            st.success("재작업 완료 처리되었습니다.")
                                             st.rerun()
-                                    else:
-                                        st.warning("종료 시간을 입력하세요.")
-                            _rw_date_dc2 = _sr.get("재작업예정일", "") or ""
-                            _rw_done_dc2 = str(_sr.get("재작업완료", "")).strip() == "Y"
-                            if _rw_date_dc2 and not _rw_done_dc2:
-                                if st.button(" 재작업 완료", key=f"stop_rw_done_{_rid}", use_container_width=True, type="primary"):
-                                    if update_stoppage_log(int(_rid), {"재작업완료": "Y"}):
-                                        st.success("재작업 완료 처리되었습니다.")
-                                        st.rerun()
-                            if st.button(" 수정", key=f"stop_edit_btn_{_rid}", use_container_width=True):
-                                st.session_state[_edit_sk] = not st.session_state[_edit_sk]
-                                st.rerun()
-                            if st.button(" 삭제", key=f"stop_del_{_rid}", use_container_width=True):
-                                if delete_stoppage_log_row(int(_rid)):
-                                    st.success("삭제되었습니다.")
+                                if st.button(" 수정", key=f"stop_edit_btn_{_rid}", use_container_width=True):
+                                    st.session_state[_edit_sk] = not st.session_state[_edit_sk]
                                     st.rerun()
+                                if st.button(" 삭제", key=f"stop_del_{_rid}", use_container_width=True):
+                                    if delete_stoppage_log_row(_rid):
+                                        st.success("삭제되었습니다.")
+                                        st.rerun()
 
                     # 수정 폼 (토글)
-                    if _is_admin_stop and st.session_state.get(f"stop_edit_mode_{_sr.get('id')}", False):
-                        _rid = _sr.get("id")
+                    _rid_raw2 = _sr.get("id")
+                    if _is_admin_stop and _rid_raw2 is not None and st.session_state.get(f"stop_edit_mode_{int(_rid_raw2)}", False):
+                        _rid = int(_rid_raw2)
                         st.divider()
                         with st.form(f"stop_edit_form_{_rid}"):
                             st.markdown("**✏️ 일지 수정**")
                             _ef1, _ef2 = st.columns(2)
-                            _e_date = _ef1.date_input("날짜", value=date.fromisoformat(_sr.get("날짜", str(date.today()))), key=f"e_date_{_rid}")
+                            try:
+                                _e_date_val = date.fromisoformat(_sr["날짜"]) if _sr.get("날짜") else date.today()
+                            except Exception:
+                                _e_date_val = date.today()
+                            _e_date = _ef1.date_input("날짜", value=_e_date_val, key=f"e_date_{_rid}")
                             _e_ban  = _ef2.selectbox("반", PRODUCTION_GROUPS,
                                 index=PRODUCTION_GROUPS.index(_sr.get("반")) if _sr.get("반") in PRODUCTION_GROUPS else 0,
                                 key=f"e_ban_{_rid}")
@@ -4233,20 +4246,20 @@ elif curr_l == "생산 중단 일지":
                             _e_cause  = st.text_area("중단 원인", value=_sr.get("중단원인", ""), height=70, key=f"e_cause_{_rid}")
                             _e_action = st.text_area("조치 사항", value=_sr.get("조치사항", "") or "", height=70, key=f"e_action_{_rid}")
                             _ef7, _ef8 = st.columns(2)
-                            _e_semi  = _ef7.number_input("반제품 수량", min_value=0, value=int(_sr.get("반제품수량", 0) or 0), step=1, key=f"e_semi_{_rid}")
-                            _e_final = _ef8.number_input("완제품 수량", min_value=0, value=int(_sr.get("완제품수량", 0) or 0), step=1, key=f"e_final_{_rid}")
+                            _e_semi  = _ef7.number_input("반제품 수량", min_value=0, value=_safe_int(_sr.get("반제품수량")), step=1, key=f"e_semi_{_rid}")
+                            _e_final = _ef8.number_input("완제품 수량", min_value=0, value=_safe_int(_sr.get("완제품수량")), step=1, key=f"e_final_{_rid}")
                             st.markdown("<p style='font-size:0.82rem;font-weight:700;color:#7a5f3a;margin:10px 0 2px 0;'> 재작업 예정 일정</p>", unsafe_allow_html=True)
                             _ef9, _ef10 = st.columns(2)
                             _e_rw_date_val = _sr.get("재작업예정일", None)
                             try:
-                                _e_rw_date_val = date.fromisoformat(_e_rw_date_val) if _e_rw_date_val else None
+                                _e_rw_date_val = date.fromisoformat(str(_e_rw_date_val)) if _e_rw_date_val and str(_e_rw_date_val) not in ("None", "") else None
                             except Exception:
                                 _e_rw_date_val = None
                             _e_rw_date = _ef9.date_input("재작업 예정일", value=_e_rw_date_val, key=f"e_rw_date_{_rid}")
                             _e_rw_note = _ef10.text_input("재작업 비고", value=_sr.get("재작업비고", "") or "", key=f"e_rw_note_{_rid}")
                             _ef11, _ef12 = st.columns(2)
-                            _e_rw_semi  = _ef11.number_input("재작업 반제품 예정", min_value=0, value=int(_sr.get("재작업반제품", 0) or 0), step=1, key=f"e_rw_semi_{_rid}")
-                            _e_rw_final = _ef12.number_input("재작업 완제품 예정", min_value=0, value=int(_sr.get("재작업완제품", 0) or 0), step=1, key=f"e_rw_final_{_rid}")
+                            _e_rw_semi  = _ef11.number_input("재작업 반제품 예정", min_value=0, value=_safe_int(_sr.get("재작업반제품")), step=1, key=f"e_rw_semi_{_rid}")
+                            _e_rw_final = _ef12.number_input("재작업 완제품 예정", min_value=0, value=_safe_int(_sr.get("재작업완제품")), step=1, key=f"e_rw_final_{_rid}")
                             _esave, _ecancel = st.columns(2)
                             _submitted_edit = _esave.form_submit_button(" 저장", type="primary", use_container_width=True)
                             _cancel_edit    = _ecancel.form_submit_button(" 취소", use_container_width=True)
@@ -4267,7 +4280,7 @@ elif curr_l == "생산 중단 일지":
                                 "재작업완제품": int(_e_rw_final),
                                 "재작업비고":   _e_rw_note.strip(),
                             }
-                            if update_stoppage_log(int(_rid), _upd):
+                            if update_stoppage_log(_rid, _upd):
                                 st.session_state[f"stop_edit_mode_{_rid}"] = False
                                 st.success("수정되었습니다.")
                                 st.rerun()
