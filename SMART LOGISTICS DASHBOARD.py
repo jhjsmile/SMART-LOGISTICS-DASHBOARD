@@ -4029,6 +4029,14 @@ elif curr_l == "생산 중단 일지":
                 _stop_semi  = _sf7.number_input("반제품 수량", min_value=0, value=0, step=1, key="stop_semi_qty")
                 _stop_final = _sf8.number_input("완제품 수량", min_value=0, value=0, step=1, key="stop_final_qty")
 
+                st.markdown("<p style='font-size:0.85rem;font-weight:700;color:#7a5f3a;margin:12px 0 2px 0;'> 재작업 예정 일정 <span style=\"font-weight:400;font-size:0.78rem;color:#aaa;\">(미완료 시 작성)</span></p>", unsafe_allow_html=True)
+                _sf9, _sf10 = st.columns(2)
+                _stop_rw_date = _sf9.date_input("재작업 예정일", value=None, key="stop_rw_date")
+                _stop_rw_note = _sf10.text_input("재작업 비고", placeholder="예: 부품 입고 후 재작업", key="stop_rw_note")
+                _sf11, _sf12 = st.columns(2)
+                _stop_rw_semi  = _sf11.number_input("재작업 반제품 예정", min_value=0, value=0, step=1, key="stop_rw_semi")
+                _stop_rw_final = _sf12.number_input("재작업 완제품 예정", min_value=0, value=0, step=1, key="stop_rw_final")
+
                 _submitted_stop = st.form_submit_button(" 등록", type="primary", use_container_width=True)
 
             if _submitted_stop:
@@ -4046,10 +4054,15 @@ elif curr_l == "생산 중단 일지":
                         "종료시간":   _stop_end.strip() if _stop_end.strip() else None,
                         "중단원인":   _stop_cause.strip(),
                         "조치사항":   _stop_action.strip(),
-                        "반제품수량": int(_stop_semi),
-                        "완제품수량": int(_stop_final),
-                        "작성자":     st.session_state.user_id,
-                        "등록시간":   get_now_kst_str(),
+                        "반제품수량":   int(_stop_semi),
+                        "완제품수량":   int(_stop_final),
+                        "재작업예정일": str(_stop_rw_date) if _stop_rw_date else None,
+                        "재작업반제품": int(_stop_rw_semi),
+                        "재작업완제품": int(_stop_rw_final),
+                        "재작업비고":   _stop_rw_note.strip(),
+                        "재작업완료":   "",
+                        "작성자":       st.session_state.user_id,
+                        "등록시간":     get_now_kst_str(),
                     }
                     if insert_stoppage_log(_stop_row):
                         st.success(" 생산 중단 일지가 등록되었습니다.")
@@ -4146,6 +4159,23 @@ elif curr_l == "생산 중단 일지":
                                 f" <b>조치 수량</b> &nbsp;·&nbsp; 반제품 <b>{int(_semi_q)}</b>개 &nbsp;/&nbsp; 완제품 <b>{int(_final_q)}</b>개</p>",
                                 unsafe_allow_html=True
                             )
+                        _rw_date = _sr.get("재작업예정일", "") or ""
+                        if _rw_date:
+                            _rw_done   = str(_sr.get("재작업완료", "")).strip() == "Y"
+                            _rw_bc     = "#27ae60" if _rw_done else "#e67e22"
+                            _rw_bt     = "재작업 완료" if _rw_done else "재작업 예정"
+                            _rw_semi   = int(_sr.get("재작업반제품", 0) or 0)
+                            _rw_final  = int(_sr.get("재작업완제품", 0) or 0)
+                            _rw_note   = html_mod.escape(str(_sr.get("재작업비고", "") or ""))
+                            _rw_qty_txt = f"&nbsp;·&nbsp; 반제품 <b>{_rw_semi}</b>개 / 완제품 <b>{_rw_final}</b>개" if (_rw_semi > 0 or _rw_final > 0) else ""
+                            _rw_note_txt = f"&nbsp;·&nbsp; {_rw_note}" if _rw_note else ""
+                            st.markdown(
+                                f"<div style='background:#fff8f0;border:1.5px solid #f0c070;border-radius:8px;padding:8px 12px;margin-top:10px;'>"
+                                f"<span style='background:{_rw_bc};color:#fff;border-radius:6px;padding:2px 9px;font-size:0.75rem;font-weight:bold;'>{_rw_bt}</span>"
+                                f"&nbsp;&nbsp;<span style='font-size:0.82rem;color:#5a4f45;'>예정일: <b>{_rw_date}</b>{_rw_qty_txt}{_rw_note_txt}</span>"
+                                f"</div>",
+                                unsafe_allow_html=True
+                            )
 
                     with _dc2:
                         if _is_admin_stop:
@@ -4164,6 +4194,13 @@ elif curr_l == "생산 중단 일지":
                                             st.rerun()
                                     else:
                                         st.warning("종료 시간을 입력하세요.")
+                            _rw_date_dc2 = _sr.get("재작업예정일", "") or ""
+                            _rw_done_dc2 = str(_sr.get("재작업완료", "")).strip() == "Y"
+                            if _rw_date_dc2 and not _rw_done_dc2:
+                                if st.button(" 재작업 완료", key=f"stop_rw_done_{_rid}", use_container_width=True, type="primary"):
+                                    if update_stoppage_log(int(_rid), {"재작업완료": "Y"}):
+                                        st.success("재작업 완료 처리되었습니다.")
+                                        st.rerun()
                             if st.button(" 수정", key=f"stop_edit_btn_{_rid}", use_container_width=True):
                                 st.session_state[_edit_sk] = not st.session_state[_edit_sk]
                                 st.rerun()
@@ -4198,6 +4235,18 @@ elif curr_l == "생산 중단 일지":
                             _ef7, _ef8 = st.columns(2)
                             _e_semi  = _ef7.number_input("반제품 수량", min_value=0, value=int(_sr.get("반제품수량", 0) or 0), step=1, key=f"e_semi_{_rid}")
                             _e_final = _ef8.number_input("완제품 수량", min_value=0, value=int(_sr.get("완제품수량", 0) or 0), step=1, key=f"e_final_{_rid}")
+                            st.markdown("<p style='font-size:0.82rem;font-weight:700;color:#7a5f3a;margin:10px 0 2px 0;'> 재작업 예정 일정</p>", unsafe_allow_html=True)
+                            _ef9, _ef10 = st.columns(2)
+                            _e_rw_date_val = _sr.get("재작업예정일", None)
+                            try:
+                                _e_rw_date_val = date.fromisoformat(_e_rw_date_val) if _e_rw_date_val else None
+                            except Exception:
+                                _e_rw_date_val = None
+                            _e_rw_date = _ef9.date_input("재작업 예정일", value=_e_rw_date_val, key=f"e_rw_date_{_rid}")
+                            _e_rw_note = _ef10.text_input("재작업 비고", value=_sr.get("재작업비고", "") or "", key=f"e_rw_note_{_rid}")
+                            _ef11, _ef12 = st.columns(2)
+                            _e_rw_semi  = _ef11.number_input("재작업 반제품 예정", min_value=0, value=int(_sr.get("재작업반제품", 0) or 0), step=1, key=f"e_rw_semi_{_rid}")
+                            _e_rw_final = _ef12.number_input("재작업 완제품 예정", min_value=0, value=int(_sr.get("재작업완제품", 0) or 0), step=1, key=f"e_rw_final_{_rid}")
                             _esave, _ecancel = st.columns(2)
                             _submitted_edit = _esave.form_submit_button(" 저장", type="primary", use_container_width=True)
                             _cancel_edit    = _ecancel.form_submit_button(" 취소", use_container_width=True)
@@ -4211,8 +4260,12 @@ elif curr_l == "생산 중단 일지":
                                 "종료시간":   _e_end.strip() if _e_end.strip() else None,
                                 "중단원인":   _e_cause.strip(),
                                 "조치사항":   _e_action.strip(),
-                                "반제품수량": int(_e_semi),
-                                "완제품수량": int(_e_final),
+                                "반제품수량":   int(_e_semi),
+                                "완제품수량":   int(_e_final),
+                                "재작업예정일": str(_e_rw_date) if _e_rw_date else None,
+                                "재작업반제품": int(_e_rw_semi),
+                                "재작업완제품": int(_e_rw_final),
+                                "재작업비고":   _e_rw_note.strip(),
                             }
                             if update_stoppage_log(int(_rid), _upd):
                                 st.session_state[f"stop_edit_mode_{_rid}"] = False
