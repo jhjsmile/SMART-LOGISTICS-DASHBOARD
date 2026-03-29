@@ -508,5 +508,111 @@ def render_admin_manual():
            Chat ID 확인: <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> 접속 후 <code>chat.id</code> 값 사용
         </p>""")
 
+    with st.expander(" 14. 생산 중단 일지"):
+        _section("", "생산 중단 일지 개요", "#6B3A2A")
+        _box("""
+        생산 현장에서 발생하는 라인 중단 이벤트를 기록·추적하는 메뉴입니다.<br>
+        <b>접근 권한</b>: 모든 역할 (컨트롤 타워는 조회만 가능)
+        <ul style='margin:6px 0 0;padding-left:1.4em;'>
+          <li><b>조립·검사·포장·OQC 담당자</b> — 자신의 라인 중단 일지 등록</li>
+          <li><b>관리자·마스터</b> — 전체 조회, 수정, 삭제, 완료 처리</li>
+          <li><b>컨트롤 타워</b> — 전체 조회만 가능</li>
+        </ul>""")
+
+        _section("", "일지 등록 항목", "#6B3A2A")
+        _box("""
+        <table style='width:100%;border-collapse:collapse;font-size:0.88rem;'>
+          <tr style='background:#6B3A2A;color:#fff;'>
+            <th style='padding:7px 10px;text-align:left;'>항목</th>
+            <th style='padding:7px 10px;text-align:left;'>설명</th>
+            <th style='padding:7px 10px;text-align:left;'>필수</th>
+          </tr>
+          <tr style='background:#f8f4f0;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>중단 날짜 / 반</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>발생 날짜와 해당 반 선택</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>✅</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>라인 / 중단 유형</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>조립·검사·OQC·포장·전체 라인 / 설비 고장·자재 부족·품질 이슈·작업 불량·관리자 작업지도 불량 등</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>✅</td>
+          </tr>
+          <tr style='background:#f8f4f0;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>시작/종료 시간</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>HH:MM 형식. 종료 미입력 시 <b>진행 중</b> 상태로 등록</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>시작 ✅ / 종료 선택</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>중단 원인 / 조치 사항</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>구체적인 원인과 취해진 조치 기술</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>원인 ✅ / 조치 선택</td>
+          </tr>
+          <tr style='background:#f8f4f0;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>조치 수량</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>해당 중단으로 처리된 반제품·완제품 수량</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>선택</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;'>재작업 예정 일정</td>
+            <td style='padding:6px 10px;'>전체 재작업이 당일 불가 시 예정일·예정 수량·비고 등록</td>
+            <td style='padding:6px 10px;'>선택</td>
+          </tr>
+        </table>""")
+
+        _section("", "조회 탭 사용법", "#6B3A2A")
+        _box("""
+        <ul style='margin:0;padding-left:1.4em;'>
+          <li><b>기간 프리셋</b>: 오늘 / 이번 주 / 이번 달 / 지난 달 / 전체 / 직접 입력 선택</li>
+          <li><b>반·유형 필터</b>: 특정 반 또는 중단 유형으로 범위 축소</li>
+          <li>상단 KPI 카드: 총 건수 · 진행 중 · 설비 고장 · 자재 부족 현황 요약</li>
+          <li>각 일지를 클릭하면 원인·조치·수량·재작업 예정 정보 확인 가능</li>
+        </ul>""")
+
+        _section("", "관리자 전용 기능", "#6B3A2A")
+        _box("""
+        <table style='width:100%;border-collapse:collapse;font-size:0.88rem;'>
+          <tr style='background:#6B3A2A;color:#fff;'>
+            <th style='padding:7px 10px;text-align:left;'>버튼</th>
+            <th style='padding:7px 10px;text-align:left;'>동작</th>
+          </tr>
+          <tr style='background:#f8f4f0;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'> 재작업 완료</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>재작업 예정일이 등록된 미완료 건에만 표시. 클릭 시 <b>재작업 완료</b> 뱃지로 전환</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'> 종료 처리</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'><b>진행 중</b> 상태의 일지에 종료 시간 입력 후 완료 처리</td>
+          </tr>
+          <tr style='background:#f8f4f0;'>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'> 수정</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #ddd;'>모든 필드 인라인 수정 (재작업 예정 일정 포함)</td>
+          </tr>
+          <tr>
+            <td style='padding:6px 10px;'> 삭제</td>
+            <td style='padding:6px 10px;'>해당 일지 영구 삭제</td>
+          </tr>
+        </table>""")
+
+        _section("", "Supabase 테이블 구조 (production_stoppage_log)", "#6B3A2A")
+        _box("""
+        <table style='width:100%;border-collapse:collapse;font-size:0.85rem;'>
+          <tr style='background:#6B3A2A;color:#fff;'>
+            <th style='padding:6px 10px;text-align:left;'>컬럼</th>
+            <th style='padding:7px 10px;text-align:left;'>타입</th>
+            <th style='padding:7px 10px;text-align:left;'>설명</th>
+          </tr>
+          <tr style='background:#f8f4f0;'><td style='padding:5px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>id</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>bigserial</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>자동 증가 PK</td></tr>
+          <tr><td style='padding:5px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>날짜</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>text</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>YYYY-MM-DD</td></tr>
+          <tr style='background:#f8f4f0;'><td style='padding:5px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>반 / 라인 / 중단유형</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>text</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>분류 값</td></tr>
+          <tr><td style='padding:5px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>시작시간 / 종료시간</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>text</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>HH:MM, 종료 null = 진행 중</td></tr>
+          <tr style='background:#f8f4f0;'><td style='padding:5px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>중단원인 / 조치사항</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>text</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>자유 텍스트</td></tr>
+          <tr><td style='padding:5px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>반제품수량 / 완제품수량</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>integer</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>조치 수량</td></tr>
+          <tr style='background:#f8f4f0;'><td style='padding:5px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>재작업예정일</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>text</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>YYYY-MM-DD, null = 재작업 없음</td></tr>
+          <tr><td style='padding:5px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>재작업반제품 / 재작업완제품</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>integer</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>재작업 예정 수량</td></tr>
+          <tr style='background:#f8f4f0;'><td style='padding:5px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>재작업비고</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>text</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>재작업 관련 메모</td></tr>
+          <tr><td style='padding:5px 10px;border-bottom:1px solid #ddd;font-family:monospace;'>재작업완료</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>text</td><td style='padding:5px 10px;border-bottom:1px solid #ddd;'>"Y" = 완료, 공백 = 미완료</td></tr>
+          <tr style='background:#f8f4f0;'><td style='padding:5px 10px;font-family:monospace;'>작성자 / 등록시간</td><td style='padding:5px 10px;'>text</td><td style='padding:5px 10px;'>로그인 ID / KST 등록 시각</td></tr>
+        </table>""")
+
     st.markdown("<br>", unsafe_allow_html=True)
     st.info(" Supabase 테이블 편집은 [supabase.com](https://supabase.com) → 프로젝트 → Table Editor에서 진행합니다.")
