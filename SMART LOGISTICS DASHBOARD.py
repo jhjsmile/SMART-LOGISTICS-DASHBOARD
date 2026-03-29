@@ -3996,7 +3996,7 @@ elif curr_l == "생산 중단 일지":
     st.markdown("<h2 class='centered-title'> 생산 중단 일지</h2>", unsafe_allow_html=True)
 
     _is_admin_stop = st.session_state.user_role in ["master", "admin"]
-    _is_readonly_stop = st.session_state.user_role in ["control_tower"]
+    _is_readonly_stop = not _is_admin_stop  # 관리자·마스터만 작성 가능
 
     _STOP_TYPES = ["설비 고장", "자재 부족", "품질 이슈", "안전 사고", "정전/유틸리티", "작업자 부족", "작업 불량", "관리자 작업지도 불량", "기타"]
     _STOP_LINES = ["조립 라인", "검사 라인", "OQC 라인", "포장 라인", "전체 라인"]
@@ -4005,7 +4005,7 @@ elif curr_l == "생산 중단 일지":
 
     with _st_tab1:
         if _is_readonly_stop:
-            st.info("컨트롤 타워 권한은 조회만 가능합니다.")
+            st.info("생산 중단 일지 등록은 관리자·마스터만 가능합니다. 조회 탭에서 내역을 확인하세요.")
         else:
             st.markdown("<div class='section-title'> 생산 중단 일지 등록</div>", unsafe_allow_html=True)
             with st.form("stoppage_form", clear_on_submit=True):
