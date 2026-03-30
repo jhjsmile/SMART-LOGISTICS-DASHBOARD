@@ -1244,20 +1244,21 @@ elif curr_l == "조립 라인":
                 rc[4].caption(ship if ship and ship != 'nan' else "-")
                 rc[5].caption(f" {note}" if note and note != 'nan' else "-")
 
-    # 이번 달 전체 일정
+    # 이번 달 전체 일정 (오늘 이후 ~ 말일)
     _month_sch_pre = sch_all[
         (sch_all['날짜'].str.startswith(today_str[:7])) &
+        (sch_all['날짜'] >= today_str) &
         (sch_all['반'] == curr_g)
     ] if not sch_all.empty else pd.DataFrame()
     _month_sch_cnt = len(_month_sch_pre)
-    with st.expander(f" {curr_g} 이번 달 전체 일정 보기  ·  {_month_sch_cnt}건" if _month_sch_cnt else f" {curr_g} 이번 달 전체 일정 보기  ·  없음", expanded=_xp("asm_sch_month"), key="_xp_asm_sch_month"):
+    with st.expander(f" {curr_g} 앞으로의 일정  ·  {_month_sch_cnt}건" if _month_sch_cnt else f" {curr_g} 앞으로의 일정  ·  없음", expanded=_xp("asm_sch_month"), key="_xp_asm_sch_month"):
         month_sch = _month_sch_pre
         if not month_sch.empty:
             show_cols = ['날짜','카테고리','모델명','pn','조립수','출하계획','특이사항']
             show_cols = [c for c in show_cols if c in month_sch.columns]
             st.dataframe(month_sch[show_cols].sort_values('날짜').rename(columns={'조립수': '처리수'}), use_container_width=True, hide_index=True)
         else:
-            st.info("이번 달 등록된 일정이 없습니다.")
+            st.info("앞으로 등록된 일정이 없습니다.")
 
     st.divider()
     db_v = st.session_state.production_db
