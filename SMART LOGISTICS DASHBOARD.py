@@ -536,6 +536,8 @@ if 'current_line'        not in st.session_state: st.session_state.current_line 
 if 'confirm_target'      not in st.session_state: st.session_state.confirm_target      = None
 if 'wait_checked'        not in st.session_state: st.session_state.wait_checked        = {}
 if 'wait_scan_cnt'       not in st.session_state: st.session_state.wait_scan_cnt       = {}
+if 'bc_trim_enabled'    not in st.session_state: st.session_state.bc_trim_enabled    = False
+if 'bc_trim_digits'     not in st.session_state: st.session_state.bc_trim_digits     = 7
 
 # =================================================================
 # 6. 로그인
@@ -1572,6 +1574,28 @@ elif curr_l == "조립 라인":
             key=_msn_field_key)
         ef2.caption(" 자재 시리얼 입력 완료 후 [생산 시작 등록] 버튼을 누르세요")
 
+        # 바코드 자릿수 변환 설정
+        with st.expander(" 바코드 자릿수 설정", expanded=False):
+            _bt_col1, _bt_col2 = st.columns([2, 1])
+            st.session_state.bc_trim_enabled = _bt_col1.toggle(
+                "뒷자리 N자리만 사용",
+                value=st.session_state.bc_trim_enabled,
+                key=f"bc_trim_tog_{curr_g}",
+                help="스캔된 바코드에서 뒤 N자리만 추출합니다. 바코드 형식이 긴 모델에 사용하세요."
+            )
+            if st.session_state.bc_trim_enabled:
+                st.session_state.bc_trim_digits = _bt_col2.number_input(
+                    "자릿수", min_value=1, max_value=30,
+                    value=st.session_state.bc_trim_digits,
+                    key=f"bc_trim_n_{curr_g}"
+                )
+                st.caption(f" 스캔값 뒤 **{st.session_state.bc_trim_digits}자리**만 사용 — 예: `1S4901E1C41LPX61` → `{'1S4901E1C41LPX61'[-st.session_state.bc_trim_digits:]}`")
+
+        def _bc_trim(val: str) -> str:
+            if st.session_state.bc_trim_enabled and val:
+                return val[-st.session_state.bc_trim_digits:]
+            return val
+
         st.divider()
 
         st.markdown("<p style='font-size:0.88rem;font-weight:700;color:#5a4f45;margin:0 0 6px 0;'> 자재 시리얼</p>", unsafe_allow_html=True)
@@ -1598,7 +1622,7 @@ elif curr_l == "조립 라인":
 
         if scan_input.strip():
             import time as _time
-            _scanned = scan_input.strip()
+            _scanned = _bc_trim(scan_input.strip())
             _scan_ts_key  = f"scan_ts_{curr_g}"
             _last_ts  = st.session_state.get(_scan_ts_key, 0)
             _last_val = st.session_state.get(_scan_processed_key, "")
@@ -1688,7 +1712,7 @@ elif curr_l == "조립 라인":
         _start_col, _ = st.columns([1, 2])
         if _start_col.button("▶ 생산 시작 등록", use_container_width=True, type="primary", key=f"start_btn_{curr_g}"):
             if target_model != "선택하세요." and target_item not in [None, "", "모델 선택 대기", "(품목코드 없음)"] and target_sn.strip():
-                _do_register_sn(target_sn.strip())
+                _do_register_sn(_bc_trim(target_sn.strip()))
             else:
                 st.warning("모델, 품목코드, 메인 S/N을 모두 입력해주세요.")
 
@@ -1742,11 +1766,12 @@ elif curr_l == "조립 라인":
                 asc2.caption(" 스캐너로 스캔하면 Enter가 자동 입력됩니다")
 
                 if add_scan_input.strip():
-                    _already = any(m["자재시리얼"] == add_scan_input.strip() for m in st.session_state[_add_mat_list_key])
+                    _add_scanned = _bc_trim(add_scan_input.strip())
+                    _already = any(m["자재시리얼"] == _add_scanned for m in st.session_state[_add_mat_list_key])
                     if not _already:
-                        st.session_state[_add_mat_list_key].append({"자재명": add_sel_mat_name, "자재시리얼": add_scan_input.strip()})
+                        st.session_state[_add_mat_list_key].append({"자재명": add_sel_mat_name, "자재시리얼": _add_scanned})
                     else:
-                        st.toast(f" 이미 추가된 자재 S/N: {add_scan_input.strip()}")
+                        st.toast(f" 이미 추가된 자재 S/N: {_add_scanned}")
                     st.session_state["_autofocus_after_rerun"] = f"add_scan_sn_{curr_g}_{st.session_state[_add_scan_cnt_key] + 1}"
                     st.session_state[_add_scan_cnt_key] += 1
                     _rerun("asm_mat")
