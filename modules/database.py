@@ -208,12 +208,11 @@ def load_production_history(date_from: str, date_to: str, limit: int = 5000) -> 
                 return []
 
     try:
-        # 최근 30일 이내 구간이 조회 범위에 포함되면 production 조회
-        if date_to >= cutoff:
-            eff_from = cutoff if date_from < cutoff else date_from
-            rows += _fetch("production", eff_from, date_to)
+        # production 테이블: WIP 제품은 아카이브되지 않고 항상 여기에 남아 있으므로
+        # date_from 기준으로 전체 구간 조회 (cutoff 제한 제거)
+        rows += _fetch("production", date_from, date_to)
 
-        # 30일 이전 구간이 조회 범위에 포함되면 production_history 조회
+        # production_history: 완료 후 아카이브된 항목 (cutoff 이전 구간만 존재)
         if date_from < cutoff:
             eff_to_hist = min(date_to, cutoff)
             rows += _fetch("production_history", date_from, eff_to_hist)
@@ -221,9 +220,10 @@ def load_production_history(date_from: str, date_to: str, limit: int = 5000) -> 
         if rows:
             df = pd.DataFrame(rows)
             df = df.drop(columns=[c for c in ['id','deleted_at','deleted_by'] if c in df.columns])
-            df = df.drop_duplicates(subset=['시리얼','시간'])
-            df = df.sort_values('시간', ascending=False).head(limit)
-            return df.fillna("")
+            df = df.sort_values('시간', ascending=False)
+            # 시리얼 기준 중복 제거 (production 우선 — 더 최신 상태 유지)
+            df = df.drop_duplicates(subset=['시리얼'], keep='first')
+            return df.fillna("").head(limit)
         return pd.DataFrame(columns=_EMPTY_COLS)
     except Exception as e:
         if st.session_state.get('login_status', False):
