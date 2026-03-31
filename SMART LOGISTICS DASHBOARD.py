@@ -1037,10 +1037,10 @@ if curr_l == "현황판":
     completed  = len(db_all[(db_all['라인']=='포장 라인')&(db_all['상태']=='완료')])
     in_prog    = len(db_all[db_all['상태'].isin(ACTIVE_STATES)])
     defects    = len(db_all[db_all['상태'].str.contains('불량|부적합',na=False)])
-    col1.markdown(f"<div class='stat-box'><div class='stat-label'> 총 투입</div><div class='stat-value'>{total}</div></div>", unsafe_allow_html=True)
-    col2.markdown(f"<div class='stat-box'><div class='stat-label'> 최종 완료</div><div class='stat-value'>{completed}</div></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='stat-box'><div class='stat-label'> 작업 중</div><div class='stat-value'>{in_prog}</div></div>", unsafe_allow_html=True)
-    col4.markdown(f"<div class='stat-box'><div class='stat-label'> 불량 이슈</div><div class='stat-value'>{defects}</div></div>", unsafe_allow_html=True)
+    col1.markdown(f"<div class='stat-box'><div class='stat-label'> 총 투입</div><div class='stat-value'>{total}</div><div class='stat-sub'>현재 DB 전체 등록 건</div></div>", unsafe_allow_html=True)
+    col2.markdown(f"<div class='stat-box'><div class='stat-label'> 최종 완료</div><div class='stat-value'>{completed}</div><div class='stat-sub'>포장 라인 완료 기준</div></div>", unsafe_allow_html=True)
+    col3.markdown(f"<div class='stat-box'><div class='stat-label'> 작업 중</div><div class='stat-value'>{in_prog}</div><div class='stat-sub'>조립~포장 공정 진행 중</div></div>", unsafe_allow_html=True)
+    col4.markdown(f"<div class='stat-box'><div class='stat-label'> 불량 이슈</div><div class='stat-value'>{defects}</div><div class='stat-sub'>불량·부적합 상태 건</div></div>", unsafe_allow_html=True)
 
     # 반별 상세 보기 토글
     _show_ban_detail = st.toggle("반별 상세 보기", value=True, key="dash_ban_detail")
@@ -1095,16 +1095,20 @@ if curr_l == "현황판":
                     f"<div style='display:grid;grid-template-columns:1fr 1fr;gap:6px;'>"
                     f"<div style='background:#f0f4f8;border-radius:8px;padding:8px 6px;text-align:center;'>"
                     f"<div style='font-size:0.62rem;color:#8a7f72;font-weight:bold;margin-bottom:3px;'>이번달 투입</div>"
-                    f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:#5a96c8;font-weight:bold;'>{_총투입}</div></div>"
+                    f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:#5a96c8;font-weight:bold;'>{_총투입}</div>"
+                    f"<div style='font-size:0.58rem;color:#aaa;margin-top:2px;'>완료 이력 기준</div></div>"
                     f"<div style='background:#f0f4f8;border-radius:8px;padding:8px 6px;text-align:center;'>"
                     f"<div style='font-size:0.62rem;color:#8a7f72;font-weight:bold;margin-bottom:3px;'>누적 완료</div>"
-                    f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:#4da875;font-weight:bold;'>{_누적완료}</div></div>"
+                    f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:#4da875;font-weight:bold;'>{_누적완료}</div>"
+                    f"<div style='font-size:0.58rem;color:#aaa;margin-top:2px;'>포장 완료 기준</div></div>"
                     f"<div style='background:#f0f4f8;border-radius:8px;padding:8px 6px;text-align:center;'>"
                     f"<div style='font-size:0.62rem;color:#8a7f72;font-weight:bold;margin-bottom:3px;'>진행 중</div>"
-                    f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:#e8a838;font-weight:bold;'>{_진행중}</div></div>"
+                    f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:#e8a838;font-weight:bold;'>{_진행중}</div>"
+                    f"<div style='font-size:0.58rem;color:#aaa;margin-top:2px;'>현재 공정 대기·작업 중</div></div>"
                     f"<div style='background:{'#fde8e7' if _불량 > 0 else '#f0f4f8'};border-radius:8px;padding:8px 6px;text-align:center;'>"
                     f"<div style='font-size:0.62rem;color:#8a7f72;font-weight:bold;margin-bottom:3px;'>불량·부적합</div>"
-                    f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:{'#c8605a' if _불량 > 0 else '#aaa'};font-weight:bold;'>{_불량}</div></div>"
+                    f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:{'#c8605a' if _불량 > 0 else '#aaa'};font-weight:bold;'>{_불량}</div>"
+                    f"<div style='font-size:0.58rem;color:#aaa;margin-top:2px;'>현재 불량·부적합 상태</div></div>"
                     f"</div></div>",
                     unsafe_allow_html=True
                 )
