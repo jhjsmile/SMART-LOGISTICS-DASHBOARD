@@ -255,43 +255,6 @@ WIP_STATES    = ['조립중', '수리 완료(재투입)']
 DONE_STATES   = ['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료']
 ACTIVE_STATES = ['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)','불량 처리 중']
 
-# ── 한국어 날짜 범위 선택기 헬퍼 ───────────────────────────────
-def _kor_date_range(key: str, default_from=None, default_to=None):
-    """연도·월·일 selectbox 기반 한국어 날짜 범위 선택기. (from_str, to_str) 반환."""
-    import calendar as _cal
-    _td   = date.today()
-    _yrs  = list(range(_td.year - 2, _td.year + 1))
-    _mths = [f"{m}월" for m in range(1, 13)]
-    _df   = default_from or (_td - timedelta(days=30))
-    _dt   = default_to   or _td
-
-    _c1, _c2, _c3, _csep, _c4, _c5, _c6 = st.columns([1.5, 1.1, 0.9, 0.25, 1.5, 1.1, 0.9])
-    _fy = _c1.selectbox("시작 연도", [f"{y}년" for y in _yrs],
-                        index=_yrs.index(_df.year) if _df.year in _yrs else len(_yrs)-1,
-                        key=f"{key}_fy", label_visibility="collapsed")
-    _fm = _c2.selectbox("시작 월", _mths, index=_df.month - 1,
-                        key=f"{key}_fm", label_visibility="collapsed")
-    _fy_i, _fm_i = int(_fy.replace("년", "")), int(_fm.replace("월", ""))
-    _fd_max = _cal.monthrange(_fy_i, _fm_i)[1]
-    _fd = _c3.selectbox("시작 일", [f"{d}일" for d in range(1, _fd_max + 1)],
-                        index=min(_df.day, _fd_max) - 1,
-                        key=f"{key}_fd", label_visibility="collapsed")
-    _csep.markdown("<div style='padding-top:28px;text-align:center;color:#aaa;'>~</div>", unsafe_allow_html=True)
-    _ty = _c4.selectbox("종료 연도", [f"{y}년" for y in _yrs],
-                        index=_yrs.index(_dt.year) if _dt.year in _yrs else len(_yrs)-1,
-                        key=f"{key}_ty", label_visibility="collapsed")
-    _tm = _c5.selectbox("종료 월", _mths, index=_dt.month - 1,
-                        key=f"{key}_tm", label_visibility="collapsed")
-    _ty_i, _tm_i = int(_ty.replace("년", "")), int(_tm.replace("월", ""))
-    _td_max = _cal.monthrange(_ty_i, _tm_i)[1]
-    _td2 = _c6.selectbox("종료 일", [f"{d}일" for d in range(1, _td_max + 1)],
-                         index=min(_dt.day, _td_max) - 1,
-                         key=f"{key}_td", label_visibility="collapsed")
-    return (
-        f"{_fy_i}-{_fm_i:02d}-{int(_fd.replace('일',''))  :02d}",
-        f"{_ty_i}-{_tm_i:02d}-{int(_td2.replace('일','')) :02d}",
-    )
-
 # ── 상태 스타일 (모듈 레벨 상수) ───────────────────────────────
 STATUS_STYLE = {
     '검사대기': ('#fff8e1','#f4922a','#f5a623',''),
@@ -2359,12 +2322,19 @@ elif curr_l in ["검사 라인", "포장 라인"]:
 elif curr_l == "생산 현황 리포트":
     st.markdown("<h2 class='centered-title'> 생산 현황 리포트</h2>", unsafe_allow_html=True)
 
-    _rpt_top1, _ = st.columns([2, 3])
+    _rpt_top1, _rpt_top2 = st.columns([2, 3])
     with _rpt_top1:
         v_group = st.radio("조회 범위", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="prod_report_grp")
-    st.caption("조회 기간")
-    _rpt_from, _rpt_to = _kor_date_range("rpt", date.today() - timedelta(days=30), date.today())
-    df_rpt = load_production_history(_rpt_from, _rpt_to)
+    with _rpt_top2:
+        _rpt_range = st.date_input(
+            "조회 기간",
+            value=(date.today() - timedelta(days=30), date.today()),
+            key="prod_rpt_date_range"
+        )
+    if isinstance(_rpt_range, (list, tuple)) and len(_rpt_range) == 2:
+        df_rpt = load_production_history(str(_rpt_range[0]), str(_rpt_range[1]))
+    else:
+        df_rpt = load_production_history(str(date.today()), str(date.today()))
     if v_group != "전체":
         df_rpt = df_rpt[df_rpt['반'] == v_group]
 
@@ -2613,11 +2583,17 @@ elif curr_l == "검사 라인":
 
     _qc_hist_total = len(db_qc[db_qc['라인'] == '검사 라인'])
     with st.expander(f" 검사 이력  ·  전체 {_qc_hist_total}건", expanded=_xp("qc_hist"), key="_xp_qc_hist"):
-        _, _qc_h2 = st.columns([3, 1])
+        _qc_h1, _qc_h2 = st.columns([3, 1])
+        _qc_drange = _qc_h1.date_input(
+            "조회 기간",
+            value=(date.today() - timedelta(days=30), date.today()),
+            key="qc_hist_date_range"
+        )
         _qc_state_f = _qc_h2.selectbox("상태 필터", ["전체", "검사대기", "검사중", "불량 처리 중"], key="qc_hist_state")
-        st.caption("조회 기간")
-        _qc_from, _qc_to = _kor_date_range("qc_hist", date.today() - timedelta(days=30), date.today())
-        hist = load_production_history(_qc_from, _qc_to)
+        if isinstance(_qc_drange, (list, tuple)) and len(_qc_drange) == 2:
+            hist = load_production_history(str(_qc_drange[0]), str(_qc_drange[1]))
+        else:
+            hist = load_production_history(str(date.today()), str(date.today()))
         hist = hist[hist['라인'] == '검사 라인']
         if _qc_state_f != "전체":
             hist = hist[hist['상태'] == _qc_state_f]
@@ -2747,11 +2723,17 @@ elif curr_l == "포장 라인":
 
     _pk_done_total = len(db_pk[db_pk['상태'] == '완료'])
     with st.expander(f" 완료 이력  ·  전체 {_pk_done_total}건", expanded=_xp("pk_hist"), key="_xp_pk_hist"):
-        _, _pk_h2 = st.columns([3, 1])
+        _pk_h1, _pk_h2 = st.columns([3, 1])
+        _pk_drange = _pk_h1.date_input(
+            "조회 기간",
+            value=(date.today() - timedelta(days=30), date.today()),
+            key="pk_hist_date_range"
+        )
         _pk_model_f = _pk_h2.selectbox("모델 필터", ["전체"] + sorted(db_pk['모델'].dropna().unique().tolist()), key="pk_hist_model")
-        st.caption("조회 기간")
-        _pk_from, _pk_to = _kor_date_range("pk_hist", date.today() - timedelta(days=30), date.today())
-        hist = load_production_history(_pk_from, _pk_to)
+        if isinstance(_pk_drange, (list, tuple)) and len(_pk_drange) == 2:
+            hist = load_production_history(str(_pk_drange[0]), str(_pk_drange[1]))
+        else:
+            hist = load_production_history(str(date.today()), str(date.today()))
         hist = hist[(hist['상태'] == '완료') & (hist['라인'] == '포장 라인')]
         if _pk_model_f != "전체":
             hist = hist[hist['모델'] == _pk_model_f]
@@ -3271,8 +3253,11 @@ elif curr_l == "OQC 라인":
         with st.expander(f" 부적합 판정 이력 (OQC)  ·  {len(_fail_audit)}건",
                          expanded=_xp("oqc_nonconf"), key="_xp_oqc_nonconf"):
             if not _fail_audit.empty:
-                st.caption("조회 기간")
-                _nf_from, _nf_to = _kor_date_range("oqc_nc", date.today() - timedelta(days=30), date.today())
+                _nf_date = st.date_input(
+                    "조회 기간",
+                    value=(date.today() - timedelta(days=30), date.today()),
+                    key="oqc_nc_date_range"
+                )
                 _nf1, _nf2, _nf3 = st.columns([1.5, 2, 2])
                 _nc_ban    = _nf1.selectbox("반 필터",     ["전체"] + PRODUCTION_GROUPS, key="oqc_nc_ban")
                 _nc_sn     = _nf2.text_input("S/N 검색",  placeholder="시리얼 일부 입력", key="oqc_nc_sn")
@@ -3280,7 +3265,8 @@ elif curr_l == "OQC 라인":
                 _nc_reason = _nf3.selectbox("부적합 사유", _nc_reason_opts, key="oqc_nc_reason")
 
                 _nc_view = _fail_audit.copy()
-                _nc_view = _nc_view[_nc_view['시간'].astype(str).str[:10].between(_nf_from, _nf_to)]
+                if isinstance(_nf_date, (list, tuple)) and len(_nf_date) == 2:
+                    _nc_view = _nc_view[_nc_view['시간'].astype(str).str[:10].between(str(_nf_date[0]), str(_nf_date[1]))]
                 if _nc_ban != "전체":
                     _nc_view = _nc_view[_nc_view['반'] == _nc_ban]
                 if _nc_sn.strip():
@@ -3866,11 +3852,19 @@ elif curr_l == "수리 현황 리포트":
     st.markdown("<h2 class='centered-title'> 품질 분석 및 수리 이력 리포트</h2>", unsafe_allow_html=True)
 
     # ── 날짜 / 반 / 상태 필터 ────────────────────────────────────
-    st.caption("조회 기간")
-    _rp_from, _rp_to = _kor_date_range("repair_rpt", date.today() - timedelta(days=30), date.today())
-    _rp_f2, _rp_f3 = st.columns([1.2, 1.5])
+    _rp_f1, _rp_f2, _rp_f3 = st.columns([3, 1.2, 1.5])
+    _rp_drange = _rp_f1.date_input(
+        "조회 기간",
+        value=(date.today() - timedelta(days=30), date.today()),
+        key="repair_rpt_date_range"
+    )
     _rp_ban   = _rp_f2.selectbox("반 필터", ["전체"] + PRODUCTION_GROUPS, key="repair_rpt_ban")
     _rp_state = _rp_f3.selectbox("상태 필터", ["전체", "불량 처리 중", "수리 완료(재투입)", "부적합(OQC)"], key="repair_rpt_state")
+
+    if isinstance(_rp_drange, (list, tuple)) and len(_rp_drange) == 2:
+        _rp_from, _rp_to = str(_rp_drange[0]), str(_rp_drange[1])
+    else:
+        _rp_from = _rp_to = str(date.today())
 
     hist_df    = load_production_history(_rp_from, _rp_to)
     _audit_rp  = load_audit_log_by_date(_rp_from, _rp_to)
@@ -4206,7 +4200,15 @@ elif curr_l == "생산 중단 일지":
             _sv_from = ""
             _sv_to   = ""
         else:  # 직접 입력
-            _sv_from, _sv_to = _kor_date_range("stop_view", _today - timedelta(days=30), _today)
+            _sv_drange = st.date_input(
+                "날짜 범위 선택",
+                value=(_today - timedelta(days=30), _today),
+                key="stop_view_date"
+            )
+            if isinstance(_sv_drange, (list, tuple)) and len(_sv_drange) == 2:
+                _sv_from, _sv_to = str(_sv_drange[0]), str(_sv_drange[1])
+            else:
+                _sv_from = _sv_to = str(_today)
 
         _stop_df = load_stoppage_log(_sv_from, _sv_to)
 
