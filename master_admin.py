@@ -11,9 +11,9 @@ from modules.database import (
     _clear_production_cache, _clear_schedule_cache, _clear_plan_cache,
     _clear_audit_cache,
     _clear_access_request_cache,
-    load_realtime_ledger, load_schedule,
+    load_realtime_ledger, load_schedule, load_model_master,
     update_row, delete_all_rows, delete_production_row_by_sn,
-    load_app_setting, save_app_setting,
+    load_app_setting, load_all_app_settings, save_app_setting,
     load_access_requests, review_access_request,
     insert_audit_log,
     delete_all_audit_log, delete_audit_log_row,
@@ -482,6 +482,52 @@ _DD_DEFAULTS = {
 }
 
 
+# ─── 삭제 관리 탭용 캐시 함수 (모듈 상단 정의 → 탭 재진입 시 캐시 재사용 보장) ──
+@st.cache_data(ttl=60)
+def _load_audit_all():
+    try:
+        res = get_supabase().table("audit_log").select("*").order("시간", desc=True).limit(500).execute()
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame(
+            columns=['id','시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+    except Exception:
+        return pd.DataFrame(columns=['id','시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
+
+@st.cache_data(ttl=60)
+def _load_mat_all():
+    try:
+        res = get_supabase().table("material_serial").select("*").order("시간", desc=True).limit(500).execute()
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame(
+            columns=['id','시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+    except Exception:
+        return pd.DataFrame(columns=['id','시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+
+@st.cache_data(ttl=60)
+def _load_plan_log_all():
+    try:
+        res = get_supabase().table("plan_change_log").select("*").order("시간", desc=True).limit(500).execute()
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame(
+            columns=['id','시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
+    except Exception:
+        return pd.DataFrame(columns=['id','시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
+
+@st.cache_data(ttl=60)
+def _load_sch_log_all():
+    try:
+        res = get_supabase().table("schedule_change_log").select("*").order("시간", desc=True).limit(500).execute()
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame(
+            columns=['id','시간','일정id','날짜','반','모델명','이전내용','변경내용','변경사유','사유상세','작업자'])
+    except Exception:
+        return pd.DataFrame(columns=['id','시간','일정id','날짜','반','모델명','이전내용','변경내용','변경사유','사유상세','작업자'])
+
+@st.cache_data(ttl=60)
+def _load_plan_all():
+    try:
+        res = get_supabase().table("production_plan").select("*").order("월", desc=True).execute()
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame(columns=['id','반','월','계획수량'])
+    except Exception:
+        return pd.DataFrame(columns=['id','반','월','계획수량'])
+
+
 # ─── Supabase 연결 유지 ─────────────────────────────────────────────
 if "supabase_alive_checked" not in st.session_state:
     keep_supabase_alive()
@@ -493,39 +539,58 @@ if "admin_authenticated" not in st.session_state:
 if "user_id" not in st.session_state:
     st.session_state.user_id = None
 
-if "user_db" not in st.session_state:
-    try:
-        _res = get_supabase().table("users").select("username,password_hash,role,custom_permissions").execute()
-        st.session_state.user_db = {
-            row["username"]: {
-                "pw_hash": row.get("password_hash", ""),
-                "role": row.get("role", "assembly_team"),
-                **({"custom_permissions": json.loads(row["custom_permissions"])} if row.get("custom_permissions") else {})
-            }
-            for row in (_res.data or [])
-        }
-    except Exception:
-        st.session_state.user_db = {}
-
 if "group_master_models" not in st.session_state:
     st.session_state.group_master_models = {"제조1반": [], "제조2반": [], "제조3반": []}
 if "group_master_items" not in st.session_state:
     st.session_state.group_master_items = {"제조1반": {}, "제조2반": {}, "제조3반": {}}
-if "master_synced" not in st.session_state:
-    sync_master_to_session()
-    st.session_state.master_synced = True
 
-if "production_db" not in st.session_state:
-    st.session_state.production_db = load_realtime_ledger()
-if "schedule_db" not in st.session_state:
+# ─── 초기 DB 쿼리 병렬 실행 ─────────────────────────────────────────
+_need_user = "user_db" not in st.session_state
+_need_mst  = "master_synced" not in st.session_state
+_need_prod = "production_db" not in st.session_state
+_need_sch  = "schedule_db" not in st.session_state
+_need_plan = "production_plan" not in st.session_state
+_need_dd   = any(k not in st.session_state for k in _DD_DEFAULTS)
+
+if any([_need_user, _need_mst, _need_prod, _need_plan, _need_dd]):
+    def _fetch_users_raw():
+        try:
+            _r = get_supabase().table("users").select("username,password_hash,role,custom_permissions").execute()
+            return {
+                row["username"]: {
+                    "pw_hash": row.get("password_hash", ""),
+                    "role": row.get("role", "assembly_team"),
+                    **({"custom_permissions": json.loads(row["custom_permissions"])} if row.get("custom_permissions") else {})
+                }
+                for row in (_r.data or [])
+            }
+        except Exception:
+            return {}
+
+    with ThreadPoolExecutor(max_workers=5) as _pool:
+        _f_users = _pool.submit(_fetch_users_raw)        if _need_user else None
+        _f_mst   = _pool.submit(load_model_master)       if _need_mst  else None
+        _f_prod  = _pool.submit(load_realtime_ledger)    if _need_prod else None
+        _f_plan  = _pool.submit(load_production_plan)    if _need_plan else None
+        _f_dd    = _pool.submit(load_all_app_settings)   if _need_dd   else None
+
+    if _need_user:
+        st.session_state.user_db = _f_users.result()
+    if _need_mst:
+        sync_master_to_session()   # load_model_master 결과는 이미 캐시에 있음
+        st.session_state.master_synced = True
+    if _need_prod:
+        st.session_state.production_db = _f_prod.result()
+    if _need_plan:
+        st.session_state.production_plan = _f_plan.result()
+    if _need_dd:
+        _all_settings = _f_dd.result()
+        for _dd_key, _dd_default in _DD_DEFAULTS.items():
+            if _dd_key not in st.session_state:
+                st.session_state[_dd_key] = _all_settings.get(_dd_key, _dd_default)
+
+if _need_sch:
     st.session_state.schedule_db = load_schedule()
-if "production_plan" not in st.session_state:
-    st.session_state.production_plan = load_production_plan()
-
-for _dd_key, _dd_default in _DD_DEFAULTS.items():
-    if _dd_key not in st.session_state:
-        _loaded = load_app_setting(_dd_key)
-        st.session_state[_dd_key] = _loaded if _loaded is not None else _dd_default
 
 # ─── 옵티미스틱 업데이트 헬퍼 ────────────────────────────────────────
 def _prod_update(sn: str, data: dict) -> None:
@@ -1350,14 +1415,6 @@ else:
 
     # ─── 탭2: 감사 로그 ───────────────────────────────────────
     with del_tab2:
-        @st.cache_data(ttl=60)
-        def _load_audit_all():
-            try:
-                res = get_supabase().table("audit_log").select("*").order("시간", desc=True).limit(500).execute()
-                return pd.DataFrame(res.data) if res.data else pd.DataFrame(
-                    columns=['id','시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
-            except Exception: return pd.DataFrame(columns=['id','시간','시리얼','모델','반','이전상태','이후상태','작업자','비고'])
-
         audit_df = _load_audit_all()
         st.caption(f"현재 **{len(audit_df)}건** (최대 500건 표시)")
         if st.button(" 새로고침", key="audit_del_refresh"):
@@ -1412,14 +1469,6 @@ else:
 
     # ─── 탭3: 자재 시리얼 ────────────────────────────────────
     with del_tab3:
-        @st.cache_data(ttl=60)
-        def _load_mat_all():
-            try:
-                res = get_supabase().table("material_serial").select("*").order("시간", desc=True).limit(500).execute()
-                return pd.DataFrame(res.data) if res.data else pd.DataFrame(
-                    columns=['id','시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
-            except Exception: return pd.DataFrame(columns=['id','시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
-
         mat_df = _load_mat_all()
         st.caption(f"현재 **{len(mat_df)}건** (최대 500건 표시)")
         if st.button(" 새로고침", key="mat_del_refresh"):
@@ -1533,15 +1582,6 @@ else:
 
     # ─── 탭5: 계획 변경 이력 ─────────────────────────────────
     with del_tab5:
-        @st.cache_data(ttl=60)
-        def _load_plan_log_all():
-            try:
-                res = get_supabase().table("plan_change_log").select("*").order("시간", desc=True).limit(500).execute()
-                return pd.DataFrame(res.data) if res.data else pd.DataFrame(
-                    columns=['id','시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
-            except Exception:
-                return pd.DataFrame(columns=['id','시간','반','월','이전수량','변경수량','증감','변경사유','사유상세','작업자'])
-
         plog = _load_plan_log_all()
         st.caption(f"현재 **{len(plog)}건** (최대 500건 표시)")
         if st.button(" 새로고침", key="plog_del_refresh"):
@@ -1598,15 +1638,6 @@ else:
 
     # ─── 탭6: 일정 변경 이력 ─────────────────────────────────
     with del_tab6:
-        @st.cache_data(ttl=60)
-        def _load_sch_log_all():
-            try:
-                res = get_supabase().table("schedule_change_log").select("*").order("시간", desc=True).limit(500).execute()
-                return pd.DataFrame(res.data) if res.data else pd.DataFrame(
-                    columns=['id','시간','일정id','날짜','반','모델명','이전내용','변경내용','변경사유','사유상세','작업자'])
-            except Exception:
-                return pd.DataFrame(columns=['id','시간','일정id','날짜','반','모델명','이전내용','변경내용','변경사유','사유상세','작업자'])
-
         slog = _load_sch_log_all()
         st.caption(f"현재 **{len(slog)}건** (최대 500건 표시)")
         if st.button(" 새로고침", key="slog_del_refresh"):
@@ -1660,15 +1691,6 @@ else:
 
     # ─── 탭7: 월별 계획 수량 ──────────────────────────────────
     with del_tab7:
-        @st.cache_data(ttl=60)
-        def _load_plan_all():
-            try:
-                res = get_supabase().table("production_plan").select("*").order("월", desc=True).execute()
-                return pd.DataFrame(res.data) if res.data else pd.DataFrame(
-                    columns=['id','반','월','계획수량'])
-            except Exception:
-                return pd.DataFrame(columns=['id','반','월','계획수량'])
-
         plan_df = _load_plan_all()
         st.caption(f"현재 **{len(plan_df)}건** 등록됨")
         if st.button(" 새로고침", key="plan_del_refresh"):
