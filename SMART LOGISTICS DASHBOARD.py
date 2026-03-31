@@ -1260,10 +1260,13 @@ elif curr_l == "조립 라인":
 
     # ──  오늘의 목표 달성 현황 ─────────────────────────────────
     _plan_qty = int(pd.to_numeric(today_sch['조립수'], errors='coerce').fillna(0).sum()) if not today_sch.empty else 0
-    _done_today = len(f_df[
-        f_df['시간'].astype(str).str.startswith(today_str) &
-        f_df['상태'].isin(['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료'])
-    ]) if not f_df.empty else 0
+    # 오늘 누적: audit_log 최초 등록(이전상태='-')으로 집계 → 검사·포장 라인 이동 후에도 감소 없음
+    _today_audit = load_audit_log_by_date(today_str, today_str)
+    _done_today = int(len(_today_audit[
+        (_today_audit['이전상태'] == '-') &
+        (_today_audit['이후상태'] == '조립중') &
+        (_today_audit['반'] == curr_g)
+    ])) if not _today_audit.empty else 0
     _wip_today  = len(f_df[f_df['시간'].astype(str).str.startswith(today_str) & f_df['상태'].isin(['조립중','수리 완료(재투입)'])]) if not f_df.empty else 0
 
     if _plan_qty > 0:
