@@ -53,7 +53,7 @@ from modules.database import (
     _clear_master_cache, _clear_audit_cache, _clear_all_cache,
     _clear_help_request_cache, _clear_access_request_cache,
     clear_cache_for_tables,
-    load_realtime_ledger, load_production_history, load_production_by_serials, archive_old_completed,
+    load_realtime_ledger, load_production_history, archive_old_completed,
     insert_row, update_row,
     delete_all_rows, delete_production_row_by_sn,
     load_app_setting, save_app_setting,
@@ -2364,17 +2364,7 @@ elif curr_l == "생산 현황 리포트":
         v_group = st.radio("조회 범위", ["전체"] + PRODUCTION_GROUPS, horizontal=True, key="prod_report_grp")
     st.caption("조회 기간")
     _rpt_from, _rpt_to = _kor_date_range("rpt", date.today() - timedelta(days=30), date.today())
-    # 실제 투입일(최초 등록: 이전상태='-', 이후상태='조립중') 기준으로 시리얼 조회
-    _audit_rpt = load_audit_log_by_date(_rpt_from, _rpt_to)
-    if not _audit_rpt.empty and '이전상태' in _audit_rpt.columns:
-        _initial_mask = (_audit_rpt['이전상태'] == '-') & (_audit_rpt['이후상태'] == '조립중')
-        _initial_rpt = _audit_rpt[_initial_mask]
-        if v_group != "전체":
-            _initial_rpt = _initial_rpt[_initial_rpt['반'] == v_group]
-        _rpt_serials = tuple(sorted(_initial_rpt['시리얼'].unique()))
-    else:
-        _rpt_serials = ()
-    df_rpt = load_production_by_serials(_rpt_serials)
+    df_rpt = load_production_history(_rpt_from, _rpt_to)
     if v_group != "전체":
         df_rpt = df_rpt[df_rpt['반'] == v_group]
 
