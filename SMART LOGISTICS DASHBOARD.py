@@ -1749,12 +1749,15 @@ elif curr_l == "조립 라인":
                 _wt_reg = _wc5.button("▶ 투입", key=f"wt_reg_{curr_g}_{_wi}", use_container_width=True, type="primary")
                 _wt_del = _wc5.button("삭제", key=f"wt_del_{curr_g}_{_wi}", use_container_width=True)
                 if _wt_reg:
+                    _wt_reg_time = get_now_kst_str()
                     if insert_row({
-                        '시간': get_now_kst_str(), '반': curr_g, '라인': "조립 라인",
+                        '시간': _wt_reg_time, '반': curr_g, '라인': "조립 라인",
                         '모델': _witem['model'], '품목코드': _witem['item'],
                         '시리얼': _witem['sn'], '상태': '조립중',
                         '증상': '', '수리': '', '작업자': st.session_state.user_id
                     }):
+                        insert_audit_log(시리얼=_witem['sn'], 모델=_witem['model'], 반=curr_g,
+                            이전상태="-", 이후상태="조립중", 작업자=st.session_state.user_id)
                         st.session_state.production_db = load_realtime_ledger()
                         st.toast(f" 투입 완료: {_witem['sn']}")
                         _wt_do_rerun = True
@@ -2318,19 +2321,33 @@ elif curr_l == "생산 현황 리포트":
     else:
         _rpt_from = _rpt_to = str(date.today())
 
-    # 날짜 기준 = 메인 시리얼 최초 등록일 (조립 라인 등록 시점)
-    # audit_log에서 이전상태='-', 이후상태='조립중' 인 항목 → 해당 기간에 등록된 시리얼만 집계
+    # 날짜 기준 = 메인 시리얼 최초 등록일 (조립 라인 최초 투입 시점)
+    # ① audit_log에서 이전상태='-', 이후상태='조립중' → 정상 등록된 시리얼
+    # ② 폴백: audit_log 누락분(과거 대기 투입 등) 보완
+    #    - production 테이블에서 시간(= 등록 시점) 이 날짜 범위 내이고 상태='조립중'인 시리얼
+    #    - 아직 상태 변경이 없으면 production.시간 = 등록 시점이므로 안전하게 사용 가능
     _rpt_audit = load_audit_log_by_date(_rpt_from, _rpt_to)
+    _audit_reg_serials = set()
     if not _rpt_audit.empty and '이전상태' in _rpt_audit.columns and '이후상태' in _rpt_audit.columns:
-        _rpt_reg = _rpt_audit[
+        _rpt_reg_df = _rpt_audit[
             (_rpt_audit['이전상태'] == '-') & (_rpt_audit['이후상태'] == '조립중')
         ]
-        if v_group != "전체":
-            _rpt_reg = _rpt_reg[_rpt_reg['반'] == v_group]
-        _rpt_serials = tuple(_rpt_reg['시리얼'].dropna().unique().tolist())
-    else:
-        _rpt_serials = ()
+        if v_group != "전체" and not _rpt_reg_df.empty:
+            _rpt_reg_df = _rpt_reg_df[_rpt_reg_df['반'] == v_group]
+        _audit_reg_serials = set(_rpt_reg_df['시리얼'].dropna().tolist())
 
+    # 폴백: production 테이블 시간 기준 + 상태='조립중' (audit_log 미기록분 보완)
+    _prod_range = load_production_history(_rpt_from, _rpt_to)
+    if v_group != "전체" and not _prod_range.empty:
+        _prod_range = _prod_range[_prod_range['반'] == v_group]
+    _fallback_serials = set()
+    if not _prod_range.empty and '상태' in _prod_range.columns:
+        _fallback_serials = (
+            set(_prod_range[_prod_range['상태'] == '조립중']['시리얼'].dropna().tolist())
+            - _audit_reg_serials
+        )
+
+    _rpt_serials = tuple(_audit_reg_serials | _fallback_serials)
     df_rpt = load_production_by_serials(_rpt_serials)
     if v_group != "전체":
         df_rpt = df_rpt[df_rpt['반'] == v_group]
