@@ -420,6 +420,8 @@ def save_app_setting(key: str, value):
             {"key": key, "value": _j.dumps(value, ensure_ascii=False)},
             on_conflict="key"
         ).execute()
+        load_app_setting.clear()
+        load_all_app_settings.clear()
         return True
     except Exception as e:
         return str(e)
