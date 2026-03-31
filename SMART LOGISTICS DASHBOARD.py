@@ -1244,10 +1244,11 @@ elif curr_l == "조립 라인":
                 rc[4].caption(ship if ship and ship != 'nan' else "-")
                 rc[5].caption(f" {note}" if note and note != 'nan' else "-")
 
-    # 이번 달 전체 일정 (오늘 이후 ~ 말일)
+    # 이번 달 + 다음 달 일정 (오늘 이후)
+    _next_mth = (date.today().replace(day=1) + timedelta(days=32)).strftime('%Y-%m')
     _month_sch_pre = sch_all[
-        (sch_all['날짜'].str.startswith(today_str[:7])) &
         (sch_all['날짜'] >= today_str) &
+        (sch_all['날짜'].str[:7].isin([today_str[:7], _next_mth])) &
         (sch_all['반'] == curr_g)
     ] if not sch_all.empty else pd.DataFrame()
     _month_sch_cnt = len(_month_sch_pre)
