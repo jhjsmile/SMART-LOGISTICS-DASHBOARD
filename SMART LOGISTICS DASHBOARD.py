@@ -1622,7 +1622,7 @@ elif curr_l == "조립 라인":
 
         if scan_input.strip():
             import time as _time
-            _scanned = _bc_trim(scan_input.strip())
+            _scanned = scan_input.strip()
             _scan_ts_key  = f"scan_ts_{curr_g}"
             _last_ts  = st.session_state.get(_scan_ts_key, 0)
             _last_val = st.session_state.get(_scan_processed_key, "")
@@ -1766,12 +1766,11 @@ elif curr_l == "조립 라인":
                 asc2.caption(" 스캐너로 스캔하면 Enter가 자동 입력됩니다")
 
                 if add_scan_input.strip():
-                    _add_scanned = _bc_trim(add_scan_input.strip())
-                    _already = any(m["자재시리얼"] == _add_scanned for m in st.session_state[_add_mat_list_key])
+                    _already = any(m["자재시리얼"] == add_scan_input.strip() for m in st.session_state[_add_mat_list_key])
                     if not _already:
-                        st.session_state[_add_mat_list_key].append({"자재명": add_sel_mat_name, "자재시리얼": _add_scanned})
+                        st.session_state[_add_mat_list_key].append({"자재명": add_sel_mat_name, "자재시리얼": add_scan_input.strip()})
                     else:
-                        st.toast(f" 이미 추가된 자재 S/N: {_add_scanned}")
+                        st.toast(f" 이미 추가된 자재 S/N: {add_scan_input.strip()}")
                     st.session_state["_autofocus_after_rerun"] = f"add_scan_sn_{curr_g}_{st.session_state[_add_scan_cnt_key] + 1}"
                     st.session_state[_add_scan_cnt_key] += 1
                     _rerun("asm_mat")
