@@ -1355,12 +1355,8 @@ elif curr_l == "조립 라인":
                         sc3.metric(" 작업중", wip)
                         sc4.metric(" 불량", defect, delta=None if defect == 0 else f"{defect}건", delta_color="inverse")
 
-        _hist_wip        = len(db_g[db_g['상태'].isin(WIP_STATES)])
-        _hist_done_today = len(db_g[
-            db_g['시간'].astype(str).str.startswith(today_str) &
-            db_g['상태'].isin(DONE_STATES)
-        ])
-        with st.expander(f" {curr_g} 생산 이력  ·  조립 대기 {_hist_wip}건 / 당일 완료 {_hist_done_today}건", expanded=_xp("asm_hist"), key="_xp_asm_hist"):
+        _hist_wip = len(db_g[db_g['상태'].isin(WIP_STATES)])
+        with st.expander(f" {curr_g} 생산 이력  ·  조립 대기 {_hist_wip}건", expanded=_xp("asm_hist"), key="_xp_asm_hist"):
             _asm_chk_key = f"asm_checked_{curr_g}"
             if _asm_chk_key not in st.session_state:
                 st.session_state[_asm_chk_key] = {}
