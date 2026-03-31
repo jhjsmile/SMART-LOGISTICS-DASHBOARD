@@ -1104,7 +1104,7 @@ if curr_l == "현황판":
 
     # ── 모델별 생산 현황 (혼류 대응) ─────────────────────────────────
     if not db_all.empty:
-        st.markdown("<div class='section-title'> 모델별 생산 현황</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'> 모델별 실시간 생산 현황</div>", unsafe_allow_html=True)
         _m_total  = db_all.groupby(['반', '모델']).size().rename('투입')
         _m_active = db_all[db_all['상태'].isin(ACTIVE_STATES)].groupby(['반', '모델']).size().rename('진행중')
         _m_done   = db_all[(db_all['라인'] == '포장 라인') & (db_all['상태'] == '완료')].groupby(['반', '모델']).size().rename('완료')
