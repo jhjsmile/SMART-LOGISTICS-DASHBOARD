@@ -1881,7 +1881,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
         wait_list = db_s[(db_s['반']==curr_g)&(db_s['상태'].isin(['검사대기','수리 완료(재투입)']))]
     else:
         wait_list = db_s[(db_s['반']==curr_g)&(db_s['상태']=='출하승인')]
-    _wait_cnt = len(wait_list)
+    _wait_cnt     = len(wait_list)
+    _reentry_cnt  = int(len(wait_list[wait_list['상태'] == '수리 완료(재투입)'])) if not wait_list.empty else 0
     DEFECT_CAUSES = st.session_state.get('dropdown_defect_cause', ['(선택)', '기타 (직접 입력)'])
 
 
@@ -1890,7 +1891,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
     if _wck_key   not in st.session_state: st.session_state[_wck_key]   = {}
     if _wscan_cnt not in st.session_state: st.session_state[_wscan_cnt] = 0
 
-    with st.expander(f" 이전 공정({prev}) 완료 — 입고 대기" + (f"  ·  {_wait_cnt}건" if _wait_cnt else "  ·  없음"), expanded=_xp("chk_wait"), key="_xp_chk_wait"):
+    _wait_title = (f"  ·  {_wait_cnt}건" + (f" (수리 재투입 {_reentry_cnt}건 포함)" if _reentry_cnt else "")) if _wait_cnt else "  ·  없음"
+    with st.expander(f" 이전 공정({prev}) 완료 — 입고 대기" + _wait_title, expanded=_xp("chk_wait"), key="_xp_chk_wait"):
         if not wait_list.empty:
             _wscan_key = f"wscan_{curr_g}_{curr_l}_{st.session_state[_wscan_cnt]}"
             ws1, ws2 = st.columns([3, 3])
@@ -1956,7 +1958,9 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             value=st.session_state[_wck_key].get(str(widx), False),
                             label_visibility="collapsed")
                         st.session_state[_wck_key][str(widx)] = _wck
-                        wr2.markdown(f"`{wrow['시리얼']}`  <span style='color:#999;font-size:0.75rem;'>{str(wrow.get('시간',''))[:16]}</span>",
+                        _is_reentry = wrow.get('상태') == '수리 완료(재투입)'
+                        _reentry_badge = "  <span style='background:#fff3cd;color:#856404;font-size:0.68rem;font-weight:700;padding:1px 6px;border-radius:8px;border:1px solid #ffc107;'>수리 재투입</span>" if _is_reentry else ""
+                        wr2.markdown(f"`{wrow['시리얼']}`  <span style='color:#999;font-size:0.75rem;'>{str(wrow.get('시간',''))[:16]}</span>{_reentry_badge}",
                                     unsafe_allow_html=True)
                         if wr3.button(" 입고", key=f"in_{widx}", use_container_width=True):
                             _next_s = '검사중' if curr_l == '검사 라인' else '포장중'
