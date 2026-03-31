@@ -292,6 +292,10 @@ def inject_styles():
         font-size: clamp(1.4rem, 2vw, 2.4rem); color: #f4922a;
         font-weight: 800; line-height: 1; white-space: nowrap;
     }
+    .stat-sub {
+        font-size: 0.62rem; color: #aab4bc; margin-top: 5px;
+        white-space: nowrap;
+    }
 
     .button-spacer { margin-top: 28px; }
 
