@@ -80,7 +80,6 @@ def keep_supabase_alive() -> None:
 def _clear_production_cache() -> None:
     load_realtime_ledger.clear()
     load_production_history.clear()
-    load_production_by_serials.clear()
 
 def _clear_schedule_cache() -> None:
     load_schedule.clear()
@@ -208,65 +207,25 @@ def load_production_history(date_from: str, date_to: str, limit: int = 5000) -> 
                 return []
 
     try:
-        # production 테이블: WIP 제품은 아카이브되지 않고 항상 여기에 남아 있으므로
-        # date_from 기준으로 전체 구간 조회 (cutoff 제한 제거)
-        rows += _fetch("production", date_from, date_to)
+        # 최근 30일 이내 구간이 조회 범위에 포함되면 production 조회
+        if date_to >= cutoff:
+            eff_from = cutoff if date_from < cutoff else date_from
+            rows += _fetch("production", eff_from, date_to)
 
-        # production_history: 완료 후 아카이브된 항목 (cutoff 이전 구간만 존재)
+        # 30일 이전 구간이 조회 범위에 포함되면 production_history 조회
         if date_from < cutoff:
-            eff_to_hist = min(date_to, cutoff)
-            rows += _fetch("production_history", date_from, eff_to_hist)
+            rows += _fetch("production_history", date_from, cutoff)
 
         if rows:
             df = pd.DataFrame(rows)
             df = df.drop(columns=[c for c in ['id','deleted_at','deleted_by'] if c in df.columns])
-            df = df.sort_values('시간', ascending=False)
-            # 시리얼 기준 중복 제거 (production 우선 — 더 최신 상태 유지)
-            df = df.drop_duplicates(subset=['시리얼'], keep='first')
-            return df.fillna("").head(limit)
+            df = df.drop_duplicates(subset=['시리얼','시간'])
+            df = df.sort_values('시간', ascending=False).head(limit)
+            return df.fillna("")
         return pd.DataFrame(columns=_EMPTY_COLS)
     except Exception as e:
         if st.session_state.get('login_status', False):
             st.warning(f"이력 로드 실패: {e}")
-        return pd.DataFrame(columns=_EMPTY_COLS)
-
-
-@st.cache_data(ttl=120)
-def load_production_by_serials(serials: tuple) -> pd.DataFrame:
-    """시리얼 목록 기반 production + production_history 조회 (날짜 무관).
-    생산 현황 리포트에서 실제 투입일 기준 집계 시 사용.
-    serials: tuple로 받아 캐시 키로 사용."""
-    _EMPTY_COLS = ['시간','반','라인','모델','품목코드','시리얼','상태','증상','수리','OQC판정','작업자','라벨시리얼']
-    if not serials:
-        return pd.DataFrame(columns=_EMPTY_COLS)
-    sb = get_supabase()
-    serial_list = list(serials)
-
-    def _fetch_by_serials(table: str) -> list:
-        try:
-            return (sb.table(table).select("*")
-                      .in_("시리얼", serial_list)
-                      .is_("deleted_at", "null")
-                      .execute().data or [])
-        except Exception:
-            try:
-                return (sb.table(table).select("*")
-                          .in_("시리얼", serial_list)
-                          .execute().data or [])
-            except Exception:
-                return []
-
-    try:
-        rows = _fetch_by_serials("production")
-        rows += _fetch_by_serials("production_history")
-        if rows:
-            df = pd.DataFrame(rows)
-            df = df.drop(columns=[c for c in ['id','deleted_at','deleted_by'] if c in df.columns])
-            # 중복 시리얼 제거: production 우선(더 최신)
-            df = df.drop_duplicates(subset=['시리얼'], keep='first')
-            return df.fillna("")
-        return pd.DataFrame(columns=_EMPTY_COLS)
-    except Exception:
         return pd.DataFrame(columns=_EMPTY_COLS)
 
 

@@ -53,7 +53,7 @@ from modules.database import (
     _clear_master_cache, _clear_audit_cache, _clear_all_cache,
     _clear_help_request_cache, _clear_access_request_cache,
     clear_cache_for_tables,
-    load_realtime_ledger, load_production_history, load_production_by_serials, archive_old_completed,
+    load_realtime_ledger, load_production_history, archive_old_completed,
     insert_row, update_row,
     delete_all_rows, delete_production_row_by_sn,
     load_app_setting, save_app_setting,
