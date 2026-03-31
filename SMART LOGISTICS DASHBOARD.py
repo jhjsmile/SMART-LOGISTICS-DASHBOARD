@@ -2314,9 +2314,24 @@ elif curr_l == "생산 현황 리포트":
             key="prod_rpt_date_range"
         )
     if isinstance(_rpt_range, (list, tuple)) and len(_rpt_range) == 2:
-        df_rpt = load_production_history(str(_rpt_range[0]), str(_rpt_range[1]))
+        _rpt_from, _rpt_to = str(_rpt_range[0]), str(_rpt_range[1])
     else:
-        df_rpt = load_production_history(str(date.today()), str(date.today()))
+        _rpt_from = _rpt_to = str(date.today())
+
+    # 날짜 기준 = 메인 시리얼 최초 등록일 (조립 라인 등록 시점)
+    # audit_log에서 이전상태='-', 이후상태='조립중' 인 항목 → 해당 기간에 등록된 시리얼만 집계
+    _rpt_audit = load_audit_log_by_date(_rpt_from, _rpt_to)
+    if not _rpt_audit.empty and '이전상태' in _rpt_audit.columns and '이후상태' in _rpt_audit.columns:
+        _rpt_reg = _rpt_audit[
+            (_rpt_audit['이전상태'] == '-') & (_rpt_audit['이후상태'] == '조립중')
+        ]
+        if v_group != "전체":
+            _rpt_reg = _rpt_reg[_rpt_reg['반'] == v_group]
+        _rpt_serials = tuple(_rpt_reg['시리얼'].dropna().unique().tolist())
+    else:
+        _rpt_serials = ()
+
+    df_rpt = load_production_by_serials(_rpt_serials)
     if v_group != "전체":
         df_rpt = df_rpt[df_rpt['반'] == v_group]
 
@@ -2371,15 +2386,14 @@ elif curr_l == "생산 현황 리포트":
                 st.plotly_chart(_fig_ln, use_container_width=True)
         with cc4:
             try:
-                # 투입 현황은 audit_log의 최초 등록(이전상태='-', 이후상태='조립중') 기준으로 집계
-                # → production_db의 '시간'(마지막 상태변경 시간)을 쓰면 오늘 처리된
-                #   검사/OQC/포장 제품까지 모두 포함되어 수치가 과도하게 집계되는 문제 방지
-                _audit_all = load_audit_log()
-                if v_group != "전체" and not _audit_all.empty:
-                    _audit_all = _audit_all[_audit_all['반'] == v_group]
-                if not _audit_all.empty and '이전상태' in _audit_all.columns and '이후상태' in _audit_all.columns:
-                    _df_trend = _audit_all[
-                        (_audit_all['이전상태'] == '-') & (_audit_all['이후상태'] == '조립중')
+                # 투입 추이: 이미 위에서 날짜 기준으로 로드한 _rpt_audit 재사용
+                # (메인 시리얼 등록 = 이전상태 '-', 이후상태 '조립중')
+                _audit_trend = _rpt_audit.copy() if not _rpt_audit.empty else pd.DataFrame(columns=['시간','반','이전상태','이후상태'])
+                if v_group != "전체" and not _audit_trend.empty:
+                    _audit_trend = _audit_trend[_audit_trend['반'] == v_group]
+                if not _audit_trend.empty and '이전상태' in _audit_trend.columns and '이후상태' in _audit_trend.columns:
+                    _df_trend = _audit_trend[
+                        (_audit_trend['이전상태'] == '-') & (_audit_trend['이후상태'] == '조립중')
                     ].copy()
                 else:
                     _df_trend = pd.DataFrame(columns=['시간'])
