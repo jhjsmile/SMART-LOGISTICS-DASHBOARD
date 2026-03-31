@@ -2340,13 +2340,15 @@ elif curr_l == "생산 현황 리포트":
     if v_group != "전체":
         df_rpt = df_rpt[df_rpt['반'] == v_group]
 
-    if not df_rpt.empty:
+    if _rpt_serials:
         # ── KPI ──────────────────────────────────────────────────────
+        # 총 투입: audit_log 최초 등록 기준 (시리얼 상태 변경·완료·삭제 여부와 무관하게 고정)
+        # 완료/진행중/불량: production 테이블 현재 상태 기준
         _rpt_done    = df_rpt[(df_rpt['라인'] == '포장 라인') & (df_rpt['상태'] == '완료')]
         _rpt_ing     = df_rpt[df_rpt['상태'].isin(ACTIVE_STATES)]
         _rpt_defect  = df_rpt[df_rpt['상태'].str.contains('불량|부적합', na=False)]
         kp1, kp2, kp3, kp4 = st.columns(4)
-        kp1.metric(" 총 투입",      f"{len(df_rpt)} EA")
+        kp1.metric(" 총 투입",      f"{len(_rpt_serials)} EA")
         kp2.metric(" 최종 완료",    f"{len(_rpt_done)} EA")
         kp3.metric(" 진행 중",     f"{len(_rpt_ing)} EA")
         kp4.metric(" 불량/부적합", f"{len(_rpt_defect)} 건")
