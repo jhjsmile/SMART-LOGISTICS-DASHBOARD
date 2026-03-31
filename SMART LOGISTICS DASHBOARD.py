@@ -1023,7 +1023,7 @@ if curr_l == "현황판":
     _hist = load_production_history(_mth_from, _mth_to)
 
     # 요약 카드 (이번달 기준 전체 반 합계)
-    st.markdown("<div class='section-title'> 전체 반 생산 요약</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'> 전체 반 생산 요약 (이번달)</div>", unsafe_allow_html=True)
     col1, col2, col3, col4 = st.columns(4)
     total      = len(_hist)
     completed  = len(_hist[(_hist['라인']=='포장 라인')&(_hist['상태']=='완료')]) if not _hist.empty else 0
@@ -1085,7 +1085,7 @@ if curr_l == "현황판":
                     f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:#5a96c8;font-weight:bold;'>{_총투입}</div>"
                     f"<div style='font-size:0.58rem;color:#aaa;margin-top:2px;'>완료 이력 기준</div></div>"
                     f"<div style='background:#f0f4f8;border-radius:8px;padding:8px 6px;text-align:center;'>"
-                    f"<div style='font-size:0.62rem;color:#8a7f72;font-weight:bold;margin-bottom:3px;'>누적 완료</div>"
+                    f"<div style='font-size:0.62rem;color:#8a7f72;font-weight:bold;margin-bottom:3px;'>최종 완료</div>"
                     f"<div style='font-size:clamp(1.1rem,2vw,1.6rem);color:#4da875;font-weight:bold;'>{_누적완료}</div>"
                     f"<div style='font-size:0.58rem;color:#aaa;margin-top:2px;'>포장 완료 기준</div></div>"
                     f"<div style='background:#f0f4f8;border-radius:8px;padding:8px 6px;text-align:center;'>"
@@ -2348,7 +2348,7 @@ elif curr_l == "생산 현황 리포트":
         with cc1:
             _st_cnt = df_rpt.groupby('상태').size().reset_index(name='수량').sort_values('수량', ascending=False)
             _fig_st = px.bar(_st_cnt, x='상태', y='수량', color='상태',
-                             title="<b>현재 상태별 제품 분포</b>", template="plotly_white",
+                             title="<b>기간별 상태 분포</b>", template="plotly_white",
                              text='수량')
             _fig_st.update_traces(textposition='outside', textfont_size=11)
             _fig_st.update_layout(showlegend=False, margin=dict(t=50, b=20))
