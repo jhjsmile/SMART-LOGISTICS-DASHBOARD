@@ -208,9 +208,10 @@ def load_production_history(date_from: str, date_to: str, limit: int = 5000) -> 
 
     try:
         # 최근 30일 이내 구간이 조회 범위에 포함되면 production 조회
+        # eff_from을 cutoff로 고정하지 않고 date_from을 그대로 사용해야
+        # 아직 아카이빙되지 않은 이전 달 레코드도 포함됨 (dedup으로 중복 제거)
         if date_to >= cutoff:
-            eff_from = cutoff if date_from < cutoff else date_from
-            rows += _fetch("production", eff_from, date_to)
+            rows += _fetch("production", date_from, date_to)
 
         # 30일 이전 구간이 조회 범위에 포함되면 production_history 조회
         if date_from < cutoff:
