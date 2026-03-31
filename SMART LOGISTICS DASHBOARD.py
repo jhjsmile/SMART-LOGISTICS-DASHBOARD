@@ -2321,34 +2321,21 @@ elif curr_l == "생산 현황 리포트":
     else:
         _rpt_from = _rpt_to = str(date.today())
 
-    # 날짜 기준 = 메인 시리얼 최초 등록일 (조립 라인 최초 투입 시점)
-    # ① audit_log(이전상태='-', 이후상태='조립중') → 정상 등록된 시리얼 (스캔 등록 경로)
-    # ② 폴백: audit_log에 등록 이벤트가 없는 시리얼 보완 (과거 대기 투입 누락분 등)
-    #    production/production_history 테이블에서 날짜 범위 내 시간을 가진 모든 시리얼 포함
-    #    - 상태='조립중': production.시간 = 등록 시점 (상태 변경 없음) → 정확
-    #    - 상태 변경된 시리얼: production.시간 = 마지막 상태변경 시점 (해당 변경이 범위 내에 있으면 포함)
-    #    등록일 기준으로 집계하기 위해 audit_log 확인 후 미기록 시리얼만 폴백 적용
+    # 날짜 기준 = audit_log에 기록된 메인 시리얼 최초 등록일
+    # (이전상태='-', 이후상태='조립중' 이벤트 발생 시점)
+    # production.시간은 마지막 상태 변경 시점이라 등록일 기준으로 사용 불가
+    # → 반드시 audit_log 기준으로만 필터링해야 날짜 오염 없음
     _rpt_audit = load_audit_log_by_date(_rpt_from, _rpt_to)
-    _audit_reg_serials = set()
+    _rpt_serials = ()
     if not _rpt_audit.empty and '이전상태' in _rpt_audit.columns and '이후상태' in _rpt_audit.columns:
         _rpt_reg_df = _rpt_audit[
             (_rpt_audit['이전상태'] == '-') & (_rpt_audit['이후상태'] == '조립중')
         ]
         if v_group != "전체" and not _rpt_reg_df.empty:
             _rpt_reg_df = _rpt_reg_df[_rpt_reg_df['반'] == v_group]
-        _audit_reg_serials = set(_rpt_reg_df['시리얼'].dropna().tolist())
+        # 중복 시리얼 제거 후 tuple로 변환
+        _rpt_serials = tuple(_rpt_reg_df['시리얼'].dropna().unique().tolist())
 
-    # 폴백: production 테이블 시간이 날짜 범위 내인 모든 시리얼
-    # (상태 무관 — 대기 투입 후 검사/포장/완료 진행된 시리얼까지 포함)
-    _prod_range = load_production_history(_rpt_from, _rpt_to)
-    if v_group != "전체" and not _prod_range.empty:
-        _prod_range = _prod_range[_prod_range['반'] == v_group]
-    _fallback_serials = (
-        set(_prod_range['시리얼'].dropna().tolist()) - _audit_reg_serials
-        if not _prod_range.empty else set()
-    )
-
-    _rpt_serials = tuple(_audit_reg_serials | _fallback_serials)
     df_rpt = load_production_by_serials(_rpt_serials)
     if v_group != "전체":
         df_rpt = df_rpt[df_rpt['반'] == v_group]
