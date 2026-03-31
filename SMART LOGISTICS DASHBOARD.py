@@ -1030,26 +1030,28 @@ if curr_l == "현황판":
 
     st.divider()
 
-    # 요약 카드 (6열로 넓게)
+    # 이번달 이력 (요약 카드 + 반별 상세 공통 사용)
+    from datetime import date as _date
+    _today    = _date.today()
+    _mth_from = _today.strftime('%Y-%m-01')
+    _mth_to   = _today.strftime('%Y-%m-%d')
+    _hist = load_production_history(_mth_from, _mth_to)
+
+    # 요약 카드 (이번달 기준 전체 반 합계)
     st.markdown("<div class='section-title'> 전체 반 생산 요약</div>", unsafe_allow_html=True)
     col1, col2, col3, col4 = st.columns(4)
-    total      = len(db_all)
-    completed  = len(db_all[(db_all['라인']=='포장 라인')&(db_all['상태']=='완료')])
-    in_prog    = len(db_all[db_all['상태'].isin(ACTIVE_STATES)])
-    defects    = len(db_all[db_all['상태'].str.contains('불량|부적합',na=False)])
-    col1.markdown(f"<div class='stat-box'><div class='stat-label'> 총 투입</div><div class='stat-value'>{total}</div><div class='stat-sub'>현재 DB 전체 등록 건</div></div>", unsafe_allow_html=True)
-    col2.markdown(f"<div class='stat-box'><div class='stat-label'> 최종 완료</div><div class='stat-value'>{completed}</div><div class='stat-sub'>포장 라인 완료 기준</div></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='stat-box'><div class='stat-label'> 작업 중</div><div class='stat-value'>{in_prog}</div><div class='stat-sub'>조립~포장 공정 진행 중</div></div>", unsafe_allow_html=True)
-    col4.markdown(f"<div class='stat-box'><div class='stat-label'> 불량 이슈</div><div class='stat-value'>{defects}</div><div class='stat-sub'>불량·부적합 상태 건</div></div>", unsafe_allow_html=True)
+    total      = len(_hist)
+    completed  = len(_hist[(_hist['라인']=='포장 라인')&(_hist['상태']=='완료')]) if not _hist.empty else 0
+    in_prog    = len(_hist[_hist['상태'].isin(ACTIVE_STATES)]) if not _hist.empty else 0
+    defects    = len(_hist[_hist['상태'].str.contains('불량|부적합',na=False)]) if not _hist.empty else 0
+    col1.markdown(f"<div class='stat-box'><div class='stat-label'> 총 투입</div><div class='stat-value'>{total}</div><div class='stat-sub'>이번달 전체 반 투입 건</div></div>", unsafe_allow_html=True)
+    col2.markdown(f"<div class='stat-box'><div class='stat-label'> 최종 완료</div><div class='stat-value'>{completed}</div><div class='stat-sub'>이번달 포장 라인 완료 기준</div></div>", unsafe_allow_html=True)
+    col3.markdown(f"<div class='stat-box'><div class='stat-label'> 작업 중</div><div class='stat-value'>{in_prog}</div><div class='stat-sub'>이번달 조립~포장 진행 중</div></div>", unsafe_allow_html=True)
+    col4.markdown(f"<div class='stat-box'><div class='stat-label'> 불량 이슈</div><div class='stat-value'>{defects}</div><div class='stat-sub'>이번달 불량·부적합 상태 건</div></div>", unsafe_allow_html=True)
 
     # 반별 상세 보기 토글
     _show_ban_detail = st.toggle("반별 상세 보기", value=True, key="dash_ban_detail")
     if _show_ban_detail:
-        from datetime import date as _date
-        _today    = _date.today()
-        _mth_from = _today.strftime('%Y-%m-01')
-        _mth_to   = _today.strftime('%Y-%m-%d')
-        _hist = load_production_history(_mth_from, _mth_to)
 
         # 이번달 조립 계획 수량 (달성률 게이지용)
         _sch_db  = st.session_state.get('schedule_db', pd.DataFrame())
