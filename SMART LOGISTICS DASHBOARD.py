@@ -85,6 +85,10 @@ from modules.calendar_view import (
     _xp, _rerun, clear_cal,
 )
 from modules.kpi_dashboard import render_kpi_dashboard
+from modules.constants import (
+    PRODUCTION_GROUPS, CALENDAR_EDIT_ROLES, SCHEDULE_COLORS,
+    PLAN_CATEGORIES, ACTIVE_STATES, SCH_CHANGE_REASONS,
+)
 
 
 # =================================================================
@@ -198,9 +202,6 @@ if (st.session_state.get("login_status")
     archive_old_completed(days=30)
     st.session_state["_archive_date"] = str(date.today())
 
-PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
-CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower", "schedule_manager"]
-
 # ── 사용 설명서 PDF (외부 파일 로드) ────────────────────────────────
 # PDF 파일을 소스 코드와 같은 폴더에 위치시키세요: PMS_v1.0.0_사용설명서.pdf
 import os as _os, base64 as _b64_loader
@@ -239,21 +240,12 @@ PERM_ACTIONS       = ["read", "write", "edit"]
 PERM_ACTION_LABELS = {"read": "읽기", "write": "쓰기", "edit": "수정"}
 
 
-SCHEDULE_COLORS = {
-    "조립계획": "#7eb8e8",
-    "포장계획": "#7ec8a0",
-    "출하계획": "#f0c878",
-    "특이사항": "#e8908a",
-    "기타":     "#b49fd4",
-}
-# 일정 등록 폼에서 선택 가능한 계획 카테고리 (특이사항/기타 제외)
-PLAN_CATEGORIES = ["조립계획", "포장계획", "출하계획"]
 calendar.setfirstweekday(6)  # 일요일 시작
 
 # ── 상태값 상수 ─────────────────────────────────────────────────
 WIP_STATES    = ['조립중', '수리 완료(재투입)']
 DONE_STATES   = ['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료']
-ACTIVE_STATES = ['조립중','검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','수리 완료(재투입)','불량 처리 중']
+# ACTIVE_STATES, SCHEDULE_COLORS, PLAN_CATEGORIES → modules/constants.py 에서 임포트
 
 # ── 상태 스타일 (모듈 레벨 상수) ───────────────────────────────
 STATUS_STYLE = {
@@ -380,20 +372,7 @@ def _run_bulk_db_ops(ops: list) -> list:
 # =================================================================
 
 
-# ── 일정 변경 로그 ───────────────────────────────────────────────
-SCH_CHANGE_REASONS = [
-    "(선택 필수)",
-    "영업 요구량 변경 (주문 취소)",
-    "영업 요구량 변경 (물량 증가)",
-    "긴급 주문 (Rush Order)",
-    "자재 수급 문제 (입고 지연)",
-    "자재 수급 문제 (불량 자재)",
-    "설비 고장 / 유지보수",
-    "인력 변동 (부족/결원)",
-    "품질 문제 (불량 발생)",
-    "계획 오입력 수정",
-    "기타 (직접 입력)",
-]
+# SCH_CHANGE_REASONS → modules/constants.py 에서 임포트
 
 
 # =================================================================
@@ -841,6 +820,9 @@ if st.sidebar.button(" 로그아웃", use_container_width=True):
 
 curr_g = st.session_state.selected_group
 curr_l = st.session_state.current_line
+# HTML에 직접 삽입 시 사용하는 이스케이프된 버전 (XSS 방지)
+curr_g_h = html_mod.escape(curr_g)
+curr_l_h = html_mod.escape(curr_l)
 
 # ── 페이지 이동 감지 → expander 상태 초기화 ──────────────────────────
 # 새 메뉴/반으로 이동하면 모든 _xp_* 키를 삭제하여 접힌 상태로 시작.
@@ -1188,7 +1170,7 @@ if curr_l == "현황판":
 
 # ── 조립 라인 ────────────────────────────────────────────────────
 elif curr_l == "조립 라인":
-    st.markdown(f"<h2 class='centered-title'> {curr_g} 신규 조립 현황</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 class='centered-title'> {curr_g_h} 신규 조립 현황</h2>", unsafe_allow_html=True)
 
     # ── 오늘 일정 알림 & 팝업 ─────────────────────────────────
     today_str   = datetime.now(KST).strftime('%Y-%m-%d')
@@ -1890,7 +1872,7 @@ elif curr_l == "조립 라인":
 
 # ── 검사 / 포장 라인 ─────────────────────────────────────────────
 elif curr_l in ["검사 라인", "포장 라인"]:
-    st.markdown(f"<h2 class='centered-title'> {curr_g} {curr_l} 현황</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 class='centered-title'> {curr_g_h} {curr_l_h} 현황</h2>", unsafe_allow_html=True)
     prev = "조립 라인" if curr_l == "검사 라인" else "OQC 라인"
 
     db_s = st.session_state.production_db
@@ -2483,7 +2465,7 @@ elif curr_l == "생산 현황 리포트":
 
 # ── 검사 라인 ────────────────────────────────────────────────────
 elif curr_l == "검사 라인":
-    st.markdown(f"<h2 class='centered-title'> {curr_g} 검사 라인 현황</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 class='centered-title'> {curr_g_h} 검사 라인 현황</h2>", unsafe_allow_html=True)
 
     db_qc_all = st.session_state.production_db.copy()
     db_qc     = db_qc_all[db_qc_all['반'] == curr_g]
@@ -2607,7 +2589,7 @@ elif curr_l == "검사 라인":
 
 # ── 포장 라인 ────────────────────────────────────────────────────
 elif curr_l == "포장 라인":
-    st.markdown(f"<h2 class='centered-title'> {curr_g} 포장 라인 현황</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 class='centered-title'> {curr_g_h} 포장 라인 현황</h2>", unsafe_allow_html=True)
 
     db_pk_all = st.session_state.production_db.copy()
     db_pk     = db_pk_all[db_pk_all['반'] == curr_g]
@@ -4450,7 +4432,7 @@ elif curr_l == "플로우차트":
 # =================================================================
 #
 #  주요 상수:
-#   AUTO_REFRESH_INTERVAL_MS = 30000  # 자동 새로고침 간격
+#   AUTO_REFRESH_INTERVAL_MS = 15000  # 자동 새로고침 간격
 #   PDF_VIEWER_HEIGHT_PX = 900         # PDF 뷰어 높이
 #   MAX_FUNCTION_LINES = 200           # 함수 최대 권장 라인
 #

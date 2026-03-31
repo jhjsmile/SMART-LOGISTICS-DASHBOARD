@@ -33,6 +33,7 @@ from modules.auth import (
     _parse_custom_perms,
 )
 from modules.utils import get_now_kst_str
+from modules.constants import PRODUCTION_GROUPS
 
 # ─── 페이지 설정 ────────────────────────────────────────────────────
 st.set_page_config(
@@ -450,7 +451,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ─── 상수 ─────────────────────────────────────────────────────────
-PRODUCTION_GROUPS = ["제조1반", "제조2반", "제조3반"]
+# PRODUCTION_GROUPS → modules/constants.py 에서 임포트
 PERM_ACTIONS       = ["read", "write", "edit"]
 ROLES = {
     "master":           ["생산 지표 관리", "조립 라인", "검사 라인", "포장 라인", "OQC 라인", "생산 현황 리포트", "불량 공정", "수리 현황 리포트", "생산 중단 일지", "마스터 관리", "작업자 매뉴얼", "관리자 매뉴얼", "플로우차트"],
