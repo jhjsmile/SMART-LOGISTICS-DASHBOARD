@@ -214,8 +214,7 @@ def load_production_history(date_from: str, date_to: str, limit: int = 5000) -> 
 
         # 30일 이전 구간이 조회 범위에 포함되면 production_history 조회
         if date_from < cutoff:
-            eff_to_hist = min(date_to, cutoff)
-            rows += _fetch("production_history", date_from, eff_to_hist)
+            rows += _fetch("production_history", date_from, cutoff)
 
         if rows:
             df = pd.DataFrame(rows)
