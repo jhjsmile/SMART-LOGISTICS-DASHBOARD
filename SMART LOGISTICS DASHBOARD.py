@@ -2321,34 +2321,21 @@ elif curr_l == "생산 현황 리포트":
     else:
         _rpt_from = _rpt_to = str(date.today())
 
-    # 날짜 기준 = audit_log에 기록된 메인 시리얼 최초 등록일
-    # (이전상태='-', 이후상태='조립중' 이벤트 발생 시점)
-    # production.시간은 마지막 상태 변경 시점이라 등록일 기준으로 사용 불가
-    # → 반드시 audit_log 기준으로만 필터링해야 날짜 오염 없음
-    _rpt_audit = load_audit_log_by_date(_rpt_from, _rpt_to)
-    _rpt_serials = ()
-    if not _rpt_audit.empty and '이전상태' in _rpt_audit.columns and '이후상태' in _rpt_audit.columns:
-        _rpt_reg_df = _rpt_audit[
-            (_rpt_audit['이전상태'] == '-') & (_rpt_audit['이후상태'] == '조립중')
-        ]
-        if v_group != "전체" and not _rpt_reg_df.empty:
-            _rpt_reg_df = _rpt_reg_df[_rpt_reg_df['반'] == v_group]
-        # 중복 시리얼 제거 후 tuple로 변환
-        _rpt_serials = tuple(_rpt_reg_df['시리얼'].dropna().unique().tolist())
-
-    df_rpt = load_production_by_serials(_rpt_serials)
+    # 메인 현황판과 동일한 방식: production.시간 기준으로 해당 기간 전체 시리얼 로드
+    # → 대기투입·스캔등록 경로 구분 없이 모든 시리얼 포함, 메인 현황판 수치와 일치
+    # audit_log(_rpt_audit)는 근무시간대별 투입 추이 차트 전용으로만 사용
+    df_rpt = load_production_history(_rpt_from, _rpt_to)
     if v_group != "전체":
         df_rpt = df_rpt[df_rpt['반'] == v_group]
+    _rpt_audit = load_audit_log_by_date(_rpt_from, _rpt_to)  # 투입 추이 차트용
 
-    if _rpt_serials:
+    if not df_rpt.empty:
         # ── KPI ──────────────────────────────────────────────────────
-        # 총 투입: audit_log 최초 등록 기준 (시리얼 상태 변경·완료·삭제 여부와 무관하게 고정)
-        # 완료/진행중/불량: production 테이블 현재 상태 기준
         _rpt_done    = df_rpt[(df_rpt['라인'] == '포장 라인') & (df_rpt['상태'] == '완료')]
         _rpt_ing     = df_rpt[df_rpt['상태'].isin(ACTIVE_STATES)]
         _rpt_defect  = df_rpt[df_rpt['상태'].str.contains('불량|부적합', na=False)]
         kp1, kp2, kp3, kp4 = st.columns(4)
-        kp1.metric(" 총 투입",      f"{len(_rpt_serials)} EA")
+        kp1.metric(" 총 투입",      f"{len(df_rpt)} EA")
         kp2.metric(" 최종 완료",    f"{len(_rpt_done)} EA")
         kp3.metric(" 진행 중",     f"{len(_rpt_ing)} EA")
         kp4.metric(" 불량/부적합", f"{len(_rpt_defect)} 건")
