@@ -402,6 +402,17 @@ def load_app_setting(key: str):
     return None
 
 
+@st.cache_data(ttl=300)
+def load_all_app_settings() -> dict:
+    """app_settings 테이블 전체를 한 번에 조회 (개별 호출 대비 쿼리 수 절감)."""
+    try:
+        import json as _j
+        res = get_supabase().table("app_settings").select("key,value").execute()
+        return {row["key"]: _j.loads(row["value"]) for row in (res.data or [])}
+    except Exception:
+        return {}
+
+
 def save_app_setting(key: str, value):
     try:
         import json as _j
