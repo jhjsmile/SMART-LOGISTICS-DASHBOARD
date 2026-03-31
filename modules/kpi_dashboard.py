@@ -18,33 +18,10 @@ from modules.calendar_view import _xp, _rerun
 
 # ── 상수 ──────────────────────────────────────────────────────────────
 KST = timezone(timedelta(hours=9))
-PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
-CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower", "schedule_manager"]
-ACTIVE_STATES = [
-    '조립중', '검사대기', '검사중', 'OQC대기', 'OQC중',
-    '출하승인', '포장대기', '포장중', '수리 완료(재투입)', '불량 처리 중',
-]
-PLAN_CATEGORIES = ["조립계획", "포장계획", "출하계획"]
-SCHEDULE_COLORS = {
-    "조립계획": "#7eb8e8",
-    "포장계획": "#7ec8a0",
-    "출하계획": "#f0c878",
-    "특이사항": "#e8908a",
-    "기타":     "#b49fd4",
-}
-SCH_CHANGE_REASONS = [
-    "(선택 필수)",
-    "영업 요구량 변경 (주문 취소)",
-    "영업 요구량 변경 (물량 증가)",
-    "긴급 주문 (Rush Order)",
-    "자재 수급 문제 (입고 지연)",
-    "자재 수급 문제 (불량 자재)",
-    "설비 고장 / 유지보수",
-    "인력 변동 (부족/결원)",
-    "품질 문제 (불량 발생)",
-    "계획 오입력 수정",
-    "기타 (직접 입력)",
-]
+from modules.constants import (
+    PRODUCTION_GROUPS, CALENDAR_EDIT_ROLES, ACTIVE_STATES,
+    PLAN_CATEGORIES, SCHEDULE_COLORS, SCH_CHANGE_REASONS,
+)
 
 
 def render_kpi_dashboard():

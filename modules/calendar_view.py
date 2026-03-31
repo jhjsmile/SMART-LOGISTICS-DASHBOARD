@@ -13,31 +13,10 @@ from modules.database import (
 )
 from modules.auth import check_perm
 from modules.utils import get_now_kst_str
-
-# ── 상수 ──────────────────────────────────────────────────────────────
-CALENDAR_EDIT_ROLES = ["master", "admin", "control_tower", "schedule_manager"]
-PRODUCTION_GROUPS   = ["제조1반", "제조2반", "제조3반"]
-SCHEDULE_COLORS = {
-    "조립계획": "#7eb8e8",
-    "포장계획": "#7ec8a0",
-    "출하계획": "#f0c878",
-    "특이사항": "#e8908a",
-    "기타":     "#b49fd4",
-}
-PLAN_CATEGORIES = ["조립계획", "포장계획", "출하계획"]
-SCH_CHANGE_REASONS = [
-    "(선택 필수)",
-    "영업 요구량 변경 (주문 취소)",
-    "영업 요구량 변경 (물량 증가)",
-    "긴급 주문 (Rush Order)",
-    "자재 수급 문제 (입고 지연)",
-    "자재 수급 문제 (불량 자재)",
-    "설비 고장 / 유지보수",
-    "인력 변동 (부족/결원)",
-    "품질 문제 (불량 발생)",
-    "계획 오입력 수정",
-    "기타 (직접 입력)",
-]
+from modules.constants import (
+    PRODUCTION_GROUPS, CALENDAR_EDIT_ROLES, SCHEDULE_COLORS,
+    PLAN_CATEGORIES, SCH_CHANGE_REASONS,
+)
 
 # =================================================================
 # 캘린더 유틸리티

@@ -24,6 +24,10 @@ _MAX_AUDIT_LOG_ROWS = 200
 # 서버사이드 로그인 잠금 (프로세스 공유 — session_state 우회 방지)
 # =================================================================
 # 구조: {"username": {"count": int, "lockout_until": float}}
+# ※ 주의: 이 잠금은 단일 프로세스 내에서만 유효합니다.
+#         멀티 워커(multi-worker) 또는 멀티 인스턴스 환경(예: 수평 확장 배포)에서는
+#         다른 프로세스/인스턴스로 요청이 라우팅될 경우 잠금을 우회할 수 있습니다.
+#         분산 환경에서 완전한 보호가 필요하다면 Redis 등 외부 공유 저장소를 사용하세요.
 _LOGIN_ATTEMPTS: dict = {}
 _LOGIN_LOCK = threading.Lock()
 
@@ -109,6 +113,9 @@ def _clear_all_cache() -> None:
     _clear_master_cache()
     _clear_audit_cache()
     _clear_stoppage_cache()
+    _clear_help_request_cache()
+    _clear_access_request_cache()
+    load_material_serials.clear()
 
 
 def clear_cache_for_tables(tables: set) -> None:
