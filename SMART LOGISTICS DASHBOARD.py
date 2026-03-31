@@ -538,6 +538,7 @@ if 'wait_checked'        not in st.session_state: st.session_state.wait_checked 
 if 'wait_scan_cnt'       not in st.session_state: st.session_state.wait_scan_cnt       = {}
 if 'bc_trim_enabled'    not in st.session_state: st.session_state.bc_trim_enabled    = False
 if 'bc_trim_digits'     not in st.session_state: st.session_state.bc_trim_digits     = 7
+if 'wt_queues'          not in st.session_state: st.session_state.wt_queues          = {}
 
 # =================================================================
 # 6. 로그인
@@ -1709,14 +1710,80 @@ elif curr_l == "조립 라인":
                 st.toast(f" 등록 완료: {sn_val}")
                 st.rerun()
 
-        _start_col, _ = st.columns([1, 2])
+        _start_col, _wait_col, _ = st.columns([1, 1, 1])
         if _start_col.button("▶ 생산 시작 등록", use_container_width=True, type="primary", key=f"start_btn_{curr_g}"):
             if target_model != "선택하세요." and target_item not in [None, "", "모델 선택 대기", "(품목코드 없음)"] and target_sn.strip():
                 _do_register_sn(_bc_trim(target_sn.strip()))
             else:
                 st.warning("모델, 품목코드, 메인 S/N을 모두 입력해주세요.")
 
+        if _wait_col.button(" 입고 대기", use_container_width=True, type="secondary", key=f"wt_add_btn_{curr_g}"):
+            _wt_sn = _bc_trim(target_sn.strip())
+            if target_model != "선택하세요." and target_item not in [None, "", "모델 선택 대기", "(품목코드 없음)"] and _wt_sn:
+                if curr_g not in st.session_state.wt_queues:
+                    st.session_state.wt_queues[curr_g] = []
+                _already_wt = any(w["sn"] == _wt_sn for w in st.session_state.wt_queues[curr_g])
+                if not _already_wt:
+                    st.session_state.wt_queues[curr_g].append({
+                        "sn": _wt_sn,
+                        "model": target_model,
+                        "item": target_item,
+                        "added": get_now_kst_str()
+                    })
+                    st.session_state[_msn_cnt_key] += 1  # S/N 입력란 초기화
+                    st.toast(f" 입고 대기 추가: {_wt_sn}")
+                    st.rerun()
+                else:
+                    st.warning(f"이미 대기 중인 S/N입니다: {_wt_sn}")
+            else:
+                st.warning("모델, 품목코드, 메인 S/N을 모두 입력해주세요.")
+
     # ── 기존 제품 자재 시리얼 추가 ────────────────────────────────────
+    # ── 입고 대기 큐 ──────────────────────────────────────────────────
+    _wt_q = st.session_state.wt_queues.get(curr_g, [])
+    if _wt_q:
+        with st.container(border=True):
+            _wth1, _wth2 = st.columns([3, 1])
+            _wth1.markdown(f"<p style='font-size:0.95rem;font-weight:700;color:#2471a3;margin:0;'> 입고 대기 · {len(_wt_q)}건</p>", unsafe_allow_html=True)
+            if _wth2.button(" 전체 삭제", key=f"wt_clr_{curr_g}", use_container_width=True):
+                st.session_state.wt_queues[curr_g] = []
+                st.rerun()
+
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            _wt_hc1, _wt_hc2, _wt_hc3, _wt_hc4, _wt_hc5 = st.columns([3, 2, 2, 1, 1])
+            _wt_hc1.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>메인 S/N</p>", unsafe_allow_html=True)
+            _wt_hc2.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>모델</p>", unsafe_allow_html=True)
+            _wt_hc3.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>품목코드</p>", unsafe_allow_html=True)
+            _wt_hc4.markdown("<p style='font-size:0.7rem;font-weight:700;color:#aaa;margin:0;'>대기 시간</p>", unsafe_allow_html=True)
+
+            _wt_new = []
+            _wt_do_rerun = False
+            for _wi, _witem in enumerate(_wt_q):
+                _wc1, _wc2, _wc3, _wc4, _wc5 = st.columns([3, 2, 2, 1, 1])
+                _wc1.code(_witem["sn"], language=None)
+                _wc2.caption(_witem.get("model", ""))
+                _wc3.caption(_witem.get("item", ""))
+                _wc4.caption(_witem.get("added", "")[-8:-3] if len(_witem.get("added", "")) > 10 else "")
+                _wt_reg = _wc5.button("▶ 투입", key=f"wt_reg_{curr_g}_{_wi}", use_container_width=True, type="primary")
+                _wt_del = _wc5.button("삭제", key=f"wt_del_{curr_g}_{_wi}", use_container_width=True)
+                if _wt_reg:
+                    if insert_row({
+                        '시간': get_now_kst_str(), '반': curr_g, '라인': "조립 라인",
+                        '모델': _witem['model'], '품목코드': _witem['item'],
+                        '시리얼': _witem['sn'], '상태': '조립중',
+                        '증상': '', '수리': '', '작업자': st.session_state.user_id
+                    }):
+                        st.session_state.production_db = load_realtime_ledger()
+                        st.toast(f" 투입 완료: {_witem['sn']}")
+                        _wt_do_rerun = True
+                elif not _wt_del:
+                    _wt_new.append(_witem)
+                else:
+                    _wt_do_rerun = True
+            if _wt_do_rerun:
+                st.session_state.wt_queues[curr_g] = _wt_new
+                st.rerun()
+
     with st.expander(" 기존 제품 자재 시리얼 추가 등록", expanded=_xp("asm_mat"), key="_xp_asm_mat"):
         st.caption("메인 S/N을 입력하면 기존 등록된 자재를 조회하고 누락된 자재를 추가할 수 있습니다.")
 
