@@ -2337,9 +2337,9 @@ elif curr_l == "생산 현황 리포트":
         _rpt_ing     = df_rpt[df_rpt['상태'].isin(ACTIVE_STATES)]
         _rpt_defect  = df_rpt[df_rpt['상태'].str.contains('불량|부적합', na=False)]
         kp1, kp2, kp3, kp4 = st.columns(4)
-        kp1.metric(" 총 투입",      f"{len(df_rpt)} EA")
-        kp2.metric(" 최종 완료",    f"{len(_rpt_done)} EA")
-        kp3.metric(" 진행 중",     f"{len(_rpt_ing)} EA")
+        kp1.metric(" 총 투입",      f"{len(df_rpt)} 대")
+        kp2.metric(" 최종 완료",    f"{len(_rpt_done)} 대")
+        kp3.metric(" 진행 중",     f"{len(_rpt_ing)} 대")
         kp4.metric(" 불량/부적합", f"{len(_rpt_defect)} 건")
         st.divider()
 
@@ -3920,8 +3920,11 @@ elif curr_l == "수리 현황 리포트":
                 '수리 완료(재투입)':  '#27ae60',
                 '부적합(OQC)':       '#e67e22',
             }
+            _trend_grp['날짜_표시'] = pd.to_datetime(_trend_grp['날짜']).apply(
+                lambda d: f"{d.month}월 {d.day}일"
+            )
             st.plotly_chart(
-                px.bar(_trend_grp, x='날짜', y='건수', color='이후상태',
+                px.bar(_trend_grp, x='날짜_표시', y='건수', color='이후상태',
                        barmode='group', title="날짜별 불량·수리 발생 추이",
                        color_discrete_map=_trend_color),
                 use_container_width=True
