@@ -2382,9 +2382,10 @@ elif curr_l == "생산 현황 리포트":
                 st.plotly_chart(_fig_ln, use_container_width=True)
         with cc4:
             try:
-                # 투입 추이: 이미 위에서 날짜 기준으로 로드한 _rpt_audit 재사용
-                # (메인 시리얼 등록 = 이전상태 '-', 이후상태 '조립중')
-                _audit_trend = _rpt_audit.copy() if not _rpt_audit.empty else pd.DataFrame(columns=['시간','반','이전상태','이후상태'])
+                # 투입 추이: 항상 오늘 날짜 기준으로 별도 조회 (조회 기간과 무관)
+                _chart_date = get_now_kst_str()[:10]
+                _today_audit = load_audit_log_by_date(_chart_date, _chart_date)
+                _audit_trend = _today_audit.copy() if not _today_audit.empty else pd.DataFrame(columns=['시간','반','이전상태','이후상태'])
                 if v_group != "전체" and not _audit_trend.empty:
                     _audit_trend = _audit_trend[_audit_trend['반'] == v_group]
                 if not _audit_trend.empty and '이전상태' in _audit_trend.columns and '이후상태' in _audit_trend.columns:
@@ -2399,12 +2400,9 @@ elif curr_l == "생산 현황 리포트":
                     _df_trend['_kst'] = _parsed.dt.tz_convert('Asia/Seoul')
                 else:
                     _df_trend['_kst'] = _parsed
-                _df_trend['_date'] = _df_trend['_kst'].dt.strftime('%Y-%m-%d')
                 _df_trend['_hhmm'] = _df_trend['_kst'].dt.hour * 60 + _df_trend['_kst'].dt.minute
 
-                # 조회 기간의 마지막 날 기준으로 표시 (기본: 오늘)
-                _chart_date = _rpt_to  # 선택한 기간의 종료일
-                _today_data = _df_trend[_df_trend['_date'] == _chart_date]
+                _today_data = _df_trend
 
                 # 근무시간 슬롯 필터: 08:30(510분) ~ 17:30(1050분)
                 _work = _today_data[
