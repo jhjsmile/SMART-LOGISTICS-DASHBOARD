@@ -2348,7 +2348,7 @@ elif curr_l == "생산 현황 리포트":
         with cc1:
             _st_cnt = df_rpt.groupby('상태').size().reset_index(name='수량').sort_values('수량', ascending=False)
             _fig_st = px.bar(_st_cnt, x='상태', y='수량', color='상태',
-                             title="<b>기간별 상태 분포</b>", template="plotly_white",
+                             title=f"<b>기간별 상태 분포</b>  ({_rpt_from} ~ {_rpt_to})", template="plotly_white",
                              text='수량')
             _fig_st.update_traces(textposition='outside', textfont_size=11)
             _fig_st.update_layout(showlegend=False, margin=dict(t=50, b=20))
@@ -2368,7 +2368,7 @@ elif curr_l == "생산 현황 리포트":
                 _ban_done = df_rpt[df_rpt['상태'] == '완료'].groupby('반').size().reset_index(name='완료')
                 if not _ban_done.empty:
                     _fig_ban = px.bar(_ban_done, x='반', y='완료', color='반',
-                                      title="<b>반별 완료 수량</b>", template="plotly_white")
+                                      title=f"<b>반별 완료 수량</b>  ({_rpt_from} ~ {_rpt_to})", template="plotly_white")
                     _fig_ban.update_layout(showlegend=False, margin=dict(t=40, b=20))
                     st.plotly_chart(_fig_ban, use_container_width=True)
                 else:
