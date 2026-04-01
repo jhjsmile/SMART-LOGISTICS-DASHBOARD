@@ -1967,13 +1967,13 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                             _upd = {'시간': get_now_kst_str(),
                                 '라인': curr_l, '상태': _next_s,
                                 '작업자': st.session_state.user_id}
-                            update_row(wrow['시리얼'], _upd)
-                            insert_audit_log(시리얼=wrow['시리얼'], 모델=wrow['모델'],
-                                반=curr_g, 이전상태=wrow['상태'], 이후상태=_next_s,
-                                작업자=st.session_state.user_id)
-                            st.session_state[_wck_key].pop(str(widx), None)
-                            _prod_update(wrow['시리얼'], _upd)
-                            _rerun("chk_wait")
+                            if update_row(wrow['시리얼'], _upd):
+                                insert_audit_log(시리얼=wrow['시리얼'], 모델=wrow['모델'],
+                                    반=curr_g, 이전상태=wrow['상태'], 이후상태=_next_s,
+                                    작업자=st.session_state.user_id)
+                                st.session_state[_wck_key].pop(str(widx), None)
+                                _prod_update(wrow['시리얼'], _upd)
+                                _rerun("chk_wait")
         else:
             st.info("입고 대기 물량 없음")
 
