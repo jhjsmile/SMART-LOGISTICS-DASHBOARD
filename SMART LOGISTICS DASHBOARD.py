@@ -59,7 +59,7 @@ from modules.database import (
     load_app_setting, save_app_setting,
     submit_help_request, load_help_requests,
     submit_access_request, load_access_requests, review_access_request,
-    insert_audit_log, load_audit_log, load_audit_log_by_date, load_oqc_fail_audit_log,
+    insert_audit_log, load_audit_log, load_audit_log_by_date, load_oqc_fail_audit_log, load_oqc_entry_dates,
     delete_all_audit_log, delete_audit_log_row,
     insert_material_serials, load_material_serials,
     load_material_serials_bulk, search_material_by_sn,
@@ -3392,7 +3392,13 @@ elif curr_l == "OQC 라인":
         with cc3:
             oqc_done_chart = oqc_chart_df[oqc_chart_df['상태'].isin(['출하승인','부적합(OQC)'])].copy()
             if not oqc_done_chart.empty and '시간' in oqc_done_chart.columns:
-                oqc_done_chart['월'] = oqc_done_chart['시간'].str[:7]
+                # OQC 최초 투입 월 기준 집계 (처리 완료 월이 아닌 OQC 투입 월)
+                _oqc_entry = load_oqc_entry_dates()
+                if not _oqc_entry.empty:
+                    oqc_done_chart = oqc_done_chart.merge(_oqc_entry, on='시리얼', how='left')
+                    oqc_done_chart['월'] = oqc_done_chart['oqc_입고시간'].fillna(oqc_done_chart['시간']).str[:7]
+                else:
+                    oqc_done_chart['월'] = oqc_done_chart['시간'].str[:7]
                 # oqc_done_chart는 이미 ['출하승인','부적합(OQC)'] 필터됨 → 전체=투입, 출하승인=합격
                 _m_total = oqc_done_chart.groupby('월').size()
                 _m_pass  = oqc_done_chart[oqc_done_chart['상태'] == '출하승인'].groupby('월').size()
