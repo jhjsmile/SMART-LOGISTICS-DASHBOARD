@@ -2402,19 +2402,9 @@ elif curr_l == "생산 현황 리포트":
                 _df_trend['_date'] = _df_trend['_kst'].dt.strftime('%Y-%m-%d')
                 _df_trend['_hhmm'] = _df_trend['_kst'].dt.hour * 60 + _df_trend['_kst'].dt.minute
 
-                # 오늘 날짜 기준으로 데이터 선택 → 없으면 가장 최근 근무일
-                _today_str = get_now_kst_str()[:10]
-                _today_data = _df_trend[_df_trend['_date'] == _today_str]
-                if _today_data.empty:
-                    # 오늘 데이터 없으면 가장 최근 날짜
-                    _latest_date = _df_trend['_date'].dropna().max() if not _df_trend.empty else None
-                    if _latest_date:
-                        _today_data = _df_trend[_df_trend['_date'] == _latest_date]
-                        _chart_date = _latest_date
-                    else:
-                        _chart_date = _today_str
-                else:
-                    _chart_date = _today_str
+                # 조회 기간의 마지막 날 기준으로 표시 (기본: 오늘)
+                _chart_date = _rpt_to  # 선택한 기간의 종료일
+                _today_data = _df_trend[_df_trend['_date'] == _chart_date]
 
                 # 근무시간 슬롯 필터: 08:30(510분) ~ 17:30(1050분)
                 _work = _today_data[
