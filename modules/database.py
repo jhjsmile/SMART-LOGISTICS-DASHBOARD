@@ -553,6 +553,23 @@ def load_audit_log_by_date(date_from: str, date_to: str) -> pd.DataFrame:
         return _EMPTY
 
 
+@st.cache_data(ttl=120)
+def load_oqc_entry_dates() -> pd.DataFrame:
+    """audit_log에서 시리얼별 OQC 최초 투입일(이후상태='OQC대기' 첫 기록) 조회."""
+    try:
+        res = (get_supabase().table("audit_log")
+               .select("시리얼,시간")
+               .eq("이후상태", "OQC대기")
+               .order("시간", desc=False)
+               .execute())
+        if res.data:
+            df = pd.DataFrame(res.data)
+            return df.groupby('시리얼')['시간'].min().reset_index().rename(columns={'시간': 'oqc_입고시간'})
+        return pd.DataFrame(columns=['시리얼', 'oqc_입고시간'])
+    except Exception:
+        return pd.DataFrame(columns=['시리얼', 'oqc_입고시간'])
+
+
 @st.cache_data(ttl=30)
 def load_oqc_fail_audit_log() -> pd.DataFrame:
     """OQC 부적합 판정 이벤트만 서버 필터로 조회 (행 수 제한 없음)."""
