@@ -1683,7 +1683,7 @@ elif curr_l == "조립 라인":
                         작업자=st.session_state.user_id
                     )
                 st.session_state[_mat_list_key] = []
-                st.session_state[f"scan_cnt_{curr_g}"] = 0
+                st.session_state[f"scan_cnt_{curr_g}"] += 1
                 st.session_state[_msn_cnt_key] += 1
                 _clear_production_cache()
                 st.session_state.production_db = load_realtime_ledger()
