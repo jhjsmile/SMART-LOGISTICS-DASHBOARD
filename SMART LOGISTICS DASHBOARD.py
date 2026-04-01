@@ -3752,11 +3752,9 @@ elif curr_l == "불량 공정":
                                 _dmc2.caption(f"`{_dm.get('자재시리얼', '')}`")
 
                     _btn_col, _ = st.columns([1, 2])
-                    _is_submitting = st.session_state.get(f"_def_submit_{sn_key}", False)
                     if _btn_col.button(" 확정", key=f"b_{sn_key}", type="primary",
-                                       use_container_width=True, disabled=_is_submitting):
+                                       use_container_width=True):
                         if v_a:
-                            st.session_state[f"_def_submit_{sn_key}"] = True
                             _target_sn = target_sn.strip() or row['시리얼']
                             _rep_sn = replace_sn.strip()
                             if _rep_sn:
@@ -3787,6 +3785,8 @@ elif curr_l == "불량 공정":
                                         _prod_update(row['시리얼'], _upd)
                                         st.toast(f" 자재 시리얼 교체 완료: {_target_sn} → {_rep_sn}")
                                         _rerun(f"def_wait_{g}")
+                                    else:
+                                        st.error(f" 자재 시리얼 교체 실패: {_target_sn} → {_rep_sn}")
                                 else:
                                     # 메인 시리얼 교체 (기존 로직)
                                     _fresh_db = load_realtime_ledger()
