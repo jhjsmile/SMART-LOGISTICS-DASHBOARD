@@ -2424,12 +2424,15 @@ elif curr_l == "생산 현황 리포트":
                 _hourly['수량'] = _hourly['수량'].astype(int)
 
                 _fig_tr = px.bar(_hourly, x='시간대', y='수량',
-                                 title=f"<b>근무시간대별 생산 투입 현황</b> ({_chart_date})",
                                  template="plotly_white", text='수량')
                 _fig_tr.update_traces(marker_color='#2471a3', textposition='outside', textfont_size=9)
                 _fig_tr.update_xaxes(tickangle=-45)
                 _fig_tr.update_yaxes(dtick=5)
-                _fig_tr.update_layout(margin=dict(t=50, b=60))
+                _fig_tr.update_layout(
+                    title=dict(text=f"<b>근무시간대별 생산 투입 현황</b> ({_chart_date})",
+                               x=0, xanchor='left', font=dict(size=13)),
+                    margin=dict(t=50, b=60)
+                )
                 st.plotly_chart(_fig_tr, use_container_width=True)
             except Exception:
                 st.info("추이 차트 데이터 처리 중 오류")
