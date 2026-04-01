@@ -543,7 +543,7 @@ def load_audit_log_by_date(date_from: str, date_to: str) -> pd.DataFrame:
                .select("*")
                .gte("시간", date_from)
                .lte("시간", date_to + " 23:59:59")
-               .order("시간", desc=False)
+               .order("시간", desc=True)
                .limit(10000)
                .execute())
         if res.data:
