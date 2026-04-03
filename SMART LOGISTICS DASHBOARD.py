@@ -1258,15 +1258,34 @@ elif curr_l == "조립 라인":
     f_df = db_v[(db_v['반'] == curr_g) & (db_v['라인'] == "조립 라인")]
     _ASM_DEFECT_CAUSES = st.session_state.get('dropdown_defect_cause', ['(선택)', '기타 (직접 입력)'])
 
+    # ── 모델 필터 ─────────────────────────────────────────────
+    _asm_models = sorted(f_df['모델'].unique().tolist()) if not f_df.empty else []
+    _sel_model = None
+    if _asm_models:
+        _sel_model = st.selectbox(
+            " 조립 모델 선택",
+            _asm_models,
+            key=f"asm_model_filter_{curr_g}",
+        )
+        f_df = f_df[f_df['모델'] == _sel_model]
+
     # ──  오늘의 목표 달성 현황 ─────────────────────────────────
-    _plan_qty = int(pd.to_numeric(today_sch['조립수'], errors='coerce').fillna(0).sum()) if not today_sch.empty else 0
+    # 모델 필터 적용: 선택된 모델 기준으로 목표/실적 집계
+    if _sel_model and not today_sch.empty and '모델명' in today_sch.columns:
+        _plan_sch = today_sch[today_sch['모델명'] == _sel_model]
+    else:
+        _plan_sch = today_sch
+    _plan_qty = int(pd.to_numeric(_plan_sch['조립수'], errors='coerce').fillna(0).sum()) if not _plan_sch.empty else 0
     # 오늘 누적: audit_log 최초 등록(이전상태='-')으로 집계 → 검사·포장 라인 이동 후에도 감소 없음
     _today_audit = load_audit_log_by_date(today_str, today_str)
-    _done_today = int(len(_today_audit[
+    _audit_mask = (
         (_today_audit['이전상태'] == '-') &
         (_today_audit['이후상태'] == '조립중') &
         (_today_audit['반'] == curr_g)
-    ])) if not _today_audit.empty else 0
+    ) if not _today_audit.empty else pd.Series(dtype=bool)
+    if _sel_model and not _today_audit.empty and '모델' in _today_audit.columns:
+        _audit_mask = _audit_mask & (_today_audit['모델'] == _sel_model)
+    _done_today = int(len(_today_audit[_audit_mask])) if not _today_audit.empty else 0
     _wip_today  = len(f_df[f_df['시간'].astype(str).str.startswith(today_str) & f_df['상태'].isin(['조립중','수리 완료(재투입)'])]) if not f_df.empty else 0
 
     if _plan_qty > 0:
@@ -1331,7 +1350,7 @@ elif curr_l == "조립 라인":
 
     # ── 모델/품목별 수량 카운트 + 생산 이력 ─────────────────────────
     if not f_df.empty:
-        if curr_g != "제조2반":
+        if True:
             with st.expander(f" {curr_g} 조립 라인 수량 현황  ·  {len(f_df)}건", expanded=_xp("asm_cnt"), key="_xp_asm_cnt"):
                 grp = f_df.groupby(['모델','품목코드'])
                 count_rows = []
@@ -1367,8 +1386,11 @@ elif curr_l == "조립 라인":
             sc1, sc2 = st.columns([2, 2])
             sn_search = sc1.text_input(" 시리얼 검색", placeholder="S/N 스캔 또는 입력...", key=_asm_search_key)
             if sn_search.strip():
-                # 반 전체(db_g)에서 검색 — 이미 다른 라인으로 이동한 시리얼도 조회 가능
-                f_df_view = db_g[db_g['시리얼'].str.contains(sn_search.strip(), case=False, na=False)]
+                # 반 전체(db_g)에서 검색 — 이미 다른 라인으로 이동한 시리얼도 조회 가능 (선택 모델 기준)
+                _search_mask = db_g['시리얼'].str.contains(sn_search.strip(), case=False, na=False)
+                if _sel_model:
+                    _search_mask = _search_mask & (db_g['모델'] == _sel_model)
+                f_df_view = db_g[_search_mask]
                 if f_df_view.empty:
                     st.warning(f" **'{sn_search.strip()}'** 에 해당하는 시리얼이 없습니다.")
                 # 자동 체크는 조립 라인의 처리 가능 상태(actionable)만 적용
@@ -1538,7 +1560,11 @@ elif curr_l == "조립 라인":
         st.markdown(f"####  {curr_g} 신규 생산 등록")
 
         g_models     = st.session_state.group_master_models.get(curr_g, [])
-        target_model = st.selectbox("투입 모델 선택", ["선택하세요."] + g_models, key=f"model_sel_{curr_g}")
+        _reg_model_opts = ["선택하세요."] + g_models
+        _reg_default_idx = 0
+        if _sel_model and _sel_model in g_models:
+            _reg_default_idx = g_models.index(_sel_model) + 1
+        target_model = st.selectbox("투입 모델 선택", _reg_model_opts, index=_reg_default_idx, key=f"model_sel_{curr_g}")
         g_items      = st.session_state.group_master_items.get(curr_g, {}).get(target_model, [])
 
         ef1, ef2 = st.columns(2)
