@@ -73,8 +73,8 @@ def get_supabase() -> Client:
 def keep_supabase_alive() -> None:
     try:
         get_supabase().table("production").select("id").limit(1).execute()
-    except Exception as e:
-        st.sidebar.warning(f"⚠️ Supabase 연결 확인 실패: {e}")
+    except Exception:
+        st.sidebar.warning("⚠️ Supabase 연결 확인 실패 — 네트워크 상태를 확인해주세요.")
 
 
 # =================================================================
@@ -572,12 +572,13 @@ def load_oqc_entry_dates() -> pd.DataFrame:
 
 @st.cache_data(ttl=30)
 def load_oqc_fail_audit_log() -> pd.DataFrame:
-    """OQC 부적합 판정 이벤트만 서버 필터로 조회 (행 수 제한 없음)."""
+    """OQC 부적합 판정 이벤트만 서버 필터로 조회."""
     try:
         res = (get_supabase().table("audit_log")
                .select("*")
                .like("비고", "OQC 부적합 - 사유:%")
                .order("시간", desc=True)
+               .limit(1000)
                .execute())
         if res.data:
             return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
@@ -629,6 +630,7 @@ def insert_material_serials(메인시리얼: str, 모델: str, 반: str,
 
 @st.cache_data(ttl=60)
 def load_material_serials(메인시리얼: str = "") -> pd.DataFrame:
+    _MAT_COLS = ['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자']
     try:
         sb  = get_supabase()
         q   = sb.table("material_serial").select("*")
@@ -637,9 +639,9 @@ def load_material_serials(메인시리얼: str = "") -> pd.DataFrame:
         res = q.order("시간", desc=False).execute()
         if res.data:
             return pd.DataFrame(res.data).drop(columns=['id'], errors='ignore')
-        return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+        return pd.DataFrame(columns=_MAT_COLS)
     except Exception:
-        return pd.DataFrame(columns=['시간','메인시리얼','모델','반','자재명','자재시리얼','작업자'])
+        return pd.DataFrame(columns=_MAT_COLS)
 
 
 @st.cache_data(ttl=60)
