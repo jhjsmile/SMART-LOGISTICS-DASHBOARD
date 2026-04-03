@@ -1137,8 +1137,8 @@ if curr_l == "현황판":
                 _tbl += (
                     f"<tr style='background:{_bg};'>"
                     f"<td style='padding:6px 10px;'><span style='background:{_hc}22;color:{_hc};font-weight:700;"
-                    f"padding:2px 8px;border-radius:5px;font-size:0.78rem;'>{_mr['반'][:3]}</span></td>"
-                    f"<td style='padding:6px 10px;font-weight:600;'>{_mr['모델']}</td>"
+                    f"padding:2px 8px;border-radius:5px;font-size:0.78rem;'>{html_mod.escape(str(_mr['반'])[:3])}</span></td>"
+                    f"<td style='padding:6px 10px;font-weight:600;'>{html_mod.escape(str(_mr['모델']))}</td>"
                     f"<td style='padding:6px 10px;text-align:center;'>{_mr['투입']}</td>"
                     f"<td style='padding:6px 10px;text-align:center;color:#d68910;font-weight:600;'>{_mr['진행중']}</td>"
                     f"<td style='padding:6px 10px;text-align:center;color:#1e8449;font-weight:600;'>{_mr['완료']}</td>"
@@ -1286,7 +1286,7 @@ elif curr_l == "조립 라인":
     if _sel_model and not _today_audit.empty and '모델' in _today_audit.columns:
         _audit_mask = _audit_mask & (_today_audit['모델'] == _sel_model)
     _done_today = int(len(_today_audit[_audit_mask])) if not _today_audit.empty else 0
-    _wip_today  = len(f_df[f_df['시간'].astype(str).str.startswith(today_str) & f_df['상태'].isin(['조립중','수리 완료(재투입)'])]) if not f_df.empty else 0
+    _wip_today  = len(f_df[f_df['시간'].astype(str).str.startswith(today_str) & f_df['상태'].isin(WIP_STATES)]) if not f_df.empty else 0
 
     if _plan_qty > 0:
         _real_pct = int(_done_today / _plan_qty * 100)
@@ -1356,8 +1356,8 @@ elif curr_l == "조립 라인":
                 count_rows = []
                 for (model, pn), gdf in grp:
                     total  = len(gdf)
-                    done   = len(gdf[gdf['상태'].isin(['검사대기','검사중','OQC대기','OQC중','출하승인','포장대기','포장중','완료'])])
-                    wip    = len(gdf[gdf['상태'].isin(['조립중','수리 완료(재투입)'])])
+                    done   = len(gdf[gdf['상태'].isin(DONE_STATES)])
+                    wip    = len(gdf[gdf['상태'].isin(WIP_STATES)])
                     defect = len(gdf[gdf['상태'].str.contains('불량|부적합', na=False)])
                     count_rows.append((model, pn, total, done, wip, defect))
 
@@ -1387,7 +1387,7 @@ elif curr_l == "조립 라인":
             sn_search = sc1.text_input(" 시리얼 검색", placeholder="S/N 스캔 또는 입력...", key=_asm_search_key)
             if sn_search.strip():
                 # 반 전체(db_g)에서 검색 — 이미 다른 라인으로 이동한 시리얼도 조회 가능 (선택 모델 기준)
-                _search_mask = db_g['시리얼'].str.contains(sn_search.strip(), case=False, na=False)
+                _search_mask = db_g['시리얼'].str.contains(sn_search.strip(), case=False, na=False, regex=False)
                 if _sel_model:
                     _search_mask = _search_mask & (db_g['모델'] == _sel_model)
                 f_df_view = db_g[_search_mask]
@@ -1395,7 +1395,7 @@ elif curr_l == "조립 라인":
                     st.warning(f" **'{sn_search.strip()}'** 에 해당하는 시리얼이 없습니다.")
                 # 자동 체크는 조립 라인의 처리 가능 상태(actionable)만 적용
                 _asm_cb_ver_now = st.session_state[_asm_search_cnt]
-                _wip_mask = f_df_view['상태'].isin(["조립중", "수리 완료(재투입)"])
+                _wip_mask = f_df_view['상태'].isin(WIP_STATES)
                 for _si in f_df_view.index[_wip_mask]:
                     st.session_state[_asm_chk_key][str(_si)] = True
                     st.session_state[f"asm_cb_{curr_g}_{_si}_{_asm_cb_ver_now}"] = True
@@ -1426,7 +1426,8 @@ elif curr_l == "조립 라인":
                                          "작업자": st.session_state.user_id}})
                     st.session_state[_asm_chk_key] = {}
                     st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
-                    _prod_bulk_update(_run_bulk_db_ops(_ops))
+                    with st.spinner("처리 중..."):
+                        _prod_bulk_update(_run_bulk_db_ops(_ops))
                     _rerun("asm_hist")
                 if ba4.button(" 일괄 불량", key=f"bulk_ng_{curr_g}", use_container_width=True,
                              disabled=not check_perm(f"조립 라인::{curr_g}", "write")):
@@ -1446,7 +1447,8 @@ elif curr_l == "조립 라인":
                                              "작업자": st.session_state.user_id}})
                         st.session_state[_asm_chk_key] = {}
                         st.session_state[_asm_search_cnt] += 1  # 체크박스 키 리셋
-                        _prod_bulk_update(_run_bulk_db_ops(_ops))
+                        with st.spinner("처리 중..."):
+                            _prod_bulk_update(_run_bulk_db_ops(_ops))
                         _rerun("asm_hist")
 
             # STATUS_STYLE: 모듈 상수 사용 (상단 정의 참조)
@@ -1460,7 +1462,7 @@ elif curr_l == "조립 라인":
             _asm_bulk_mats = load_material_serials_bulk(_asm_bulk_sns) if _asm_bulk_sns else pd.DataFrame()
             for row in f_df_view.sort_values('시간', ascending=False).reset_index().to_dict('records'):
                 idx = row['index']
-                is_actionable = row['상태'] in ["조립중", "수리 완료(재투입)"]
+                is_actionable = row['상태'] in WIP_STATES
                 r = st.columns([0.4, 2.0, 1.8, 1.4, 1.6, 1.1, 1.1])
                 if is_actionable:
                     _ck = r[0].checkbox("", key=f"asm_cb_{curr_g}_{idx}_{_asm_cb_ver}",
@@ -1888,7 +1890,7 @@ elif curr_l == "조립 라인":
                                 st.session_state[_add_mat_list_key] = []
                                 st.session_state[_add_mat_sn_cnt_key] += 1
                                 st.session_state[_add_scan_cnt_key] = 0
-                                st.cache_data.clear()
+                                clear_cache_for_tables({"material_serial"})
                                 st.toast(f" {len(valid_add_mats)}개 자재 시리얼 추가 완료")
                                 _rerun("asm_mat")
                         else:
@@ -1960,7 +1962,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                          "작업자": st.session_state.user_id}})
                     st.session_state[_wck_key] = {}
                     st.session_state[_wscan_cnt] += 1  # 체크박스 키 리셋
-                    _prod_bulk_update(_run_bulk_db_ops(_ops))
+                    with st.spinner("처리 중..."):
+                        _prod_bulk_update(_run_bulk_db_ops(_ops))
                     _rerun("chk_wait")
                 if wba3.button(" 선택 해제", key=f"wait_unck_{curr_g}_{curr_l}",
                                use_container_width=True):
@@ -1986,7 +1989,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                         st.session_state[_wck_key][str(widx)] = _wck
                         _is_reentry = wrow.get('상태') == '수리 완료(재투입)'
                         _reentry_badge = "  <span style='background:#fff3cd;color:#856404;font-size:0.68rem;font-weight:700;padding:1px 6px;border-radius:8px;border:1px solid #ffc107;'>수리 재투입</span>" if _is_reentry else ""
-                        wr2.markdown(f"`{wrow['시리얼']}`  <span style='color:#999;font-size:0.75rem;'>{str(wrow.get('시간',''))[:16]}</span>{_reentry_badge}",
+                        wr2.markdown(f"`{html_mod.escape(str(wrow['시리얼']))}`  <span style='color:#999;font-size:0.75rem;'>{html_mod.escape(str(wrow.get('시간',''))[:16])}</span>{_reentry_badge}",
                                     unsafe_allow_html=True)
                         if wr3.button(" 입고", key=f"in_{widx}", use_container_width=True):
                             _next_s = '검사중' if curr_l == '검사 라인' else '포장중'
@@ -2064,7 +2067,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                              "작업자": st.session_state.user_id}})
                     st.session_state[_hck_key] = {}
                     st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
-                    _prod_bulk_update(_run_bulk_db_ops(_ops))
+                    with st.spinner("처리 중..."):
+                        _prod_bulk_update(_run_bulk_db_ops(_ops))
                     _rerun("chk_hist")
                 if hba4.button(" 일괄 불량", key=f"hist_bulk_ng_{curr_g}_{curr_l}",
                                use_container_width=True):
@@ -2085,7 +2089,8 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                                  "작업자": st.session_state.user_id}})
                         st.session_state[_hck_key] = {}
                         st.session_state[_hsrch_cnt] += 1  # 체크박스 키 리셋
-                        _prod_bulk_update(_run_bulk_db_ops(_ops))
+                        with st.spinner("처리 중..."):
+                            _prod_bulk_update(_run_bulk_db_ops(_ops))
                         _rerun("chk_hist")
                 if hba5.button("해제", key=f"hist_unck_{curr_g}_{curr_l}",
                                use_container_width=True, help="선택 해제"):
@@ -2324,7 +2329,7 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                 st.session_state[_ql_mat_list_key] = []
                                 st.session_state[_ql_sn_cnt_key] += 1
                                 st.session_state[_ql_scan_cnt_key] = 0
-                                st.cache_data.clear()
+                                clear_cache_for_tables({"material_serial"})
                                 st.toast(f" {len(valid_ql_mats)}개 자재 시리얼 추가 완료")
                                 _rerun("chk_mat")
                         else:
@@ -2867,7 +2872,8 @@ elif curr_l == "OQC 라인":
                                          "작업자": st.session_state.user_id}})
                     st.session_state[_oqc_in_ck_key] = {}
                     st.session_state[_oqc_in_sc_cnt] += 1  # 체크박스 키 리셋
-                    _prod_bulk_update(_run_bulk_db_ops(_ops))
+                    with st.spinner("처리 중..."):
+                        _prod_bulk_update(_run_bulk_db_ops(_ops))
                     _rerun("oqc_wait")
                 if oib3.button(" 해제", key="oqc_in_unck", use_container_width=True):
                     st.session_state[_oqc_in_ck_key] = {}
@@ -2951,7 +2957,8 @@ elif curr_l == "OQC 라인":
                                          "작업자": st.session_state.user_id}})
                     st.session_state[_oqc_ck_key] = {}
                     st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
-                    _prod_bulk_update(_run_bulk_db_ops(_ops))
+                    with st.spinner("처리 중..."):
+                        _prod_bulk_update(_run_bulk_db_ops(_ops))
                     _rerun("oqc_ing")
                 _bulk_defect = ob3.selectbox("부적합 사유", OQC_DEFECT_REASONS,
                                              key="oqc_bulk_defect", label_visibility="collapsed")
@@ -2978,7 +2985,8 @@ elif curr_l == "OQC 라인":
                                              "비고": f"OQC 부적합 - 사유: {_dflt}"}})
                         st.session_state[_oqc_ck_key] = {}
                         st.session_state[_oqc_sc_cnt] += 1  # 체크박스 키 리셋
-                        _prod_bulk_update(_run_bulk_db_ops(_ops))
+                        with st.spinner("처리 중..."):
+                            _prod_bulk_update(_run_bulk_db_ops(_ops))
                         _rerun("oqc_ing")
 
             st.markdown("<hr style='margin:8px 0;border-color:#e0d8c8;'>", unsafe_allow_html=True)
@@ -3081,7 +3089,7 @@ elif curr_l == "OQC 라인":
         if not oqc_done.empty:
             oqc_sn_filter = st.text_input(" S/N 검색", key="oqc_sn_filter", placeholder="시리얼 일부 입력")
             if oqc_sn_filter.strip():
-                oqc_done = oqc_done[oqc_done['시리얼'].str.contains(oqc_sn_filter.strip(), case=False, na=False)]
+                oqc_done = oqc_done[oqc_done['시리얼'].str.contains(oqc_sn_filter.strip(), case=False, na=False, regex=False)]
     
             STATE_CLR2 = STATUS_BG  # 전역 상수 재사용 (중복 정의 제거)
     
@@ -3171,8 +3179,8 @@ elif curr_l == "OQC 라인":
                                     ac[0].caption(str(ar.get('시간',''))[:16])
                                     prev_c = STATE_CLR2.get(ar.get('이전상태',''), '#f5f2ec')
                                     next_c = STATE_CLR2.get(ar.get('이후상태',''), '#f5f2ec')
-                                    ac[1].markdown(f"<span style='background:{prev_c};padding:1px 6px;border-radius:4px;font-size:0.75rem;'>{ar.get('이전상태','')}</span>", unsafe_allow_html=True)
-                                    ac[2].markdown(f"<span style='background:{next_c};padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:bold;'>{ar.get('이후상태','')}</span>", unsafe_allow_html=True)
+                                    ac[1].markdown(f"<span style='background:{prev_c};padding:1px 6px;border-radius:4px;font-size:0.75rem;'>{html_mod.escape(str(ar.get('이전상태','')))}</span>", unsafe_allow_html=True)
+                                    ac[2].markdown(f"<span style='background:{next_c};padding:1px 6px;border-radius:4px;font-size:0.75rem;font-weight:bold;'>{html_mod.escape(str(ar.get('이후상태','')))}</span>", unsafe_allow_html=True)
                                     ac[3].caption(ar.get('작업자',''))
                                     ac[4].caption(ar.get('비고',''))
                             else:
@@ -3187,7 +3195,7 @@ elif curr_l == "OQC 라인":
                         if not mat_df.empty:
                             # 성능: iterrows → to_dict('records')
                             for mr in mat_df.to_dict('records'):
-                                st.markdown(f"- **{mr.get('자재명','')}** : `{mr.get('자재시리얼','')}`　<span style='color:#aaa;font-size:0.75rem;'>{mr.get('작업자','')}</span>", unsafe_allow_html=True)
+                                st.markdown(f"- **{html_mod.escape(str(mr.get('자재명','')))}** : `{html_mod.escape(str(mr.get('자재시리얼','')))}` <span style='color:#aaa;font-size:0.75rem;'>{html_mod.escape(str(mr.get('작업자','')))}</span>", unsafe_allow_html=True)
                         else:
                             st.info("등록된 자재 시리얼 없음")
                 # ── 시리얼 클릭 자재 토글 표시 ──
@@ -3279,7 +3287,7 @@ elif curr_l == "OQC 라인":
                 if _nc_ban != "전체":
                     _nc_view = _nc_view[_nc_view['반'] == _nc_ban]
                 if _nc_sn.strip():
-                    _nc_view = _nc_view[_nc_view['시리얼'].str.contains(_nc_sn.strip(), case=False, na=False)]
+                    _nc_view = _nc_view[_nc_view['시리얼'].str.contains(_nc_sn.strip(), case=False, na=False, regex=False)]
                 if _nc_reason != "전체":
                     _nc_view = _nc_view[_nc_view['부적합 사유'] == _nc_reason]
 
@@ -3685,12 +3693,15 @@ elif curr_l == "불량 공정":
         if _def_search.strip():
             _ds = _def_search.strip().lower()
             wait = wait[
-                wait['시리얼'].str.lower().str.contains(_ds, na=False) |
-                wait['모델'].str.lower().str.contains(_ds, na=False)
+                wait['시리얼'].str.lower().str.contains(_ds, na=False, regex=False) |
+                wait['모델'].str.lower().str.contains(_ds, na=False, regex=False)
             ]
         if wait.empty: continue
         has_any = True
         with st.expander(f" {g} 불량 처리 대기 ({len(wait)}건)", expanded=_xp(f"def_wait_{g}"), key=f"_xp_def_wait_{g}"):
+            # N+1 방지: 불량 대기 시리얼 자재 일괄 조회
+            _def_bulk_sns = tuple(wait['시리얼'].unique().tolist())
+            _def_bulk_mats = load_material_serials_bulk(_def_bulk_sns) if _def_bulk_sns else pd.DataFrame()
             for row in wait.to_dict('records'):
                 sn_key = row['시리얼']  # idx 대신 실제 시리얼을 키로 사용 (목록 변경 시 키 밀림 방지)
                 with st.container(border=True):
@@ -3760,7 +3771,7 @@ elif curr_l == "불량 공정":
                     )
 
                     # 등록된 자재 시리얼 표시 (기존 시리얼란에 자재 S/N 입력 가능 안내)
-                    _def_mats = load_material_serials(row['시리얼'])
+                    _def_mats = _def_bulk_mats[_def_bulk_mats['메인시리얼'] == row['시리얼']] if not _def_bulk_mats.empty else pd.DataFrame()
                     if not _def_mats.empty:
                         with st.expander(f" 등록된 자재 시리얼 ({len(_def_mats)}개) — 자재 교체 시 기존 시리얼란에 입력", expanded=_xp(f"def_mat_{g}"), key=f"_xp_def_mat_{g}"):
                             for _, _dm in _def_mats.iterrows():
@@ -3775,8 +3786,8 @@ elif curr_l == "불량 공정":
                             _target_sn = target_sn.strip() or row['시리얼']
                             _rep_sn = replace_sn.strip()
                             if _rep_sn:
-                                # 기존 시리얼이 자재 시리얼인지 확인
-                                _def_mats_check = load_material_serials(row['시리얼'])
+                                # 기존 시리얼이 자재 시리얼인지 확인 (bulk 데이터 재사용)
+                                _def_mats_check = _def_bulk_mats[_def_bulk_mats['메인시리얼'] == row['시리얼']] if not _def_bulk_mats.empty else pd.DataFrame()
                                 _is_mat_sn = (
                                     not _def_mats_check.empty and
                                     _target_sn != row['시리얼'] and
@@ -4016,7 +4027,7 @@ elif curr_l == "수리 현황 리포트":
         if not audit_df.empty:
             if a_ban   != "전체":  audit_df = audit_df[audit_df['반'] == a_ban]
             if a_state != "전체":  audit_df = audit_df[audit_df['이후상태'] == a_state]
-            if a_sn.strip():       audit_df = audit_df[audit_df['시리얼'].str.contains(a_sn.strip(), case=False, na=False)]
+            if a_sn.strip():       audit_df = audit_df[audit_df['시리얼'].str.contains(a_sn.strip(), case=False, na=False, regex=False)]
 
             # 요약 KPI
             k1, k2, k3, k4, k5 = st.columns(5)
@@ -4278,7 +4289,7 @@ elif curr_l == "생산 중단 일지":
                         st.write(_sr.get("조치사항", "") or "—")
                         def _safe_int(v):
                             try: return int(v) if v and str(v) not in ("nan", "None") else 0
-                            except: return 0
+                            except (ValueError, TypeError): return 0
                         _semi_q  = _safe_int(_sr.get("반제품수량"))
                         _final_q = _safe_int(_sr.get("완제품수량"))
                         if _semi_q > 0 or _final_q > 0:
