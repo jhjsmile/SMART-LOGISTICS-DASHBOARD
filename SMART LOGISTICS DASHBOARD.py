@@ -1261,6 +1261,7 @@ elif curr_l == "조립 라인":
     # ── 모델 필터 ─────────────────────────────────────────────
     _asm_models = sorted(f_df['모델'].unique().tolist()) if not f_df.empty else []
     _sel_model = None
+    f_df_all = f_df  # 모델 필터 전 원본 (목표 달성 현황용)
     if _asm_models:
         _sel_model = st.selectbox(
             " 조립 모델 선택",
@@ -1269,24 +1270,16 @@ elif curr_l == "조립 라인":
         )
         f_df = f_df[f_df['모델'] == _sel_model]
 
-    # ──  오늘의 목표 달성 현황 ─────────────────────────────────
-    # 모델 필터 적용: 선택된 모델 기준으로 목표/실적 집계
-    if _sel_model and not today_sch.empty and '모델명' in today_sch.columns:
-        _plan_sch = today_sch[today_sch['모델명'] == _sel_model]
-    else:
-        _plan_sch = today_sch
-    _plan_qty = int(pd.to_numeric(_plan_sch['조립수'], errors='coerce').fillna(0).sum()) if not _plan_sch.empty else 0
+    # ──  오늘의 목표 달성 현황 (반 전체 합산) ──────────────────
+    _plan_qty = int(pd.to_numeric(today_sch['조립수'], errors='coerce').fillna(0).sum()) if not today_sch.empty else 0
     # 오늘 누적: audit_log 최초 등록(이전상태='-')으로 집계 → 검사·포장 라인 이동 후에도 감소 없음
     _today_audit = load_audit_log_by_date(today_str, today_str)
-    _audit_mask = (
+    _done_today = int(len(_today_audit[
         (_today_audit['이전상태'] == '-') &
         (_today_audit['이후상태'] == '조립중') &
         (_today_audit['반'] == curr_g)
-    ) if not _today_audit.empty else pd.Series(dtype=bool)
-    if _sel_model and not _today_audit.empty and '모델' in _today_audit.columns:
-        _audit_mask = _audit_mask & (_today_audit['모델'] == _sel_model)
-    _done_today = int(len(_today_audit[_audit_mask])) if not _today_audit.empty else 0
-    _wip_today  = len(f_df[f_df['시간'].astype(str).str.startswith(today_str) & f_df['상태'].isin(['조립중','수리 완료(재투입)'])]) if not f_df.empty else 0
+    ])) if not _today_audit.empty else 0
+    _wip_today  = len(f_df_all[f_df_all['시간'].astype(str).str.startswith(today_str) & f_df_all['상태'].isin(['조립중','수리 완료(재투입)'])]) if not f_df_all.empty else 0
 
     if _plan_qty > 0:
         _real_pct = int(_done_today / _plan_qty * 100)
