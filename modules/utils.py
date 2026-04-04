@@ -210,8 +210,11 @@ def render_mobile_camera_scanner(target_placeholder: str, key: str = "cam_scan")
     """모바일/태블릿 전용 카메라 바코드 스캐너 버튼을 렌더링한다.
 
     iOS Safari/Chrome 호환을 위해 네이티브 카메라 캡처(<input capture>) 방식을 사용한다.
-    사진 촬영 → 클라이언트 바코드 디코딩 → 결과를 text_input에 주입.
-    iframe 내 getUserMedia 권한 문제를 우회한다.
+    사진 촬영 → 캔버스 리사이즈 → 바코드 디코딩 → 결과를 text_input에 주입.
+
+    디코딩 순서:
+      1) BarcodeDetector API (Chrome Android 등 네이티브 지원 시)
+      2) html5-qrcode 라이브러리 (동적 로드)
 
     PC (화면 너비 > 1024px)에서는 자동으로 숨겨진다.
 
@@ -225,143 +228,203 @@ def render_mobile_camera_scanner(target_placeholder: str, key: str = "cam_scan")
     safe_placeholder = _h.escape(target_placeholder).replace("'", "\\'")
     cid = _h.escape(key).replace("'", "\\'").replace("-", "_")
 
-    html_code = f"""
-<style>
-  .cam-wrap-{cid} {{ display: none; }}
-  @media (max-width: 1024px) {{
-    .cam-wrap-{cid} {{ display: block; }}
-  }}
-  .cam-wrap-{cid} label {{
-    display: block; background: #1a73e8; color: #fff; border: none;
-    border-radius: 8px; padding: 10px 16px; font-size: 0.85rem;
-    font-weight: 600; cursor: pointer; text-align: center; margin: 4px 0;
-  }}
-  .cam-wrap-{cid} label:active {{ background: #1558b0; }}
-  .cam-wrap-{cid} input[type="file"] {{ display: none; }}
-  #cam-status-{cid} {{
-    text-align: center; padding: 4px; font-size: 0.8rem;
-    font-weight: 600; min-height: 20px;
-  }}
-  #cam-reader-{cid} {{ display: none !important; }}
-</style>
-<div class="cam-wrap-{cid}">
-  <label for="cam-file-{cid}">
-    카메라 스캔
-  </label>
-  <input type="file" id="cam-file-{cid}" accept="image/*" capture="environment"
-         onchange="handleCapture_{cid}(this)">
-  <div id="cam-status-{cid}"></div>
-  <div id="cam-reader-{cid}"></div>
-</div>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"><\/script>
-<script>
-function handleCapture_{cid}(input) {{
-  var status = document.getElementById('cam-status-{cid}');
-  if (!input.files || !input.files[0]) return;
-  status.textContent = '바코드 인식 중...';
-  status.style.color = '#1a73e8';
-
-  var origFile = input.files[0];
-
-  /* ── iOS 고해상도 사진을 캔버스로 리사이즈 후 디코딩 ── */
-  var reader = new FileReader();
-  reader.onload = function(ev) {{
-    var img = new Image();
-    img.onload = function() {{
-      var MAX = 1200;
-      var w = img.width, h = img.height;
-      if (w > MAX || h > MAX) {{
-        var ratio = Math.min(MAX / w, MAX / h);
-        w = Math.round(w * ratio);
-        h = Math.round(h * ratio);
-      }}
-      var canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      var ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      canvas.toBlob(function(blob) {{
-        if (!blob) {{
-          status.textContent = '이미지 처리 실패';
-          status.style.color = '#d93025';
-          input.value = '';
-          return;
-        }}
-        var resized = new File([blob], 'scan.jpg', {{ type: 'image/jpeg' }});
-        doScan_{cid}(resized, status, input);
-      }}, 'image/jpeg', 0.85);
-    }};
-    img.onerror = function() {{
-      status.textContent = '이미지 로드 실패';
-      status.style.color = '#d93025';
-      input.value = '';
-    }};
-    img.src = ev.target.result;
-  }};
-  reader.readAsDataURL(origFile);
-}}
-
-function doScan_{cid}(file, status, input) {{
-  /* 1D/2D 바코드 포맷 명시 */
-  var formats = [
-    Html5QrcodeSupportedFormats.QR_CODE,
-    Html5QrcodeSupportedFormats.CODE_128,
-    Html5QrcodeSupportedFormats.CODE_39,
-    Html5QrcodeSupportedFormats.CODE_93,
-    Html5QrcodeSupportedFormats.EAN_13,
-    Html5QrcodeSupportedFormats.EAN_8,
-    Html5QrcodeSupportedFormats.UPC_A,
-    Html5QrcodeSupportedFormats.UPC_E,
-    Html5QrcodeSupportedFormats.ITF,
-    Html5QrcodeSupportedFormats.CODABAR,
-    Html5QrcodeSupportedFormats.DATA_MATRIX
-  ];
-  var html5qr = new Html5Qrcode('cam-reader-{cid}',
-    {{ formatsToSupport: formats, verbose: false }});
-  html5qr.scanFile(file, /* showImage= */ false)
-    .then(function(decoded) {{
-      html5qr.clear();
-      status.textContent = decoded;
-      status.style.color = '#1e8e3e';
-      input.value = '';
-
-      /* 가장 가까운 target input 찾아서 값 주입 */
-      var pdoc = window.parent.document;
-      var inputs = pdoc.querySelectorAll('input[placeholder*="{safe_placeholder}"]');
-      if (!inputs.length) inputs = pdoc.querySelectorAll('input[type="text"]');
-      var ifr = window.frameElement;
-      var target = null;
-      if (ifr && inputs.length) {{
-        var ir = ifr.getBoundingClientRect();
-        var bestD = Infinity;
-        for (var i = 0; i < inputs.length; i++) {{
-          var inp = inputs[i];
-          if (inp.disabled || inp.readOnly || inp.offsetParent === null) continue;
-          var r = inp.getBoundingClientRect();
-          var d = Math.abs(r.top - ir.top) + Math.abs(r.left - ir.left);
-          if (d < bestD) {{ bestD = d; target = inp; }}
-        }}
-      }}
-      if (!target && inputs.length) target = inputs[0];
-      if (target) {{
-        var nativeSet = Object.getOwnPropertyDescriptor(
-          window.parent.HTMLInputElement.prototype, 'value').set;
-        nativeSet.call(target, decoded);
-        target.dispatchEvent(new Event('input', {{ bubbles: true }}));
-        setTimeout(function() {{
-          target.dispatchEvent(
-            new KeyboardEvent('keydown', {{ key: 'Enter', code: 'Enter',
-              keyCode: 13, which: 13, bubbles: true }}));
-        }}, 150);
-      }}
-    }})
-    .catch(function(err) {{
-      try {{ html5qr.clear(); }} catch(e) {{}}
-      status.textContent = '인식 실패: ' + String(err).substring(0, 80);
-      status.style.color = '#d93025';
-      input.value = '';
-    }});
-}}
-<\/script>
-"""
+    html_code = (
+        '<style>'
+        f'.cam-wrap-{cid} {{ display: none; }}'
+        f'@media (max-width: 1024px) {{ .cam-wrap-{cid} {{ display: block; }} }}'
+        f'.cam-wrap-{cid} label {{'
+        '  display: block; background: #1a73e8; color: #fff; border: none;'
+        '  border-radius: 8px; padding: 10px 16px; font-size: 0.85rem;'
+        '  font-weight: 600; cursor: pointer; text-align: center; margin: 4px 0;'
+        '}'
+        f'.cam-wrap-{cid} label:active {{ background: #1558b0; }}'
+        f'.cam-wrap-{cid} input[type="file"] {{ display: none; }}'
+        f'#cam-status-{cid} {{'
+        '  text-align: center; padding: 4px; font-size: 0.8rem;'
+        '  font-weight: 600; min-height: 20px;'
+        '}'
+        '</style>'
+        f'<div class="cam-wrap-{cid}">'
+        f'  <label for="cam-file-{cid}">카메라 스캔</label>'
+        f'  <input type="file" id="cam-file-{cid}" accept="image/*" capture="environment">'
+        f'  <div id="cam-status-{cid}"></div>'
+        '</div>'
+        '<script>'
+        '(function() {'
+        f'  var fileInput = document.getElementById("cam-file-{cid}");'
+        f'  var status = document.getElementById("cam-status-{cid}");'
+        '  if (!fileInput || !status) return;'
+        ''
+        '  fileInput.addEventListener("change", function() {'
+        '    if (!fileInput.files || !fileInput.files[0]) return;'
+        '    var origFile = fileInput.files[0];'
+        '    status.textContent = "이미지 처리 중...";'
+        '    status.style.color = "#1a73e8";'
+        ''
+        '    var reader = new FileReader();'
+        '    reader.onerror = function() {'
+        '      status.textContent = "파일 읽기 실패";'
+        '      status.style.color = "#d93025";'
+        '      fileInput.value = "";'
+        '    };'
+        '    reader.onload = function(ev) {'
+        '      var img = new Image();'
+        '      img.onerror = function() {'
+        '        status.textContent = "이미지 로드 실패";'
+        '        status.style.color = "#d93025";'
+        '        fileInput.value = "";'
+        '      };'
+        '      img.onload = function() {'
+        '        var MAX = 1200;'
+        '        var w = img.width, h = img.height;'
+        '        if (w > MAX || h > MAX) {'
+        '          var ratio = Math.min(MAX / w, MAX / h);'
+        '          w = Math.round(w * ratio);'
+        '          h = Math.round(h * ratio);'
+        '        }'
+        '        var canvas = document.createElement("canvas");'
+        '        canvas.width = w; canvas.height = h;'
+        '        var ctx = canvas.getContext("2d");'
+        '        ctx.drawImage(img, 0, 0, w, h);'
+        '        status.textContent = "바코드 검색 중...";'
+        ''
+        '        /* 1) BarcodeDetector API */'
+        '        if (typeof BarcodeDetector !== "undefined") {'
+        '          try {'
+        '            var detector = new BarcodeDetector({'
+        '              formats: ["code_128","code_39","code_93","ean_13","ean_8",'
+        '                        "upc_a","upc_e","itf","codabar","qr_code","data_matrix"]'
+        '            });'
+        '            detector.detect(canvas)'
+        '              .then(function(barcodes) {'
+        '                if (barcodes && barcodes.length > 0) {'
+        f'                  injectResult("{cid}", barcodes[0].rawValue, status, fileInput);'
+        '                } else {'
+        '                  status.textContent = "바코드를 찾지 못함 — 가까이서 다시 촬영";'
+        '                  status.style.color = "#d93025";'
+        '                  fileInput.value = "";'
+        '                }'
+        '              })'
+        '              .catch(function() {'
+        f'                tryLib("{cid}", canvas, status, fileInput);'
+        '              });'
+        '            return;'
+        '          } catch(e) {}'
+        '        }'
+        ''
+        '        /* 2) html5-qrcode fallback */'
+        f'        tryLib("{cid}", canvas, status, fileInput);'
+        '      };'
+        '      img.src = ev.target.result;'
+        '    };'
+        '    reader.readAsDataURL(origFile);'
+        '  });'
+        '})();'
+        ''
+        '/* html5-qrcode 라이브러리로 스캔 */'
+        'function tryLib(cid, canvas, status, fileInput) {'
+        '  function doScan() {'
+        '    canvas.toBlob(function(blob) {'
+        '      if (!blob) {'
+        '        status.textContent = "이미지 변환 실패";'
+        '        status.style.color = "#d93025";'
+        '        fileInput.value = "";'
+        '        return;'
+        '      }'
+        '      var scanFile = new File([blob], "scan.jpg", { type: "image/jpeg" });'
+        '      var rdiv = document.createElement("div");'
+        '      rdiv.id = "cam_rd_" + cid + "_" + Date.now();'
+        '      rdiv.style.display = "none";'
+        '      document.body.appendChild(rdiv);'
+        '      try {'
+        '        var html5qr = new Html5Qrcode(rdiv.id, {'
+        '          formatsToSupport: ['
+        '            Html5QrcodeSupportedFormats.QR_CODE,'
+        '            Html5QrcodeSupportedFormats.CODE_128,'
+        '            Html5QrcodeSupportedFormats.CODE_39,'
+        '            Html5QrcodeSupportedFormats.CODE_93,'
+        '            Html5QrcodeSupportedFormats.EAN_13,'
+        '            Html5QrcodeSupportedFormats.EAN_8,'
+        '            Html5QrcodeSupportedFormats.UPC_A,'
+        '            Html5QrcodeSupportedFormats.UPC_E,'
+        '            Html5QrcodeSupportedFormats.ITF,'
+        '            Html5QrcodeSupportedFormats.CODABAR,'
+        '            Html5QrcodeSupportedFormats.DATA_MATRIX'
+        '          ], verbose: false'
+        '        });'
+        '        html5qr.scanFile(scanFile, false)'
+        '          .then(function(decoded) {'
+        '            try { html5qr.clear(); } catch(e) {}'
+        '            try { rdiv.remove(); } catch(e) {}'
+        f'            injectResult(cid, decoded, status, fileInput);'
+        '          })'
+        '          .catch(function(err) {'
+        '            try { html5qr.clear(); } catch(e) {}'
+        '            try { rdiv.remove(); } catch(e) {}'
+        '            status.textContent = "인식 실패 — 가까이서 다시 촬영해주세요";'
+        '            status.style.color = "#d93025";'
+        '            fileInput.value = "";'
+        '          });'
+        '      } catch(ex) {'
+        '        try { rdiv.remove(); } catch(e) {}'
+        '        status.textContent = "스캔 오류: " + String(ex).substring(0, 60);'
+        '        status.style.color = "#d93025";'
+        '        fileInput.value = "";'
+        '      }'
+        '    }, "image/jpeg", 0.85);'
+        '  }'
+        ''
+        '  if (typeof Html5Qrcode !== "undefined") {'
+        '    doScan();'
+        '  } else {'
+        '    status.textContent = "스캔 라이브러리 로딩...";'
+        '    var s = document.createElement("script");'
+        '    s.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";'
+        '    s.onload = function() { doScan(); };'
+        '    s.onerror = function() {'
+        '      status.textContent = "라이브러리 로드 실패 (네트워크 확인)";'
+        '      status.style.color = "#d93025";'
+        '      fileInput.value = "";'
+        '    };'
+        '    document.head.appendChild(s);'
+        '  }'
+        '}'
+        ''
+        '/* 스캔 결과를 가장 가까운 input에 주입 */'
+        'function injectResult(cid, decoded, status, fileInput) {'
+        '  status.textContent = decoded;'
+        '  status.style.color = "#1e8e3e";'
+        '  fileInput.value = "";'
+        ''
+        '  var pdoc = window.parent.document;'
+        f'  var inputs = pdoc.querySelectorAll(\'input[placeholder*="{safe_placeholder}"]\');'
+        '  if (!inputs.length) inputs = pdoc.querySelectorAll(\'input[type="text"]\');'
+        '  var ifr = window.frameElement;'
+        '  var target = null;'
+        '  if (ifr && inputs.length) {'
+        '    var ir = ifr.getBoundingClientRect();'
+        '    var bestD = Infinity;'
+        '    for (var i = 0; i < inputs.length; i++) {'
+        '      var inp = inputs[i];'
+        '      if (inp.disabled || inp.readOnly || inp.offsetParent === null) continue;'
+        '      var r = inp.getBoundingClientRect();'
+        '      var d = Math.abs(r.top - ir.top) + Math.abs(r.left - ir.left);'
+        '      if (d < bestD) { bestD = d; target = inp; }'
+        '    }'
+        '  }'
+        '  if (!target && inputs.length) target = inputs[0];'
+        '  if (target) {'
+        '    var nativeSet = Object.getOwnPropertyDescriptor('
+        '      window.parent.HTMLInputElement.prototype, "value").set;'
+        '    nativeSet.call(target, decoded);'
+        '    target.dispatchEvent(new Event("input", { bubbles: true }));'
+        '    setTimeout(function() {'
+        '      target.dispatchEvent('
+        '        new KeyboardEvent("keydown", { key: "Enter", code: "Enter",'
+        '          keyCode: 13, which: 13, bubbles: true }));'
+        '    }, 150);'
+        '  }'
+        '}'
+        '</script>'
+    )
     components.html(html_code, height=55, scrolling=False)
-
