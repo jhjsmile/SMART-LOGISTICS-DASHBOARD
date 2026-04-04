@@ -261,8 +261,46 @@ function handleCapture_{cid}(input) {{
   status.textContent = '바코드 인식 중...';
   status.style.color = '#1a73e8';
 
-  var file = input.files[0];
+  var origFile = input.files[0];
 
+  /* ── iOS 고해상도 사진을 캔버스로 리사이즈 후 디코딩 ── */
+  var reader = new FileReader();
+  reader.onload = function(ev) {{
+    var img = new Image();
+    img.onload = function() {{
+      var MAX = 1200;
+      var w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {{
+        var ratio = Math.min(MAX / w, MAX / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
+      }}
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(function(blob) {{
+        if (!blob) {{
+          status.textContent = '이미지 처리 실패';
+          status.style.color = '#d93025';
+          input.value = '';
+          return;
+        }}
+        var resized = new File([blob], 'scan.jpg', {{ type: 'image/jpeg' }});
+        doScan_{cid}(resized, status, input);
+      }}, 'image/jpeg', 0.85);
+    }};
+    img.onerror = function() {{
+      status.textContent = '이미지 로드 실패';
+      status.style.color = '#d93025';
+      input.value = '';
+    }};
+    img.src = ev.target.result;
+  }};
+  reader.readAsDataURL(origFile);
+}}
+
+function doScan_{cid}(file, status, input) {{
   /* 1D/2D 바코드 포맷 명시 */
   var formats = [
     Html5QrcodeSupportedFormats.QR_CODE,
@@ -282,7 +320,7 @@ function handleCapture_{cid}(input) {{
   html5qr.scanFile(file, /* showImage= */ false)
     .then(function(decoded) {{
       html5qr.clear();
-      status.textContent = '✅ ' + decoded;
+      status.textContent = decoded;
       status.style.color = '#1e8e3e';
       input.value = '';
 
@@ -318,7 +356,7 @@ function handleCapture_{cid}(input) {{
     }})
     .catch(function(err) {{
       try {{ html5qr.clear(); }} catch(e) {{}}
-      status.textContent = '인식 실패 — 바코드를 가까이서 촬영해주세요';
+      status.textContent = '인식 실패: ' + String(err).substring(0, 80);
       status.style.color = '#d93025';
       input.value = '';
     }});
