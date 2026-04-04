@@ -242,6 +242,7 @@ def render_mobile_camera_scanner(target_placeholder: str, key: str = "cam_scan")
     text-align: center; padding: 4px; font-size: 0.8rem;
     font-weight: 600; min-height: 20px;
   }}
+  #cam-reader-{cid} {{ display: none !important; }}
 </style>
 <div class="cam-wrap-{cid}">
   <label for="cam-file-{cid}">
@@ -250,6 +251,7 @@ def render_mobile_camera_scanner(target_placeholder: str, key: str = "cam_scan")
   <input type="file" id="cam-file-{cid}" accept="image/*" capture="environment"
          onchange="handleCapture_{cid}(this)">
   <div id="cam-status-{cid}"></div>
+  <div id="cam-reader-{cid}"></div>
 </div>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"><\/script>
 <script>
@@ -260,10 +262,27 @@ function handleCapture_{cid}(input) {{
   status.style.color = '#1a73e8';
 
   var file = input.files[0];
-  var html5qr = new Html5Qrcode('cam-status-{cid}');
-  html5qr.scanFile(file, true)
+
+  /* 1D/2D 바코드 포맷 명시 */
+  var formats = [
+    Html5QrcodeSupportedFormats.QR_CODE,
+    Html5QrcodeSupportedFormats.CODE_128,
+    Html5QrcodeSupportedFormats.CODE_39,
+    Html5QrcodeSupportedFormats.CODE_93,
+    Html5QrcodeSupportedFormats.EAN_13,
+    Html5QrcodeSupportedFormats.EAN_8,
+    Html5QrcodeSupportedFormats.UPC_A,
+    Html5QrcodeSupportedFormats.UPC_E,
+    Html5QrcodeSupportedFormats.ITF,
+    Html5QrcodeSupportedFormats.CODABAR,
+    Html5QrcodeSupportedFormats.DATA_MATRIX
+  ];
+  var html5qr = new Html5Qrcode('cam-reader-{cid}',
+    {{ formatsToSupport: formats, verbose: false }});
+  html5qr.scanFile(file, /* showImage= */ false)
     .then(function(decoded) {{
-      status.textContent = '스캔 완료: ' + decoded;
+      html5qr.clear();
+      status.textContent = '✅ ' + decoded;
       status.style.color = '#1e8e3e';
       input.value = '';
 
@@ -298,7 +317,8 @@ function handleCapture_{cid}(input) {{
       }}
     }})
     .catch(function(err) {{
-      status.textContent = '바코드 인식 실패 — 다시 촬영해주세요';
+      try {{ html5qr.clear(); }} catch(e) {{}}
+      status.textContent = '인식 실패 — 바코드를 가까이서 촬영해주세요';
       status.style.color = '#d93025';
       input.value = '';
     }});
