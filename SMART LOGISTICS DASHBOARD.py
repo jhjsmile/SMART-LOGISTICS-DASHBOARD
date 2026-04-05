@@ -42,7 +42,6 @@ from modules.utils import (
     get_now_kst_str, _inject_autofocus, notify_new_arrivals,
     _send_telegram, _get_tg_creds, upload_img_to_drive,
     _TELEGRAM_BOT_TOKEN, _TELEGRAM_CHAT_ID, _TG_SENT_CACHE,
-    render_mobile_camera_scanner,
 )
 from modules.auth import (
     hash_pw, verify_pw, get_master_pw_hash,
@@ -1386,9 +1385,6 @@ elif curr_l == "조립 라인":
             _asm_search_key = f"sn_search_{curr_g}"
             sc1, sc2 = st.columns([2, 2])
             sn_search = sc1.text_input(" 시리얼 검색", placeholder="S/N 스캔 또는 입력...", key=_asm_search_key)
-            _cam_val = render_mobile_camera_scanner("S/N 스캔 또는 입력", key=f"cam_asm_search_{curr_g}")
-            if _cam_val:
-                sn_search = _cam_val
             if sn_search.strip():
                 # 반 전체(db_g)에서 검색 — 이미 다른 라인으로 이동한 시리얼도 조회 가능 (선택 모델 기준)
                 _search_mask = db_g['시리얼'].str.contains(sn_search.strip(), case=False, na=False, regex=False)
@@ -1586,9 +1582,6 @@ elif curr_l == "조립 라인":
             placeholder="S/N 입력 후 아래 버튼으로 등록",
             key=_msn_field_key)
         ef2.caption(" 자재 시리얼 입력 완료 후 [생산 시작 등록] 버튼을 누르세요")
-        _cam_msn = render_mobile_camera_scanner("S/N 입력 후 아래 버튼으로 등록", key=f"cam_msn_{curr_g}")
-        if _cam_msn:
-            target_sn = _cam_msn
 
         # 바코드 자릿수 변환 설정
         with st.expander(" 바코드 자릿수 설정", expanded=False):
@@ -1635,10 +1628,6 @@ elif curr_l == "조립 라인":
         if st.session_state.pop("_autofocus_after_rerun", None) == _scan_field_key:
             _inject_autofocus("자재 S/N 스캔")
         sc2.caption(" 스캐너로 스캔하면 Enter가 자동 입력됩니다")
-        _cam_mat = render_mobile_camera_scanner("바코드 스캔", key=f"cam_mat_{curr_g}")
-        if _cam_mat:
-            scan_input = _cam_mat
-
         if scan_input.strip():
             import time as _time
             _scanned = scan_input.strip()
@@ -1938,9 +1927,6 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                                     key=_wscan_key)
             if st.session_state.pop("_autofocus_after_rerun", None) == _wscan_key:
                 _inject_autofocus(placeholder="스캔 또는 입력 → 자동 체크")
-            _cam_wait = render_mobile_camera_scanner("스캔 또는 입력", key=f"cam_wait_{curr_g}_{curr_l}")
-            if _cam_wait:
-                w_scan = _cam_wait
             if w_scan.strip():
                 matched_sn = wait_list[wait_list['시리얼'].str.contains(
                     w_scan.strip(), case=False, na=False)]
@@ -2036,9 +2022,6 @@ elif curr_l in ["검사 라인", "포장 라인"]:
                 placeholder="스캔 또는 입력 → 자동 체크", key=_hsrch_key)
             if st.session_state.pop("_autofocus_after_rerun", None) == _hsrch_key:
                 _inject_autofocus(placeholder="스캔 또는 입력 → 자동 체크")
-            _cam_hist = render_mobile_camera_scanner("스캔 또는 입력", key=f"cam_hist_{curr_g}_{curr_l}")
-            if _cam_hist:
-                _sn_search_qp = _cam_hist
 
             f_df_view = f_df
             if _sn_search_qp.strip():
@@ -2858,9 +2841,6 @@ elif curr_l == "OQC 라인":
                                              key=_oqc_in_sc_key)
             if st.session_state.pop("_autofocus_after_rerun", None) == _oqc_in_sc_key:
                 _inject_autofocus(placeholder="스캔 또는 입력 → 자동 체크")
-            _cam_oqc_in = render_mobile_camera_scanner("스캔 또는 입력", key="cam_oqc_in")
-            if _cam_oqc_in:
-                _oqc_in_scan = _cam_oqc_in
             if _oqc_in_scan.strip():
                 _oqc_in_matched = packing_done[packing_done['시리얼'].str.contains(
                     _oqc_in_scan.strip(), case=False, na=False)]
@@ -2943,9 +2923,6 @@ elif curr_l == "OQC 라인":
                                         key=_oqc_sc_key)
             if st.session_state.pop("_autofocus_after_rerun", None) == _oqc_sc_key:
                 _inject_autofocus(placeholder="스캔 또는 입력 → 자동 체크")
-            _cam_oqc_ing = render_mobile_camera_scanner("스캔 또는 입력", key="cam_oqc_ing")
-            if _cam_oqc_ing:
-                _oqc_scan = _cam_oqc_ing
             if _oqc_scan.strip():
                 _oqc_matched = oqc_wait_list[oqc_wait_list['시리얼'].str.contains(
                     _oqc_scan.strip(), case=False, na=False)]
