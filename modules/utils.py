@@ -207,224 +207,47 @@ def upload_img_to_drive(file_obj, serial_no: str) -> str:
 # =================================================================
 
 def render_mobile_camera_scanner(target_placeholder: str, key: str = "cam_scan"):
-    """모바일/태블릿 전용 카메라 바코드 스캐너 버튼을 렌더링한다.
+    """모바일/태블릿 전용 카메라 바코드 스캐너.
 
-    iOS Safari/Chrome 호환을 위해 네이티브 카메라 캡처(<input capture>) 방식을 사용한다.
-    사진 촬영 → 캔버스 리사이즈 → 바코드 디코딩 → 결과를 text_input에 주입.
-
-    디코딩 순서:
-      1) BarcodeDetector API (Chrome Android 등 네이티브 지원 시)
-      2) html5-qrcode 라이브러리 (동적 로드)
-
-    PC (화면 너비 > 1024px)에서는 자동으로 숨겨진다.
+    st.camera_input()으로 사진 촬영 → pyzbar로 서버 디코딩.
+    PC (화면 너비 > 1024px)에서는 CSS로 숨겨진다.
+    스캔 성공 시 session_state에 결과를 저장하고 rerun한다.
 
     Args:
-        target_placeholder: 스캔 결과를 넣을 text_input의 placeholder 문자열
+        target_placeholder: 사용하지 않음 (하위 호환용)
         key: Streamlit 위젯 키 (중복 방지용)
+    Returns:
+        디코딩된 바코드 문자열 또는 None
     """
-    import streamlit.components.v1 as components
-    import html as _h
+    result_key = f"_cam_result_{key}"
 
-    safe_placeholder = _h.escape(target_placeholder).replace("'", "\\'")
-    cid = _h.escape(key).replace("'", "\\'").replace("-", "_")
-
-    html_code = (
-        '<style>'
-        f'.cam-wrap-{cid} {{ display: none; }}'
-        f'@media (max-width: 1024px) {{ .cam-wrap-{cid} {{ display: block; }} }}'
-        f'.cam-wrap-{cid} label {{'
-        '  display: block; background: #1a73e8; color: #fff; border: none;'
-        '  border-radius: 8px; padding: 10px 16px; font-size: 0.85rem;'
-        '  font-weight: 600; cursor: pointer; text-align: center; margin: 4px 0;'
-        '}'
-        f'.cam-wrap-{cid} label:active {{ background: #1558b0; }}'
-        f'.cam-wrap-{cid} input[type="file"] {{ display: none; }}'
-        f'#cam-status-{cid} {{'
-        '  text-align: center; padding: 4px; font-size: 0.8rem;'
-        '  font-weight: 600; min-height: 20px;'
-        '}'
-        '</style>'
-        f'<div class="cam-wrap-{cid}">'
-        f'  <label for="cam-file-{cid}">카메라 스캔</label>'
-        f'  <input type="file" id="cam-file-{cid}" accept="image/*" capture="environment">'
-        f'  <div id="cam-status-{cid}"></div>'
-        '</div>'
-        '<script>'
-        '(function() {'
-        f'  var fileInput = document.getElementById("cam-file-{cid}");'
-        f'  var status = document.getElementById("cam-status-{cid}");'
-        '  if (!fileInput || !status) return;'
-        ''
-        '  fileInput.addEventListener("change", function() {'
-        '    if (!fileInput.files || !fileInput.files[0]) return;'
-        '    var origFile = fileInput.files[0];'
-        '    status.textContent = "이미지 처리 중...";'
-        '    status.style.color = "#1a73e8";'
-        ''
-        '    var reader = new FileReader();'
-        '    reader.onerror = function() {'
-        '      status.textContent = "파일 읽기 실패";'
-        '      status.style.color = "#d93025";'
-        '      fileInput.value = "";'
-        '    };'
-        '    reader.onload = function(ev) {'
-        '      var img = new Image();'
-        '      img.onerror = function() {'
-        '        status.textContent = "이미지 로드 실패";'
-        '        status.style.color = "#d93025";'
-        '        fileInput.value = "";'
-        '      };'
-        '      img.onload = function() {'
-        '        var MAX = 1200;'
-        '        var w = img.width, h = img.height;'
-        '        if (w > MAX || h > MAX) {'
-        '          var ratio = Math.min(MAX / w, MAX / h);'
-        '          w = Math.round(w * ratio);'
-        '          h = Math.round(h * ratio);'
-        '        }'
-        '        var canvas = document.createElement("canvas");'
-        '        canvas.width = w; canvas.height = h;'
-        '        var ctx = canvas.getContext("2d");'
-        '        ctx.drawImage(img, 0, 0, w, h);'
-        '        status.textContent = "바코드 검색 중...";'
-        ''
-        '        /* 1) BarcodeDetector API */'
-        '        if (typeof BarcodeDetector !== "undefined") {'
-        '          try {'
-        '            var detector = new BarcodeDetector({'
-        '              formats: ["code_128","code_39","code_93","ean_13","ean_8",'
-        '                        "upc_a","upc_e","itf","codabar","qr_code","data_matrix"]'
-        '            });'
-        '            detector.detect(canvas)'
-        '              .then(function(barcodes) {'
-        '                if (barcodes && barcodes.length > 0) {'
-        f'                  injectResult("{cid}", barcodes[0].rawValue, status, fileInput);'
-        '                } else {'
-        '                  status.textContent = "바코드를 찾지 못함 — 가까이서 다시 촬영";'
-        '                  status.style.color = "#d93025";'
-        '                  fileInput.value = "";'
-        '                }'
-        '              })'
-        '              .catch(function() {'
-        f'                tryLib("{cid}", canvas, status, fileInput);'
-        '              });'
-        '            return;'
-        '          } catch(e) {}'
-        '        }'
-        ''
-        '        /* 2) html5-qrcode fallback */'
-        f'        tryLib("{cid}", canvas, status, fileInput);'
-        '      };'
-        '      img.src = ev.target.result;'
-        '    };'
-        '    reader.readAsDataURL(origFile);'
-        '  });'
-        '})();'
-        ''
-        '/* html5-qrcode 라이브러리로 스캔 */'
-        'function tryLib(cid, canvas, status, fileInput) {'
-        '  function doScan() {'
-        '    canvas.toBlob(function(blob) {'
-        '      if (!blob) {'
-        '        status.textContent = "이미지 변환 실패";'
-        '        status.style.color = "#d93025";'
-        '        fileInput.value = "";'
-        '        return;'
-        '      }'
-        '      var scanFile = new File([blob], "scan.jpg", { type: "image/jpeg" });'
-        '      var rdiv = document.createElement("div");'
-        '      rdiv.id = "cam_rd_" + cid + "_" + Date.now();'
-        '      rdiv.style.display = "none";'
-        '      document.body.appendChild(rdiv);'
-        '      try {'
-        '        var html5qr = new Html5Qrcode(rdiv.id, {'
-        '          formatsToSupport: ['
-        '            Html5QrcodeSupportedFormats.QR_CODE,'
-        '            Html5QrcodeSupportedFormats.CODE_128,'
-        '            Html5QrcodeSupportedFormats.CODE_39,'
-        '            Html5QrcodeSupportedFormats.CODE_93,'
-        '            Html5QrcodeSupportedFormats.EAN_13,'
-        '            Html5QrcodeSupportedFormats.EAN_8,'
-        '            Html5QrcodeSupportedFormats.UPC_A,'
-        '            Html5QrcodeSupportedFormats.UPC_E,'
-        '            Html5QrcodeSupportedFormats.ITF,'
-        '            Html5QrcodeSupportedFormats.CODABAR,'
-        '            Html5QrcodeSupportedFormats.DATA_MATRIX'
-        '          ], verbose: false'
-        '        });'
-        '        html5qr.scanFile(scanFile, false)'
-        '          .then(function(decoded) {'
-        '            try { html5qr.clear(); } catch(e) {}'
-        '            try { rdiv.remove(); } catch(e) {}'
-        f'            injectResult(cid, decoded, status, fileInput);'
-        '          })'
-        '          .catch(function(err) {'
-        '            try { html5qr.clear(); } catch(e) {}'
-        '            try { rdiv.remove(); } catch(e) {}'
-        '            status.textContent = "인식 실패 — 가까이서 다시 촬영해주세요";'
-        '            status.style.color = "#d93025";'
-        '            fileInput.value = "";'
-        '          });'
-        '      } catch(ex) {'
-        '        try { rdiv.remove(); } catch(e) {}'
-        '        status.textContent = "스캔 오류: " + String(ex).substring(0, 60);'
-        '        status.style.color = "#d93025";'
-        '        fileInput.value = "";'
-        '      }'
-        '    }, "image/jpeg", 0.85);'
-        '  }'
-        ''
-        '  if (typeof Html5Qrcode !== "undefined") {'
-        '    doScan();'
-        '  } else {'
-        '    status.textContent = "스캔 라이브러리 로딩...";'
-        '    var s = document.createElement("script");'
-        '    s.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";'
-        '    s.onload = function() { doScan(); };'
-        '    s.onerror = function() {'
-        '      status.textContent = "라이브러리 로드 실패 (네트워크 확인)";'
-        '      status.style.color = "#d93025";'
-        '      fileInput.value = "";'
-        '    };'
-        '    document.head.appendChild(s);'
-        '  }'
-        '}'
-        ''
-        '/* 스캔 결과를 가장 가까운 input에 주입 */'
-        'function injectResult(cid, decoded, status, fileInput) {'
-        '  status.textContent = decoded;'
-        '  status.style.color = "#1e8e3e";'
-        '  fileInput.value = "";'
-        ''
-        '  var pdoc = window.parent.document;'
-        f'  var inputs = pdoc.querySelectorAll(\'input[placeholder*="{safe_placeholder}"]\');'
-        '  if (!inputs.length) inputs = pdoc.querySelectorAll(\'input[type="text"]\');'
-        '  var ifr = window.frameElement;'
-        '  var target = null;'
-        '  if (ifr && inputs.length) {'
-        '    var ir = ifr.getBoundingClientRect();'
-        '    var bestD = Infinity;'
-        '    for (var i = 0; i < inputs.length; i++) {'
-        '      var inp = inputs[i];'
-        '      if (inp.disabled || inp.readOnly || inp.offsetParent === null) continue;'
-        '      var r = inp.getBoundingClientRect();'
-        '      var d = Math.abs(r.top - ir.top) + Math.abs(r.left - ir.left);'
-        '      if (d < bestD) { bestD = d; target = inp; }'
-        '    }'
-        '  }'
-        '  if (!target && inputs.length) target = inputs[0];'
-        '  if (target) {'
-        '    var nativeSet = Object.getOwnPropertyDescriptor('
-        '      window.parent.HTMLInputElement.prototype, "value").set;'
-        '    nativeSet.call(target, decoded);'
-        '    target.dispatchEvent(new Event("input", { bubbles: true }));'
-        '    setTimeout(function() {'
-        '      target.dispatchEvent('
-        '        new KeyboardEvent("keydown", { key: "Enter", code: "Enter",'
-        '          keyCode: 13, which: 13, bubbles: true }));'
-        '    }, 150);'
-        '  }'
-        '}'
-        '</script>'
+    # PC에서 카메라 위젯 숨기기
+    st.markdown(
+        '<style>@media(min-width:1025px){.mobile-cam-scan{display:none!important}}</style>',
+        unsafe_allow_html=True,
     )
-    components.html(html_code, height=55, scrolling=False)
+
+    # 이전 스캔 결과가 있으면 반환 (한 번만)
+    if result_key in st.session_state:
+        return st.session_state.pop(result_key)
+
+    with st.container():
+        st.markdown('<div class="mobile-cam-scan">', unsafe_allow_html=True)
+        cam_img = st.camera_input("카메라 스캔", key=f"_cam_widget_{key}")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if cam_img is not None:
+        try:
+            from pyzbar.pyzbar import decode as _zbar_decode
+            from PIL import Image as _PILImage
+            img = _PILImage.open(cam_img)
+            barcodes = _zbar_decode(img)
+            if barcodes:
+                decoded_val = barcodes[0].data.decode("utf-8")
+                st.session_state[result_key] = decoded_val
+                st.rerun()
+            else:
+                st.warning("바코드를 인식하지 못했습니다 — 바코드를 가까이서 다시 촬영해주세요")
+        except Exception as e:
+            st.error(f"스캔 처리 오류: {e}")
+    return None
