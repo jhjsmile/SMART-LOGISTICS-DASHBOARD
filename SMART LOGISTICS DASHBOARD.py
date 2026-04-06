@@ -999,7 +999,16 @@ if curr_l == "현황판":
                 db_all.groupby('상태').size().reset_index(name='수량'),
                 values='수량', names='상태', hole=0.5, title="<b>전체 상태 비중</b>"
             )
-            fig2.update_layout(margin=dict(t=40,b=20))
+            fig2.update_traces(
+                textposition='inside',
+                textinfo='percent',
+                insidetextorientation='horizontal',
+            )
+            fig2.update_layout(
+                margin=dict(t=40, b=20),
+                uniformtext_minsize=10,
+                uniformtext_mode='hide',
+            )
             st.plotly_chart(fig2, use_container_width=True, key="dashboard_pie")
         with ch3:
             fig3 = px.bar(
