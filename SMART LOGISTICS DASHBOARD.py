@@ -1270,11 +1270,13 @@ elif curr_l == "조립 라인":
         f_df = f_df[f_df['모델'] == _sel_model]
 
     # ──  오늘의 목표 달성 현황 ─────────────────────────────────
-    # 모델 필터 적용: 선택된 모델 기준으로 목표/실적 집계
-    if _sel_model and not today_sch.empty and '모델명' in today_sch.columns:
-        _plan_sch = today_sch[today_sch['모델명'] == _sel_model]
-    else:
-        _plan_sch = today_sch
+    # 모델 필터 적용: 선택된 모델의 품목코드(pn) 기준으로 목표/실적 집계
+    # (생산 데이터의 '모델'과 일정의 '모델명'이 다를 수 있으므로 pn으로 매칭)
+    _plan_sch = today_sch
+    if _sel_model and not f_df.empty and not today_sch.empty and 'pn' in today_sch.columns:
+        _sel_pns = f_df[f_df['모델'] == _sel_model]['품목코드'].unique().tolist()
+        if _sel_pns:
+            _plan_sch = today_sch[today_sch['pn'].isin(_sel_pns)]
     _plan_qty = int(pd.to_numeric(_plan_sch['조립수'], errors='coerce').fillna(0).sum()) if not _plan_sch.empty else 0
     # 오늘 누적: audit_log 최초 등록(이전상태='-')으로 집계 → 검사·포장 라인 이동 후에도 감소 없음
     _today_audit = load_audit_log_by_date(today_str, today_str)
