@@ -1000,15 +1000,10 @@ if curr_l == "현황판":
                 values='수량', names='상태', hole=0.5, title="<b>전체 상태 비중</b>"
             )
             fig2.update_traces(
-                textposition='inside',
+                textposition='auto',
                 textinfo='percent',
-                insidetextorientation='horizontal',
             )
-            fig2.update_layout(
-                margin=dict(t=40, b=20),
-                uniformtext_minsize=10,
-                uniformtext_mode='hide',
-            )
+            fig2.update_layout(margin=dict(t=40, b=40, l=40, r=40))
             st.plotly_chart(fig2, use_container_width=True, key="dashboard_pie")
         with ch3:
             fig3 = px.bar(
