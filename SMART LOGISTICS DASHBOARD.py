@@ -3778,7 +3778,7 @@ elif curr_l == "불량 공정":
                     # 등록된 자재 시리얼 표시 (기존 시리얼란에 자재 S/N 입력 가능 안내)
                     _def_mats = _def_bulk_mats[_def_bulk_mats['메인시리얼'] == row['시리얼']] if not _def_bulk_mats.empty else pd.DataFrame()
                     if not _def_mats.empty:
-                        with st.expander(f" 등록된 자재 시리얼 ({len(_def_mats)}개) — 자재 교체 시 기존 시리얼란에 입력", expanded=_xp(f"def_mat_{g}"), key=f"_xp_def_mat_{g}"):
+                        with st.expander(f" 등록된 자재 시리얼 ({len(_def_mats)}개) — 자재 교체 시 기존 시리얼란에 입력", expanded=_xp(f"def_mat_{g}"), key=f"_xp_def_mat_{sn_key}"):
                             for _, _dm in _def_mats.iterrows():
                                 _dmc1, _dmc2 = st.columns([1, 1])
                                 _dmc1.caption(f"**{_dm.get('자재명', '')}**")
