@@ -858,6 +858,15 @@ def render_kpi_dashboard():
                     detected_mode = "PMS 반별 시트 양식"
                 elif "생산계획_업로드" in sheet_names:
                     detected_mode = "PMS 단일 시트 양식"
+                elif "생산계획" in sheet_names:
+                    # 가로형 생산계획 양식 감지: R3에 날짜, R5~에 P/N 반복
+                    _test_ws = wb["생산계획"]
+                    _r3c1 = _test_ws.cell(3, 1).value
+                    _r3c2 = _test_ws.cell(3, 2).value
+                    if _r3c2 == "구분" or str(_r3c1).strip() == "라인":
+                        detected_mode = "생산계획 가로형 양식"
+                    else:
+                        detected_mode = "지원하지 않는 양식"
                 else:
                     detected_mode = "지원하지 않는 양식"
 
@@ -958,6 +967,89 @@ def render_kpi_dashboard():
                             '특이사항': str(note or "").strip(),
                             '작성자':   st.session_state.user_id,
                         })
+
+                # ══════════════════════════════════════════
+                # ③ 생산계획 가로형 양식 파싱
+                # ══════════════════════════════════════════
+                elif detected_mode == "생산계획 가로형 양식":
+                    ws = wb["생산계획"]
+                    from datetime import datetime as _dt_cls
+
+                    # R3 행에서 날짜 읽기 (열3부터)
+                    date_map = {}  # col_index -> 'YYYY-MM-DD'
+                    for c in range(3, ws.max_column + 1):
+                        v = ws.cell(3, c).value
+                        if isinstance(v, _dt_cls):
+                            date_map[c] = v.strftime('%Y-%m-%d')
+                        elif isinstance(v, str) and len(v) >= 10:
+                            date_map[c] = v[:10]
+
+                    # 행을 순회하며 카테고리 + 블록(P/N, 모델명, 수량, 출하계획) 파싱
+                    current_cat = None  # 조립계획 / 포장계획
+                    r = 5
+                    while r <= ws.max_row:
+                        # 열1에 카테고리가 있으면 갱신
+                        col1 = ws.cell(r, 1).value
+                        if col1 and str(col1).strip() in ('조립계획', '포장계획'):
+                            current_cat = str(col1).strip()
+
+                        col2 = ws.cell(r, 2).value
+                        if col2 and str(col2).strip() == 'P/N' and current_cat:
+                            # P/N 행 발견 → 이어서 모델명, 수량, 출하계획 읽기
+                            pn_row = r
+                            model_row = r + 1
+                            qty_row = r + 2
+                            ship_row = r + 3
+
+                            qty_label = str(ws.cell(qty_row, 2).value or '').strip()
+                            if qty_label not in ('조립수', '포장수'):
+                                r += 1
+                                continue
+
+                            for c, date_str in date_map.items():
+                                pn_val = ws.cell(pn_row, c).value
+                                model_val = ws.cell(model_row, c).value
+                                qty_val = ws.cell(qty_row, c).value
+                                ship_val = ws.cell(ship_row, c).value
+
+                                if not pn_val and not model_val:
+                                    continue
+                                # 수량 파싱
+                                qty_int = 0
+                                if isinstance(qty_val, (int, float)) and qty_val > 0:
+                                    qty_int = int(qty_val)
+                                elif isinstance(qty_val, str):
+                                    # 포장수: "출하 4/17 16 (75대)" → 날짜 뒤 첫 숫자(16)
+                                    _ship_m = _re.search(r'출하\s+\d+/\d+\s+(\d+)', qty_val)
+                                    if _ship_m:
+                                        qty_int = int(_ship_m.group(1))
+                                    else:
+                                        nums = _re.findall(r'\d+', qty_val)
+                                        qty_int = int(nums[0]) if nums else 0
+                                if qty_int <= 0:
+                                    continue
+
+                                # 포장계획: 출하계획은 수량 셀 텍스트 자체
+                                if current_cat == '포장계획' and isinstance(qty_val, str):
+                                    _ship_text = qty_val.strip()
+                                else:
+                                    _ship_text = str(ship_val or '').strip()
+
+                                parsed.append({
+                                    '날짜':     date_str,
+                                    '반':       '',  # 엑셀에 반 정보 없음 → 업로드 시 선택
+                                    '카테고리': current_cat,
+                                    'pn':       str(pn_val or '').strip(),
+                                    '모델명':   str(model_val or '').strip(),
+                                    '조립수':   qty_int,
+                                    '출하계획': _ship_text,
+                                    '특이사항': '',
+                                    '작성자':   st.session_state.user_id,
+                                })
+                            # MH 행까지 건너뛰기
+                            r += 5
+                            continue
+                        r += 1
 
                 # 지원하지 않는 양식
                 else:
