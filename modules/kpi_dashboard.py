@@ -841,6 +841,7 @@ def render_kpi_dashboard():
     &nbsp;&nbsp;• 시트명: <b>생산계획_업로드</b> / 컬럼에 반 포함<br><br>
     """, unsafe_allow_html=True)
 
+        st.info("과거 날짜의 일정은 업로드되지 않습니다 (오늘 이후 날짜만 등록 가능).", icon="ℹ")
         uploaded_file = st.file_uploader(" 엑셀 파일 선택 (.xlsx)", type=["xlsx"], key="sch_upload")
 
         if uploaded_file:
@@ -1020,12 +1021,22 @@ def render_kpi_dashboard():
                             status_text = st.empty()
                             total = len(filtered)
                             
+                            from datetime import date as _date_cls
+                            _today_str = _date_cls.today().strftime('%Y-%m-%d')
+                            past_cnt = 0
+
                             for idx, row in enumerate(filtered, 1):
                                 # 진행률 업데이트
                                 progress = idx / total
                                 progress_bar.progress(progress)
                                 status_text.text(f" 등록 중... {idx}/{total} ({int(progress*100)}%)")
-                                
+
+                                # 과거 날짜 스킵
+                                row_date = str(row.get('날짜', ''))[:10]
+                                if row_date < _today_str:
+                                    past_cnt += 1
+                                    skip_cnt += 1
+                                    continue
                                 # 반 강제 지정
                                 if upload_ban:
                                     row['반'] = upload_ban
@@ -1056,8 +1067,13 @@ def render_kpi_dashboard():
                             
                             _clear_schedule_cache()
                             st.session_state.schedule_db = load_schedule()
-                            if success_cnt > 0:
-                                st.toast(f" 등록 완료: {success_cnt}건  |  건너뜀(중복): {skip_cnt}건" + (f"  |  실패: {fail_cnt}건" if fail_cnt else ""))
+                            if success_cnt > 0 or skip_cnt > 0:
+                                _msg = f" 등록 완료: {success_cnt}건  |  건너뜀: {skip_cnt}건"
+                                if past_cnt > 0:
+                                    _msg += f" (과거 날짜 {past_cnt}건 제외)"
+                                if fail_cnt:
+                                    _msg += f"  |  실패: {fail_cnt}건"
+                                st.toast(_msg)
                             if fail_rows:
                                 st.toast("등록 실패 행:\n" + "\n".join(fail_rows))
                             st.rerun()
