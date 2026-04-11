@@ -432,13 +432,17 @@ def save_app_setting(key: str, value):
 # =================================================================
 
 def submit_help_request(requester: str, role: str, page: str, message: str) -> tuple:
-    """도움 요청을 Supabase에 저장하고 텔레그램으로도 알림을 보낸다.
+    """도움 요청을 Supabase 에 저장하고 텔레그램으로도 알림을 보낸다.
 
-    Returns (saved, tg_status):
-      - saved: DB 저장 성공 여부. True 이면 관리자 사이드바에 요청이 등록됨.
-      - tg_status: 'ok' (텔레그램 전송 성공) 또는 실패 사유 문자열.
-    텔레그램은 부가 알림이므로 실패해도 saved=True 를 반환한다.
+    Returns (delivered, status):
+      - delivered: DB 저장 또는 텔레그램 전송 중 하나라도 성공하면 True.
+      - status: 결과 상세 문자열.
+          * 'ok' — DB 저장 및 텔레그램 전송 모두 성공
+          * 'db_only' — DB 저장 성공, 텔레그램은 미발송/실패
+          * 'tg_only: <사유>' — DB 저장 실패, 텔레그램은 성공
+          * 'fail: <사유>' — 두 경로 모두 실패
     """
+    db_err = None
     try:
         get_supabase().table("help_requests").insert({
             "requester": requester, "role": role,
@@ -450,7 +454,8 @@ def submit_help_request(requester: str, role: str, page: str, message: str) -> t
         except Exception:
             pass
     except Exception as e:
-        return False, f"DB 저장 실패: {e}"
+        db_err = str(e)
+
     _now = datetime.now(_KST).strftime("%Y-%m-%d %H:%M")
     _tg_result = _send_telegram(
         f"🆘 <b>관리자 도움 요청</b>\n"
@@ -459,7 +464,17 @@ def submit_help_request(requester: str, role: str, page: str, message: str) -> t
         f"내용: {message}\n"
         f"시각: {_now}"
     )
-    return True, _tg_result
+
+    db_ok = db_err is None
+    tg_ok = _tg_result == "ok"
+
+    if db_ok and tg_ok:
+        return True, "ok"
+    if db_ok and not tg_ok:
+        return True, f"db_only: 텔레그램 미발송 ({_tg_result})"
+    if (not db_ok) and tg_ok:
+        return True, f"tg_only: DB 저장 실패 ({db_err})"
+    return False, f"fail: DB={db_err} / TG={_tg_result}"
 
 
 @st.cache_data(ttl=20)
