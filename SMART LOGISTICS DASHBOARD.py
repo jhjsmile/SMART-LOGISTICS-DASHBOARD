@@ -786,14 +786,13 @@ else:
     with st.sidebar.expander("🆘 관리자 도움 요청", expanded=False):
         if 'help_sent' not in st.session_state: st.session_state.help_sent = False
         if st.session_state.help_sent:
-            st.success(" 요청이 등록되었습니다.")
-            _tg_warn = st.session_state.get('help_tg_warn')
-            if _tg_warn:
-                st.caption(f"⚠️ 텔레그램 알림은 미발송: {_tg_warn}")
-                st.caption("요청 내용은 관리자 사이드바에 정상 등록되었습니다.")
+            st.success(" 요청이 전송되었습니다.")
+            _help_note = st.session_state.get('help_note')
+            if _help_note:
+                st.caption(_help_note)
             if st.button("다시 요청하기", key="help_reset", use_container_width=True):
                 st.session_state.help_sent = False
-                st.session_state.pop('help_tg_warn', None)
+                st.session_state.pop('help_note', None)
                 st.rerun()
         else:
             with st.form("help_request_form"):
@@ -801,7 +800,7 @@ else:
                     placeholder="도움이 필요한 내용을 입력해 주세요.", height=80, label_visibility="collapsed")
                 if st.form_submit_button(" 요청 전송", use_container_width=True, type="primary"):
                     if _help_msg.strip():
-                        _ok, _tg_status = submit_help_request(
+                        _ok, _status = submit_help_request(
                             requester=st.session_state.user_id,
                             role=st.session_state.user_role,
                             page=st.session_state.current_line,
@@ -809,13 +808,23 @@ else:
                         )
                         if _ok:
                             st.session_state.help_sent = True
-                            if _tg_status != "ok":
-                                st.session_state.help_tg_warn = _tg_status
+                            if _status == "ok":
+                                st.session_state.pop('help_note', None)
+                            elif _status.startswith("db_only"):
+                                st.session_state.help_note = (
+                                    "ℹ️ 관리자 사이드바에 등록되었습니다. "
+                                    "(텔레그램 푸시 알림은 미발송)"
+                                )
+                            elif _status.startswith("tg_only"):
+                                st.session_state.help_note = (
+                                    "ℹ️ 텔레그램으로 관리자에게 전달되었습니다. "
+                                    "(DB 목록 등록은 실패 — help_requests 테이블을 확인하세요)"
+                                )
                             else:
-                                st.session_state.pop('help_tg_warn', None)
+                                st.session_state.help_note = f"⚠️ {_status}"
                             st.rerun()
                         else:
-                            st.error(f"전송 실패: {_tg_status}")
+                            st.error(f"전송 실패: {_status}")
                     else:
                         st.warning("내용을 입력해 주세요.")
 
