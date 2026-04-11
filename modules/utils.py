@@ -143,19 +143,35 @@ def notify_new_arrivals(curr_cnt: int, notif_key: str, label: str):
 # =================================================================
 
 def _get_tg_creds():
-    """TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID를 최상위 또는 theme 섹션에서 찾아 반환."""
-    token, chat = "", ""
-    for _key in ("TELEGRAM_BOT_TOKEN",):
-        try: token = str(st.secrets[_key]).strip(); break
-        except (KeyError, AttributeError): pass
-        try: token = str(st.secrets["theme"][_key]).strip(); break
-        except (KeyError, AttributeError): pass
-    for _key in ("TELEGRAM_CHAT_ID",):
-        try: chat = str(st.secrets[_key]).strip(); break
-        except (KeyError, AttributeError): pass
-        try: chat = str(st.secrets["theme"][_key]).strip(); break
-        except (KeyError, AttributeError): pass
-    return token, chat
+    """TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID를 secrets 의 어느 위치에 있든 찾아 반환.
+    우선순위: 최상위 → 모든 서브섹션 순차 탐색.
+    어떤 예외가 발생해도 "" 를 반환한다 (Streamlit 버전별 예외 차이 대응)."""
+    def _find(key: str) -> str:
+        # 1) top-level
+        try:
+            v = st.secrets[key]
+            if v is not None and str(v).strip():
+                return str(v).strip()
+        except Exception:
+            pass
+        # 2) any section under secrets
+        try:
+            for _section_name in list(st.secrets):
+                try:
+                    _section = st.secrets[_section_name]
+                except Exception:
+                    continue
+                try:
+                    v = _section[key]
+                    if v is not None and str(v).strip():
+                        return str(v).strip()
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return ""
+
+    return _find("TELEGRAM_BOT_TOKEN"), _find("TELEGRAM_CHAT_ID")
 
 
 _TG_SENT_CACHE: set = set()   # 프로세스 내 중복 전송 방지 캐시
