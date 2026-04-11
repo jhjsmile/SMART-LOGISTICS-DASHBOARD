@@ -167,10 +167,12 @@ except Exception:
 
 
 def _send_telegram(message: str) -> str:
-    """텔레그램 메시지 전송. 성공 시 'ok', 실패 시 오류 문자열 반환."""
+    """텔레그램 메시지 전송. 성공 시 'ok', 실패 시 오류 사유 문자열 반환.
+    호출자가 상황에 맞게 '전송 실패:' 등 접두사를 붙일 수 있도록
+    오류 문자열 자체에는 접두사를 포함하지 않는다."""
     _token, _chat = _get_tg_creds()
     if not _token or not _chat:
-        return "전송 실패: TELEGRAM 시크릿 없음"
+        return "TELEGRAM 시크릿 미설정"
     try:
         url = f"https://api.telegram.org/bot{_token}/sendMessage"
         res = requests.post(url, json={"chat_id": _chat, "text": message, "parse_mode": "HTML"}, timeout=10)
